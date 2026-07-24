@@ -34,7 +34,7 @@ directories = "5"
 
 # UI (locked: egui + eframe)
 egui = "0.29"
-eframe = "0.29"
+eframe = "0.35"
 
 [package]
 name = "fancontrol-rs"
