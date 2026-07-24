@@ -165,7 +165,7 @@ fn build_registry(include_mock: bool, include_hw: bool, allow_hw_write: bool) ->
         reg.register_sensor_provider(Box::new(ArcSensor(arc.clone())));
         reg.register_control_provider(Box::new(ArcControl(arc)));
     }
-    // Best-effort GPU/SSD (nvidia-smi / PowerShell) — no privilege required
+    // Best-effort GPU/SSD (nvidia-smi / DeviceIoControl) — host path
     reg.register_sensor_provider(Box::new(HostSensorProvider::new()));
     reg
 }

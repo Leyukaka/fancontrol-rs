@@ -44,7 +44,7 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 - Phase 1: PawnIOLib FFI + LpcIO + **NCT668x EC HWM** (validated class id `0xD5` rev `0x92` @ `0x0A20`) + banked NCT path (experimental) + control loop + CLI.
 - Elevation required for `pawnio_open` (Administrator). **PawnIO is a prerequisite** (not bundled) — UI shows a startup dialog if missing / not openable.
 - Validated path: **Nuvoton NCT6687D-class**; **ctrl0–3** reliable PWM; higher controls = DR/experimental. See `docs/SUPPORTED_HARDWARE.md`.
-- Host sensors: `nvidia-smi` + PowerShell storage (read-only).
+- Host sensors: `nvidia-smi` + storage via `DeviceIoControl` (read-only, no PowerShell).
 - Vendored modules: `crates/fancontrol-pawnio/modules/` (PawnIO.Modules).
 - UI: live sensors, sliders, curve editor, curve auto-apply, CPU graph windows, rename map.
 - Packaging: `.github/workflows/release.yml` publishes unsigned `fancontrol-rs.exe` on version tags. Signing later — `docs/SIGNING_AND_DISTRIBUTION.md`.

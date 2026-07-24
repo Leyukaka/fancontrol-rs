@@ -17,7 +17,7 @@
 - [x] CLI harness (`detect`, `backend-status`, `list-sensors`, `run`, `sample`, `test-duty`, …)
 - [x] Verify readings/writes on elevated process (owner NCT6687D-class; admin required)
 - [ ] Broader chip coverage (ITE IT87, banked NCT — experimental detect only today)
-- [x] Host sensors: GPU (`nvidia-smi`), storage (PowerShell) — read-only
+- [x] Host sensors: GPU (`nvidia-smi`), storage (`DeviceIoControl`, no PowerShell) — read-only
 
 ## Phase 2 — UI MVP
 - [x] Main window with sensor list + control list (egui)
