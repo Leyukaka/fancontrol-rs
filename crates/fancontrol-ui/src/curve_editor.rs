@@ -37,7 +37,11 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
     );
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 6.0, Color32::from_rgb(14, 16, 26));
-    painter.rect_stroke(rect, 6.0, Stroke::new(1.0, Color32::from_rgb(50, 60, 90)));
+    painter.rect_stroke(
+        rect,
+        6.0,
+        Stroke::new(1.0_f32, Color32::from_rgb(50, 60, 90)),
+    );
 
     // Grid
     for i in 0..=4 {
@@ -45,11 +49,11 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
         let y = rect.top() + rect.height() * (i as f32) / 4.0;
         painter.line_segment(
             [Pos2::new(x, rect.top()), Pos2::new(x, rect.bottom())],
-            Stroke::new(1.0, Color32::from_rgba_unmultiplied(70, 80, 110, 50)),
+            Stroke::new(1.0_f32, Color32::from_rgba_unmultiplied(70, 80, 110, 50)),
         );
         painter.line_segment(
             [Pos2::new(rect.left(), y), Pos2::new(rect.right(), y)],
-            Stroke::new(1.0, Color32::from_rgba_unmultiplied(70, 80, 110, 50)),
+            Stroke::new(1.0_f32, Color32::from_rgba_unmultiplied(70, 80, 110, 50)),
         );
     }
 
@@ -80,11 +84,11 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
         // glow
         painter.add(egui::Shape::line(
             pts.clone(),
-            Stroke::new(6.0, Color32::from_rgba_unmultiplied(80, 200, 255, 40)),
+            Stroke::new(6.0_f32, Color32::from_rgba_unmultiplied(80, 200, 255, 40)),
         ));
         painter.add(egui::Shape::line(
             pts,
-            Stroke::new(2.0, Color32::from_rgb(120, 220, 255)),
+            Stroke::new(2.0_f32, Color32::from_rgb(120, 220, 255)),
         ));
     }
 
@@ -93,7 +97,7 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
         let x = to_pos(t as f32, 0.0).x;
         painter.line_segment(
             [Pos2::new(x, rect.top()), Pos2::new(x, rect.bottom())],
-            Stroke::new(1.5, Color32::from_rgb(255, 180, 60)),
+            Stroke::new(1.5_f32, Color32::from_rgb(255, 180, 60)),
         );
         painter.text(
             Pos2::new(x + 4.0, rect.top() + 4.0),
@@ -163,7 +167,7 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
         painter.circle_stroke(
             hp,
             if active { 7.0 } else { 5.0 },
-            Stroke::new(1.0, Color32::WHITE),
+            Stroke::new(1.0_f32, Color32::WHITE),
         );
     }
 

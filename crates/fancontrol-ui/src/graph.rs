@@ -120,14 +120,18 @@ pub fn show_cpu_graph(ui: &mut egui::Ui, history: &TempHistory, title: &str, win
         let painter = ui.painter_at(rect);
         // Background
         painter.rect_filled(rect, 6.0, Color32::from_rgb(12, 14, 22));
-        painter.rect_stroke(rect, 6.0, Stroke::new(1.0, Color32::from_rgb(40, 48, 70)));
+        painter.rect_stroke(
+            rect,
+            6.0,
+            Stroke::new(1.0_f32, Color32::from_rgb(40, 48, 70)),
+        );
 
         // Grid
         for i in 0..4 {
             let y = rect.top() + rect.height() * (i as f32) / 3.0;
             painter.line_segment(
                 [Pos2::new(rect.left(), y), Pos2::new(rect.right(), y)],
-                Stroke::new(1.0, Color32::from_rgba_unmultiplied(60, 70, 100, 40)),
+                Stroke::new(1.0_f32, Color32::from_rgba_unmultiplied(60, 70, 100, 40)),
             );
         }
 
@@ -164,14 +168,14 @@ pub fn show_cpu_graph(ui: &mut egui::Ui, history: &TempHistory, title: &str, win
             painter.add(egui::Shape::convex_polygon(
                 fill,
                 Color32::from_rgba_unmultiplied(0, 200, 255, 28),
-                Stroke::new(0.0, Color32::TRANSPARENT),
+                Stroke::new(0.0_f32, Color32::TRANSPARENT),
             ));
         }
 
         // Glow layers
         let last_t = history.last().unwrap_or(40.0);
         let base = temp_color(last_t);
-        for (w, a) in [(10.0, 20), (6.0, 40), (3.0, 90)] {
+        for (w, a) in [(10.0_f32, 20_u8), (6.0, 40), (3.0, 90)] {
             let stroke = Stroke::new(
                 w,
                 Color32::from_rgba_unmultiplied(base.r(), base.g(), base.b(), a),
@@ -181,7 +185,7 @@ pub fn show_cpu_graph(ui: &mut egui::Ui, history: &TempHistory, title: &str, win
         // Core line
         painter.add(egui::Shape::line(
             points.clone(),
-            Stroke::new(2.0, Color32::from_rgb(220, 245, 255)),
+            Stroke::new(2.0_f32, Color32::from_rgb(220, 245, 255)),
         ));
 
         // Head pulse
