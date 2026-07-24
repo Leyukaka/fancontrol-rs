@@ -9,7 +9,8 @@ publish = false
 
 [dependencies]
 fancontrol-core = { workspace = true }
-# egui / eframe will be enabled when the UI is implemented
-# egui = { workspace = true }
-# eframe = { workspace = true }
+fancontrol-plugins = { workspace = true }
+fancontrol-pawnio = { workspace = true }
+egui = { workspace = true }
+eframe = { workspace = true }
 tracing = { workspace = true }

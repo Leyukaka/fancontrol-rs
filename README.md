@@ -44,11 +44,27 @@ cargo test
 ```bash
 cargo run -- list-sensors
 cargo run -- list-controls
-cargo run -- set-duty mock.cpu_fan 45
+cargo run -- sample
+cargo run -- map-init
 cargo run -- demo --seconds 5
 cargo run -- backend-status
-cargo run -- init-profile
+cargo run -- init-profile --hw
 ```
+
+## UI (egui)
+
+```bash
+# Mock only (no admin)
+cargo run -- --no-hw ui
+
+# Live hardware (Administrator recommended)
+cargo run -- --hw-only ui
+
+# Live + PWM sliders enabled
+cargo run -- --hw-only --allow-hw-write ui
+```
+
+Rename fans/sensors: edit `channel-map.json` under the app config dir (`map-init` creates it).
 
 ## License
 

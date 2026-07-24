@@ -40,8 +40,8 @@ Spec-Driven Design: product/architecture decisions live in `specs/`.
 | `fancontrol-core` | Domain: Sensor/Control/Curve/Profile, curve eval, profile JSON |
 | `fancontrol-plugins` | `SensorProvider` / `ControlProvider` traits, `MockProvider`, registry |
 | `fancontrol-pawnio` | PawnIO backend (**stub** until real bindings) |
-| `fancontrol-ui` | Desktop UI (**stub**; locked to **egui + eframe**) |
-| `fancontrol-rs` | Binary: CLI harness now; wires UI later |
+| `fancontrol-ui` | Desktop UI **egui + eframe** (live + sliders) |
+| `fancontrol-rs` | Binary: CLI + `ui` |
 
 Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles/*.json`).
 
@@ -54,13 +54,15 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 - **Reads validated (2026-07-24):** CPU~56°C, System~36, fans 0/1/12/13/14 live, ctrl0~38% ctrl1~54%.
 - **Writes validated (2026-07-24):** `test-duty pawnio.0.ctrl1` 54%→40%→54% with RPM 2150→~1826→~1954. NCT6687D EC write path OK.
 - Vendored modules: `crates/fancontrol-pawnio/modules/` (PawnIO.Modules 0.2.9).
-- CLI: `list-sensors`, `list-controls`, `read`, `set-duty`, `demo`, `detect`, `backend-status`, `run`, …
+- CLI: `list-sensors`, `list-controls`, `sample`, `watch`, `test-duty`, `map-init`, `ui`, …
+- UI MVP: `cargo run -- ui` / `--hw-only ui` / `--allow-hw-write ui`
+- Channel map: `map-init` → `channel-map.json`
 
 ## Next priorities (order)
 
-1. Owner: dry-run profile `init-profile --hw` + `run`; optional careful `test-duty` on one fan.
-2. Labels / fan header mapping for this board.
-3. UI MVP (egui) showing live sample.
+1. User renames fans in `%APPDATA%/…/channel-map.json` as needed.
+2. Curve editor + profiles in UI.
+3. System tray.
 4. Packaging later.
 
 ## Safety product rules

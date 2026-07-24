@@ -19,10 +19,11 @@
 - [ ] Broader chip coverage (ITE IT87, NCT668x EC path)
 
 ## Phase 2 — UI MVP
-- [ ] Main window with sensor list + control list
-- [ ] Manual duty control
+- [x] Main window with sensor list + control list (egui)
+- [x] Manual duty control (sliders, write-gated)
+- [x] Channel display map (`channel-map.json`)
 - [ ] Basic curve editor
-- [ ] Profile save/load
+- [ ] Profile save/load in UI
 - [ ] System tray
 
 ## Phase 3 — Polish & Plugins

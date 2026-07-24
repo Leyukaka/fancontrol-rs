@@ -20,4 +20,7 @@ pub enum CoreError {
 
     #[error("config path unavailable: {0}")]
     ConfigPath(String),
+
+    #[error("channel map error: {0}")]
+    ChannelMap(String),
 }

@@ -3,6 +3,7 @@
 //! Pure logic only: sensors/controls descriptors, fan curves, profiles,
 //! and config paths. No hardware access lives here.
 
+pub mod channel_map;
 pub mod config;
 pub mod control_loop;
 pub mod curve;
@@ -10,6 +11,7 @@ pub mod error;
 pub mod models;
 pub mod profile;
 
+pub use channel_map::ChannelMap;
 pub use config::{config_dir, ensure_config_dirs, profiles_dir};
 pub use control_loop::{default_interval, evaluate_profile_step, ControlStepResult};
 pub use curve::{evaluate_curve, CurveEvalState};

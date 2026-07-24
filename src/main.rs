@@ -5,8 +5,8 @@
 
 use clap::{Parser, Subcommand};
 use fancontrol_core::{
-    evaluate_curve, evaluate_profile_step, load_profile, save_profile, ControlId, CurveEvalState,
-    FanCurve, Profile, SensorId, SensorKind,
+    evaluate_curve, evaluate_profile_step, load_profile, save_profile, ChannelMap, ControlId,
+    CurveEvalState, FanCurve, Profile, SensorId, SensorKind,
 };
 use fancontrol_plugins::{MockProvider, ProviderRegistry};
 use std::collections::HashMap;
@@ -133,7 +133,13 @@ enum Commands {
     },
     /// List saved profile ids
     ListProfiles,
-    /// Launch the GUI (Phase 2 — not implemented yet)
+    /// Write / update channel-map.json display names (owner NCT668x seed)
+    MapInit {
+        /// Overwrite existing map with seed
+        #[arg(long)]
+        force: bool,
+    },
+    /// Launch desktop UI (egui). Same global flags: --hw-only, --allow-hw-write, --no-hw
     Ui,
 }
 
@@ -216,6 +222,7 @@ fn main() -> anyhow::Result<()> {
     match cli.command.unwrap_or(Commands::ListSensors) {
         Commands::ListSensors => {
             let reg = build_registry(include_mock, include_hw, allow_hw_write);
+            let map = ChannelMap::load_or_seed().unwrap_or_default();
             println!("Sensors:");
             for s in reg.all_sensors() {
                 let value = reg.read_sensor(&s.id).ok();
@@ -223,11 +230,11 @@ fn main() -> anyhow::Result<()> {
                 let val_str = value
                     .map(|v| format!("{v:.1}{unit}"))
                     .unwrap_or_else(|| "n/a".into());
+                let label = map.sensor_name(s.id.as_str(), &s.name);
                 println!(
-                    "  [{kind:?}] {id} — {name} = {val}  (provider: {prov})",
+                    "  [{kind:?}] {id} — {label} = {val}  (provider: {prov})",
                     kind = s.kind,
                     id = s.id,
-                    name = s.name,
                     val = val_str,
                     prov = s.provider,
                 );
@@ -238,16 +245,17 @@ fn main() -> anyhow::Result<()> {
         }
         Commands::ListControls => {
             let reg = build_registry(include_mock, include_hw, allow_hw_write);
+            let map = ChannelMap::load_or_seed().unwrap_or_default();
             println!("Controls (duty is read-only current PWM %):");
             for c in reg.all_controls() {
                 let duty = reg.get_duty(&c.id).ok();
                 let duty_str = duty
                     .map(|d| format!("{d}%"))
                     .unwrap_or_else(|| "n/a".into());
+                let label = map.control_name(c.id.as_str(), &c.name);
                 println!(
-                    "  {id} — {name}  duty={duty}  writable={writable}  (provider: {prov})",
+                    "  {id} — {label}  duty={duty}  writable={writable}  (provider: {prov})",
                     id = c.id,
-                    name = c.name,
                     duty = duty_str,
                     writable = c.writable,
                     prov = c.provider,
@@ -310,12 +318,13 @@ fn main() -> anyhow::Result<()> {
             all,
         } => {
             let reg = build_registry(include_mock, include_hw, false);
+            let map = ChannelMap::load_or_seed().unwrap_or_default();
             let times = times.max(1);
             for n in 0..times {
                 if times > 1 {
                     println!("--- sample {}/{} ---", n + 1, times);
                 }
-                print_sample(&reg, all);
+                print_sample(&reg, &map, all);
                 if n + 1 < times {
                     thread::sleep(Duration::from_millis(interval_ms));
                 }
@@ -323,11 +332,12 @@ fn main() -> anyhow::Result<()> {
         }
         Commands::Watch { interval_ms, all } => {
             let reg = build_registry(include_mock, include_hw, false);
+            let map = ChannelMap::load_or_seed().unwrap_or_default();
             println!("Watching (read-only). Ctrl+C to stop.\n");
             loop {
                 let ts = chrono_like_now();
                 println!("======== {ts} ========");
-                print_sample(&reg, all);
+                print_sample(&reg, &map, all);
                 println!();
                 thread::sleep(Duration::from_millis(interval_ms.max(200)));
             }
@@ -456,14 +466,29 @@ fn main() -> anyhow::Result<()> {
             }
             Err(e) => println!("Could not list profiles: {e}"),
         },
-        Commands::Ui => {
-            if fancontrol_ui::is_implemented() {
-                fancontrol_ui::run().map_err(|e| anyhow::anyhow!(e))?;
+        Commands::MapInit { force } => {
+            let path = if force {
+                ChannelMap::write_seed()?
             } else {
-                anyhow::bail!(
-                    "UI not implemented yet (Phase 2). Use list-sensors / demo / run for now."
-                );
-            }
+                let (p, created) = ChannelMap::init_seed_if_missing()?;
+                if !created {
+                    println!("Map already exists at {} (use --force to overwrite)", p.display());
+                    return Ok(());
+                }
+                p
+            };
+            println!("Wrote channel map to {}", path.display());
+            println!("Edit labels there; sample/ui will pick them up.");
+        }
+        Commands::Ui => {
+            let opts = fancontrol_ui::UiOptions {
+                include_mock,
+                include_hw,
+                allow_hw_write,
+            };
+            // Ensure seed map exists for labels
+            let _ = ChannelMap::init_seed_if_missing();
+            fancontrol_ui::run(opts).map_err(|e| anyhow::anyhow!(e))?;
         }
     }
 
@@ -480,7 +505,7 @@ fn chrono_like_now() -> String {
     format!("unix={secs}")
 }
 
-fn print_sample(reg: &ProviderRegistry, show_all: bool) {
+fn print_sample(reg: &ProviderRegistry, map: &ChannelMap, show_all: bool) {
     println!("Temperatures:");
     let mut any_t = false;
     for s in reg.all_sensors() {
@@ -490,7 +515,8 @@ fn print_sample(reg: &ProviderRegistry, show_all: bool) {
         match reg.read_sensor(&s.id) {
             Ok(v) => {
                 any_t = true;
-                println!("  {:>28}  {v:6.1} °C  ({})", s.id, s.name);
+                let label = map.sensor_name(s.id.as_str(), &s.name);
+                println!("  {:>28}  {v:6.1} °C  ({label})", s.id);
             }
             Err(e) => {
                 if show_all {
@@ -515,7 +541,8 @@ fn print_sample(reg: &ProviderRegistry, show_all: bool) {
                     continue;
                 }
                 any_f = true;
-                println!("  {:>28}  {v:7.0} RPM  ({})", s.id, s.name);
+                let label = map.sensor_name(s.id.as_str(), &s.name);
+                println!("  {:>28}  {v:7.0} RPM  ({label})", s.id);
             }
             Err(e) => {
                 if show_all {
@@ -537,13 +564,14 @@ fn print_sample(reg: &ProviderRegistry, show_all: bool) {
                     continue;
                 }
                 any_c = true;
+                let label = map.control_name(c.id.as_str(), &c.name);
                 let rpm = c
                     .rpm_sensor
                     .as_ref()
                     .map(|s| s.as_str())
                     .unwrap_or("-");
                 println!(
-                    "  {:>28}  {d:3}%  writable={}  rpm={rpm}",
+                    "  {:>28}  {d:3}%  {label}  writable={}  rpm={rpm}",
                     c.id, c.writable
                 );
             }
