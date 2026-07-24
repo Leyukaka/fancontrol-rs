@@ -33,7 +33,7 @@ clap = { version = "4", features = ["derive"] }
 directories = "5"
 
 # UI (locked: egui + eframe)
-egui = "0.29"
+egui = "0.35"
 eframe = "0.29"
 
 [package]
