@@ -19,7 +19,13 @@ Thumbs.db
 .env
 *.local
 
+# Maintainer / agent notes (not for public tree)
+AGENTS.local.md
+CLAUDE.local.md
+.grok/
+
 # Build artifacts
 *.pdb
 *.exe
 *.dll
+

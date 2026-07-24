@@ -1,15 +1,9 @@
-# Claude Code — fancontrol-rs
+# Coding agents (Claude / others)
 
-Tu travailles sur le **même repo** que Grok Build. Lis d’abord :
+Before non-trivial work on this repository, read:
 
-1. **`AGENTS.md`** — règles agent, sécurité machine réelle, architecture, statut
-2. **`specs/`** — décisions produit / tech (Spec-Driven Design)
-3. **`specs/06-roadmap.md`** — phases
+1. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — PR process, AI contribution policy, hardware safety  
+2. [`AGENTS.md`](./AGENTS.md) — environment rules, architecture, status  
+3. [`specs/`](./specs/) — Spec-Driven Design (especially `06-roadmap.md`)
 
-## Rappel critique
-
-- Hôte Windows **réel** (capteurs / PawnIO) — **ne rien installer** sans accord explicite de l’utilisateur.
-- Avancer en code sans demander chaque détail ; **poser des questions** si doute (install, admin, scope produit, push).
-- Ne pas déclarer le travail « terminé » sans build/tests ou sans nuancer.
-
-Si tu changes l’architecture ou le statut des phases, mets à jour `AGENTS.md` et/ou `specs/06-roadmap.md`.
+Optional local-only maintainer notes: untracked `AGENTS.local.md` (gitignored).

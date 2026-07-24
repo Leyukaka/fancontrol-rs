@@ -28,9 +28,15 @@ Spiritual successor to [FanControl](https://github.com/Rem0o/FanControl.Releases
 | [docs/SUPPORTED_HARDWARE.md](./docs/SUPPORTED_HARDWARE.md) | Chip matrix, prerequisites, validation |
 | [docs/SIGNING_AND_DISTRIBUTION.md](./docs/SIGNING_AND_DISTRIBUTION.md) | Signing options, release checklist, CI notes |
 
+## Contributing
+
+Bug reports and pull requests are welcome on this repository.
+Please read [CONTRIBUTING.md](./CONTRIBUTING.md) (includes a strict policy for AI-assisted patches).
+
 ## Status
 
 🚧 **Early stage** — Phase 1 hardware (PawnIO / NCT668x) + Phase 2 UI (live sensors, sliders, curve editor MVP, temp graph).
+Public source of truth: this repo (issues, PRs, and [Releases](https://github.com/Leyukaka/fancontrol-rs/releases)).
 
 | Crate | Status |
 |-------|--------|
