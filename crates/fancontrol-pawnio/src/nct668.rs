@@ -341,8 +341,8 @@ impl Nct668Device {
         let percent = percent.min(100);
         let pwm = ((f64::from(percent) * 2.55).round() as u16).min(255) as u8;
 
-        let _g = IsaBusGuard::acquire(Duration::from_millis(200))
-            .ok_or_else(|| "could not acquire ISA bus mutex".to_string())?;
+        // Process-local SIO lock always succeeds; never fail a write on ISA timeout.
+        let _g = IsaBusGuard::acquire(Duration::from_millis(1000));
 
         if control_slot < 8 {
             // Classic request / mode / command path

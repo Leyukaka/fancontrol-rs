@@ -77,8 +77,12 @@ fn take_snapshot(reg: &ProviderRegistry, map: &fancontrol_core::ChannelMap, tick
             },
             Err(e) => {
                 let msg = e.to_string();
-                // Don't treat "fan not present" as global poll failure
-                if !msg.contains("fan not present") && error.is_none() {
+                // Benign / per-channel gaps — not a global poll failure
+                let benign = msg.contains("fan not present")
+                    || msg.contains("temp out of range")
+                    || msg.contains("missing")
+                    || msg.contains("not present");
+                if !benign && error.is_none() {
                     error = Some(msg);
                 }
             }

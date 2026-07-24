@@ -269,14 +269,20 @@ impl FanApp {
         let ids: Vec<String> = self.pending_write.keys().cloned().collect();
         for id in ids {
             if let Some(t) = self.last_hw_write.get(&id) {
-                if now.duration_since(*t) < Duration::from_millis(150) {
+                if now.duration_since(*t) < Duration::from_millis(200) {
                     continue;
                 }
             }
             let Some(percent) = self.pending_write.remove(&id) else {
                 continue;
             };
-            match self.reg.set_duty(&ControlId::new(id.clone()), percent) {
+            // One retry: poller may hold the process SIO lock briefly.
+            let mut result = self.reg.set_duty(&ControlId::new(id.clone()), percent);
+            if result.is_err() {
+                std::thread::sleep(Duration::from_millis(50));
+                result = self.reg.set_duty(&ControlId::new(id.clone()), percent);
+            }
+            match result {
                 Ok(()) => {
                     self.last_hw_write.insert(id, now);
                     self.write_error = None;

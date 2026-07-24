@@ -304,8 +304,7 @@ impl NctBankedDevice {
         let mode_regs: [u16; 7] = [0x102, 0x202, 0x302, 0x802, 0x902, 0xA02, 0xB02];
         let cmd_regs: [u16; 7] = [0x109, 0x209, 0x309, 0x809, 0x909, 0xA09, 0xB09];
 
-        let _g = IsaBusGuard::acquire(Duration::from_millis(100))
-            .ok_or_else(|| "could not acquire ISA bus mutex".to_string());
+        let _g = IsaBusGuard::acquire(Duration::from_millis(1000));
         // Do not select_slot (clears BARs).
         self.write_byte(mode_regs[index], 0)?;
         self.write_byte(cmd_regs[index], pwm)?;
