@@ -10,6 +10,13 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+/// CREATE_NO_WINDOW — avoid flashing a console when spawning powershell/nvidia-smi.
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 #[derive(Clone)]
 struct Cached {
     values: Arc<Vec<(String, String, f64)>>,
@@ -147,12 +154,14 @@ impl SensorProvider for HostSensorProvider {
 }
 
 fn probe_nvidia() -> Vec<(String, String, f64)> {
-    let output = Command::new("nvidia-smi")
-        .args([
-            "--query-gpu=index,name,temperature.gpu",
-            "--format=csv,noheader,nounits",
-        ])
-        .output();
+    let mut cmd = Command::new("nvidia-smi");
+    cmd.args([
+        "--query-gpu=index,name,temperature.gpu",
+        "--format=csv,noheader,nounits",
+    ]);
+    #[cfg(windows)]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    let output = cmd.output();
     let Ok(out) = output else {
         return Vec::new();
     };
@@ -181,6 +190,10 @@ fn probe_nvidia() -> Vec<(String, String, f64)> {
 }
 
 fn probe_storage_temps() -> Vec<(String, String, f64)> {
+    // Read-only Storage module probes. Intentionally **no** `-ExecutionPolicy Bypass`:
+    // that flag is a common malware (e.g. SolarMarker) behavioral IOC and trips
+    // VirusTotal / Sigma rules even when the script is benign. Inline `-Command`
+    // does not require Bypass for these built-in cmdlets on a normal Windows install.
     let script = r#"
 $ErrorActionPreference='SilentlyContinue'
 Get-PhysicalDisk | ForEach-Object {
@@ -189,16 +202,11 @@ Get-PhysicalDisk | ForEach-Object {
   if ($null -ne $t) { "{0}|{1}" -f $n, $t }
 }
 "#;
-    let output = Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            script,
-        ])
-        .output();
+    let mut cmd = Command::new("powershell.exe");
+    cmd.args(["-NoProfile", "-NonInteractive", "-Command", script]);
+    #[cfg(windows)]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    let output = cmd.output();
     let Ok(out) = output else {
         return Vec::new();
     };

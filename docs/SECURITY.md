@@ -80,6 +80,38 @@ When signing is added (SignPath / Azure Trusted Signing / OV-EV cert), it will b
 
 Until then: update by downloading a new Release and verifying SHA256 yourself.
 
+## VirusTotal / Defender behavioral false positives
+
+Unsigned Windows tools that touch **kernel I/O (PawnIO)** and spawn **host helpers** often look like malware under sandbox rules.
+
+### What fancontrol-rs actually does
+
+| Behavior | Why (legitimate) |
+|----------|------------------|
+| Load PawnIO / talk to Super I/O | Fan/temp hardware access (not WinRing0) |
+| Spawn `nvidia-smi` | Optional GPU temperature (read-only) |
+| Spawn `powershell.exe -Command …` | Optional SSD/HDD temperature via `Get-PhysicalDisk` / `Get-StorageReliabilityCounter` (**read-only**) |
+| Run elevated | Required for `pawnio_open` on many systems |
+
+### Rules you may see (and why they fire)
+
+Examples reported against early builds:
+
+| Behavioral rule (examples) | Likely trigger |
+|----------------------------|----------------|
+| PowerShell / **SolarMarker**-style “initial execution” | Spawning PowerShell from an unsigned EXE (sandbox heuristic) |
+| **Change PowerShell Policies to an Insecure Level** | Older builds used `-ExecutionPolicy Bypass` for storage probes — **removed** (unnecessary for inline `-Command`) |
+| **Unsigned image loaded into LSASS** | Often sandbox / third-party noise; our app does not inject into LSASS. **Code signing** later reduces this class of alerts |
+| **PowerShell deleted mounted share** | Common sandbox false positive around storage cmdlets; we do not intentionally unmount shares |
+
+### What we do / don’t do
+
+- We **do not** download remote scripts, open reverse shells, or disable Defender.
+- Prefer official [GitHub Releases](https://github.com/Leyukaka/fancontrol-rs/releases) + **SHA256** verify ([above](#release-integrity-sha256)).
+- **Code signing** (when configured) is the main long-term fix for reputation / SmartScreen — see [SIGNING_AND_DISTRIBUTION.md](./SIGNING_AND_DISTRIBUTION.md).
+
+If a vendor flags a release, open an issue with the VT link and the release tag; maintainers can submit false-positive reports once signing exists.
+
 ## Product safety (hardware)
 
 - Prefer **PawnIO** only; never ship WinRing0 or known-vulnerable ring-0 drivers.

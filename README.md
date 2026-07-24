@@ -74,9 +74,14 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 Release binary: `target/release/fancontrol-rs.exe`.
 
-## Windows Defender / SmartScreen
+## Windows Defender / SmartScreen / VirusTotal
 
-This app talks to **PawnIO** (kernel I/O). Like FanControl / LibreHardwareMonitor, Windows Defender may flag the **unsigned** debug/release binary as a false positive — especially with `--allow-hw-write` (real PWM control).
+This app talks to **PawnIO** (kernel I/O) and may spawn **nvidia-smi** / **PowerShell** for optional GPU/SSD temps. Like FanControl / LibreHardwareMonitor, scanners may flag the **unsigned** binary (heuristic / behavioral rules, not a proof of malware).
+
+- Prefer official Releases + verify **SHA256** — see [docs/SECURITY.md](./docs/SECURITY.md).
+- Especially with `--allow-hw-write` (real PWM control), Defender can be noisier.
+
+
 
 **Do not disable Defender entirely.** Prefer a folder exclusion for local development:
 
