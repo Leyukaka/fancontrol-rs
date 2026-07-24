@@ -1,0 +1,60 @@
+# Minimal Windows release build.
+# GitHub Actions requires YAML under .github/workflows/ (platform native format).
+# Not a cargo-dist / generator setup — keep this file small on purpose.
+# Signing is intentionally out of scope here; see docs/SIGNING_AND_DISTRIBUTION.md.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release -p fancontrol-rs
+
+      - name: Stage artifacts + SHA256
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item target/release/fancontrol-rs.exe dist/fancontrol-rs.exe
+          $hash = (Get-FileHash -Algorithm SHA256 dist/fancontrol-rs.exe).Hash.ToLower()
+          Set-Content -Path dist/fancontrol-rs.exe.sha256 -Value "$hash  fancontrol-rs.exe" -NoNewline
+          Get-Content dist/fancontrol-rs.exe.sha256
+
+      - name: Upload artifact (workflow_dispatch / always)
+        uses: actions/upload-artifact@v4
+        with:
+          name: fancontrol-rs-windows
+          path: |
+            dist/fancontrol-rs.exe
+            dist/fancontrol-rs.exe.sha256
+
+      - name: GitHub Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/fancontrol-rs.exe
+            dist/fancontrol-rs.exe.sha256
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

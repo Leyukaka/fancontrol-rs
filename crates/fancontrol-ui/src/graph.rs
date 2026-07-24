@@ -1,35 +1,82 @@
-//! CPU temperature sparkline with glow fill.
+//! CPU temperature sparkline with glow fill and configurable time window.
 
 use eframe::egui::{self, Color32, Pos2, Sense, Stroke, Vec2};
 use std::collections::VecDeque;
-
-const HISTORY: usize = 180; // ~ samples at poll rate
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone)]
 pub struct TempHistory {
-    samples: VecDeque<f32>,
+    /// `(timestamp, temp_c)` samples, oldest first.
+    samples: VecDeque<(Instant, f32)>,
+    window: Duration,
+    sample_interval: Duration,
     max_len: usize,
+    last_push: Option<Instant>,
 }
 
 impl Default for TempHistory {
     fn default() -> Self {
-        Self {
-            samples: VecDeque::with_capacity(HISTORY),
-            max_len: HISTORY,
-        }
+        let mut h = Self {
+            samples: VecDeque::new(),
+            window: Duration::from_secs(10 * 60),
+            sample_interval: Duration::from_secs(2),
+            max_len: 0,
+            last_push: None,
+        };
+        h.recompute_max_len();
+        h
     }
 }
 
 impl TempHistory {
-    pub fn push(&mut self, t: f32) {
-        if self.samples.len() >= self.max_len {
+    pub fn configure(&mut self, window_minutes: u16, sample_secs: u16) {
+        let window_minutes = window_minutes.max(1) as u64;
+        let sample_secs = sample_secs.max(1) as u64;
+        self.window = Duration::from_secs(window_minutes * 60);
+        self.sample_interval = Duration::from_secs(sample_secs);
+        self.recompute_max_len();
+        self.prune(Instant::now());
+    }
+
+    fn recompute_max_len(&mut self) {
+        let window_secs = self.window.as_secs().max(1);
+        let sample_secs = self.sample_interval.as_secs().max(1);
+        self.max_len = (window_secs / sample_secs) as usize + 8;
+    }
+
+    /// Push only if `sample_secs` elapsed since last push; then prune by window.
+    pub fn push_if_due(&mut self, temp: f32, now: Instant) {
+        if let Some(last) = self.last_push {
+            if now.duration_since(last) < self.sample_interval {
+                return;
+            }
+        }
+        self.samples.push_back((now, temp));
+        self.last_push = Some(now);
+        self.prune(now);
+    }
+
+    fn prune(&mut self, now: Instant) {
+        // Prefer relative to newest sample when present; fall back to `now`.
+        let anchor = self
+            .samples
+            .back()
+            .map(|(t, _)| *t)
+            .unwrap_or(now);
+        while let Some(&(t, _)) = self.samples.front() {
+            if anchor.saturating_duration_since(t) > self.window {
+                self.samples.pop_front();
+            } else {
+                break;
+            }
+        }
+        while self.samples.len() > self.max_len {
             self.samples.pop_front();
         }
-        self.samples.push_back(t);
     }
 
     pub fn last(&self) -> Option<f32> {
-        self.samples.back().copied()
+        self.samples.back().map(|(_, t)| *t)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -38,10 +85,13 @@ impl TempHistory {
 }
 
 /// Draw a glowing temperature graph in `ui`.
-pub fn show_cpu_graph(ui: &mut egui::Ui, history: &TempHistory, title: &str) {
+///
+/// `window_minutes` is used for the X-axis labels (`-Nm` … `now`).
+pub fn show_cpu_graph(ui: &mut egui::Ui, history: &TempHistory, title: &str, window_minutes: u16) {
     ui.group(|ui| {
         ui.horizontal(|ui| {
             ui.heading(title);
+            ui.weak(format!("({window_minutes}m)"));
             if let Some(t) = history.last() {
                 let color = temp_color(t);
                 ui.colored_label(color, format!("{t:.1} °C"));
@@ -49,10 +99,16 @@ pub fn show_cpu_graph(ui: &mut egui::Ui, history: &TempHistory, title: &str) {
         });
 
         let height = 140.0;
-        let (rect, _resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), height), Sense::hover());
+        let (rect, _resp) =
+            ui.allocate_exact_size(Vec2::new(ui.available_width(), height), Sense::hover());
         if history.is_empty() {
-            ui.painter()
-                .text(rect.center(), egui::Align2::CENTER_CENTER, "…", egui::FontId::proportional(14.0), Color32::GRAY);
+            ui.painter().text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                "…",
+                egui::FontId::proportional(14.0),
+                Color32::GRAY,
+            );
             return;
         }
 
@@ -60,7 +116,7 @@ pub fn show_cpu_graph(ui: &mut egui::Ui, history: &TempHistory, title: &str) {
         let max_t = history
             .samples
             .iter()
-            .copied()
+            .map(|(_, t)| *t)
             .fold(80.0_f32, f32::max)
             .max(50.0)
             + 5.0;
@@ -79,18 +135,29 @@ pub fn show_cpu_graph(ui: &mut egui::Ui, history: &TempHistory, title: &str) {
             );
         }
 
-        let n = history.samples.len().max(2) as f32;
+        let window = Duration::from_secs(u64::from(window_minutes.max(1)) * 60);
+        let newest = history
+            .samples
+            .back()
+            .map(|(t, _)| *t)
+            .unwrap_or_else(Instant::now);
+
         let map_y = |t: f32| {
             let u = ((t - min_t) / (max_t - min_t)).clamp(0.0, 1.0);
             rect.bottom() - u * rect.height()
         };
-        let map_x = |i: usize| rect.left() + (i as f32) / (n - 1.0) * rect.width();
+        let map_x = |ts: Instant| {
+            let age = newest.saturating_duration_since(ts).as_secs_f32();
+            let span = window.as_secs_f32().max(1.0);
+            // leftmost = oldest (full window age), rightmost = newest (age 0)
+            let u = (1.0 - age / span).clamp(0.0, 1.0);
+            rect.left() + u * rect.width()
+        };
 
         let points: Vec<Pos2> = history
             .samples
             .iter()
-            .enumerate()
-            .map(|(i, t)| Pos2::new(map_x(i), map_y(*t)))
+            .map(|(ts, t)| Pos2::new(map_x(*ts), map_y(*t)))
             .collect();
 
         // Fill under curve
@@ -124,11 +191,15 @@ pub fn show_cpu_graph(ui: &mut egui::Ui, history: &TempHistory, title: &str) {
         // Head pulse
         if let Some(p) = points.last() {
             let r = 4.0 + (ui.input(|i| i.time) as f32 * 4.0).sin().abs() * 2.0;
-            painter.circle_filled(*p, r + 4.0, Color32::from_rgba_unmultiplied(base.r(), base.g(), base.b(), 50));
+            painter.circle_filled(
+                *p,
+                r + 4.0,
+                Color32::from_rgba_unmultiplied(base.r(), base.g(), base.b(), 50),
+            );
             painter.circle_filled(*p, r, base);
         }
 
-        // Min/max labels
+        // Min/max temp labels
         painter.text(
             Pos2::new(rect.left() + 6.0, rect.top() + 4.0),
             egui::Align2::LEFT_TOP,
@@ -144,6 +215,21 @@ pub fn show_cpu_graph(ui: &mut egui::Ui, history: &TempHistory, title: &str) {
             Color32::GRAY,
         );
 
+        // Time axis labels: -Nm … now
+        painter.text(
+            Pos2::new(rect.left() + 6.0, rect.bottom() - 2.0),
+            egui::Align2::LEFT_BOTTOM,
+            format!("-{window_minutes}m"),
+            egui::FontId::monospace(10.0),
+            Color32::from_rgb(100, 110, 140),
+        );
+        painter.text(
+            Pos2::new(rect.right() - 6.0, rect.bottom() - 2.0),
+            egui::Align2::RIGHT_BOTTOM,
+            "now",
+            egui::FontId::monospace(10.0),
+            Color32::from_rgb(100, 110, 140),
+        );
     });
 }
 

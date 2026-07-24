@@ -39,8 +39,8 @@ Spec-Driven Design: product/architecture decisions live in `specs/`.
 |-------|------|
 | `fancontrol-core` | Domain: Sensor/Control/Curve/Profile, curve eval, profile JSON |
 | `fancontrol-plugins` | `SensorProvider` / `ControlProvider` traits, `MockProvider`, registry |
-| `fancontrol-pawnio` | PawnIO backend (**stub** until real bindings) |
-| `fancontrol-ui` | Desktop UI **egui + eframe** (live + sliders) |
+| `fancontrol-pawnio` | PawnIO backend (FFI + LpcIO + NCT668x EC) |
+| `fancontrol-ui` | Desktop UI **egui + eframe** (live, sliders, curve editor, graph) |
 | `fancontrol-rs` | Binary: CLI + `ui` |
 
 Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles/*.json`).
@@ -48,22 +48,25 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 ## Status (keep updated)
 
 - Phase 0 foundation: **done**.
-- Phase 1: PawnIOLib FFI + LpcIO + **NCT668x EC HWM** (owner chip id=0xD5 rev=0x92 @ 0x0A20) + banked NCT path + control loop + CLI.
-- Elevation required for `pawnio_open` (admin terminal).
+- Phase 1: PawnIOLib FFI + LpcIO + **NCT668x EC HWM** (owner chip id=0xD5 rev=0x92 @ 0x0A20) + banked NCT path (experimental) + control loop + CLI.
+- Elevation required for `pawnio_open` (admin terminal). **PawnIO is a prerequisite** (not bundled).
 - Owner board: **Nuvoton NCT6687D-class** slot1 @0x4E hwm=0x0A20.
 - **Reads validated (2026-07-24):** CPU~56°C, System~36, fans 0/1/12/13/14 live, ctrl0~38% ctrl1~54%.
-- **Writes validated (2026-07-24):** `test-duty pawnio.0.ctrl1` 54%→40%→54% with RPM 2150→~1826→~1954. NCT6687D EC write path OK.
+- **Writes validated (2026-07-24):** `test-duty pawnio.0.ctrl1` 54%→40%→54% with RPM 2150→~1826→~1954. NCT6687D EC write path OK. **ctrl0–3 reliable**; higher ctrls = DR/experimental path.
+- Host sensors: nvidia-smi + PowerShell storage (read-only).
 - Vendored modules: `crates/fancontrol-pawnio/modules/` (PawnIO.Modules 0.2.9).
 - CLI: `list-sensors`, `list-controls`, `sample`, `watch`, `test-duty`, `map-init`, `ui`, …
-- UI MVP: `cargo run -- ui` / `--hw-only ui` / `--allow-hw-write ui`
+- UI: live + sliders + curve editor MVP + CPU graph; `cargo run -- ui` / `--hw-only ui` / `--allow-hw-write ui`
 - Channel map: `map-init` → `channel-map.json`
+- Docs/packaging: `CONTRIBUTING.md`, `docs/SUPPORTED_HARDWARE.md`, `docs/SIGNING_AND_DISTRIBUTION.md`, `.github/workflows/release.yml` (unsigned tag builds; no signing yet).
 
 ## Next priorities (order)
 
-1. Curve editor + profiles in UI.
-2. System tray.
-3. RGB (future — not Super I/O).
-4. Packaging / code signing (Defender).
+1. System tray.
+2. Broader chip validation (IT87 / banked NCT still experimental).
+3. Profile UX polish in UI.
+4. Code signing later (SmartScreen) — see `docs/SIGNING_AND_DISTRIBUTION.md`.
+5. RGB (future — not Super I/O).
 
 ## Safety product rules
 

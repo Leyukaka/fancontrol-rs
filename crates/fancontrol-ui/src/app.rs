@@ -16,6 +16,16 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+const GRAPH_WINDOWS: [u16; 4] = [10, 20, 30, 60];
+const GRAPH_SAMPLES: [u16; 4] = [1, 2, 5, 10];
+const PAWNIO_URL: &str = "https://pawnio.eu";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PawnioDialogKind {
+    NotInstalled,
+    NeedsAdmin,
+}
+
 #[derive(Debug, Clone)]
 pub struct UiOptions {
     pub include_mock: bool,
@@ -30,6 +40,19 @@ impl Default for UiOptions {
             include_hw: true,
             allow_hw_write: false,
         }
+    }
+}
+
+fn detect_pawnio_dialog(include_hw: bool) -> Option<PawnioDialogKind> {
+    if !include_hw {
+        return None;
+    }
+    if !fancontrol_pawnio::is_installed() {
+        Some(PawnioDialogKind::NotInstalled)
+    } else if !fancontrol_pawnio::is_available() {
+        Some(PawnioDialogKind::NeedsAdmin)
+    } else {
+        None
     }
 }
 
@@ -52,6 +75,10 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
     );
     let writes = WriteQueue::start(Arc::clone(&reg));
     let profile = load_or_create_default_profile();
+    let pawnio_dialog = detect_pawnio_dialog(options.include_hw);
+
+    let mut cpu_history = TempHistory::default();
+    cpu_history.configure(settings.graph_window_minutes, settings.graph_sample_secs);
 
     let app = FanApp {
         options,
@@ -66,8 +93,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         rename_id: None,
         rename_buf: String::new(),
         rename_is_control: false,
-        cpu_history: TempHistory::default(),
-        last_history_tick: None,
+        cpu_history,
         show_settings: false,
         show_curves: true,
         profile,
@@ -78,6 +104,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         last_applied_duty: HashMap::new(),
         profile_status: None,
         new_profile_name: "default".into(),
+        pawnio_dialog,
     };
 
     let native = eframe::NativeOptions {
@@ -112,7 +139,6 @@ struct FanApp {
     rename_buf: String,
     rename_is_control: bool,
     cpu_history: TempHistory,
-    last_history_tick: Option<u64>,
     show_settings: bool,
     show_curves: bool,
     profile: Profile,
@@ -123,6 +149,7 @@ struct FanApp {
     last_applied_duty: HashMap<String, u8>,
     profile_status: Option<String>,
     new_profile_name: String,
+    pawnio_dialog: Option<PawnioDialogKind>,
 }
 
 fn load_or_create_default_profile() -> Profile {
@@ -156,11 +183,8 @@ impl eframe::App for FanApp {
             .map(|g| g.clone())
             .unwrap_or_default();
 
-        if self.last_history_tick != Some(snap.tick) {
-            if let Some(t) = snap.cpu_temp {
-                self.cpu_history.push(t as f32);
-            }
-            self.last_history_tick = Some(snap.tick);
+        if let Some(t) = snap.cpu_temp {
+            self.cpu_history.push_if_due(t as f32, Instant::now());
         }
 
         // Auto-apply curves ~1 Hz when enabled + write allowed
@@ -187,12 +211,46 @@ impl eframe::App for FanApp {
                     }
                     if ui
                         .selectable_label(self.show_curves, "Curves")
+                        .on_hover_text("Afficher/masquer l'éditeur de courbes")
                         .clicked()
                     {
                         self.show_curves = !self.show_curves;
                     }
+                    // Prominent Curve control toggle (auto-apply to hardware)
+                    let curve_on = self.settings.auto_apply_curves;
+                    let (label, fill, text_color) = if curve_on {
+                        (
+                            "Curve control: ON",
+                            egui::Color32::from_rgb(30, 90, 50),
+                            egui::Color32::from_rgb(140, 255, 170),
+                        )
+                    } else {
+                        (
+                            "Curve control: OFF",
+                            egui::Color32::from_rgb(70, 40, 40),
+                            egui::Color32::from_rgb(220, 160, 160),
+                        )
+                    };
+                    let btn = egui::Button::new(egui::RichText::new(label).color(text_color).strong())
+                        .fill(fill);
+                    if ui
+                        .add(btn)
+                        .on_hover_text(
+                            "Activer l'application automatique des courbes aux contrôles PWM",
+                        )
+                        .clicked()
+                    {
+                        self.settings.auto_apply_curves = !self.settings.auto_apply_curves;
+                        self.settings.save();
+                    }
                 });
             });
+            if self.settings.auto_apply_curves && !self.options.allow_hw_write {
+                ui.colored_label(
+                    egui::Color32::YELLOW,
+                    "Curve control ON but hardware is read-only — launch with --allow-hw-write",
+                );
+            }
             ui.label(&self.status);
             if let Some(err) = &snap.error {
                 ui.colored_label(egui::Color32::YELLOW, format!("poll: {err}"));
@@ -273,7 +331,13 @@ impl eframe::App for FanApp {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             if self.settings.show_cpu_graph {
-                show_cpu_graph(ui, &self.cpu_history, "CPU temperature");
+                self.ui_graph_controls(ui);
+                show_cpu_graph(
+                    ui,
+                    &self.cpu_history,
+                    "CPU temperature",
+                    self.settings.graph_window_minutes,
+                );
                 ui.add_space(8.0);
             }
 
@@ -483,10 +547,102 @@ impl eframe::App for FanApp {
         });
 
         self.show_rename_modal(ctx);
+        self.show_pawnio_dialog(ctx);
     }
 }
 
 impl FanApp {
+    fn ui_graph_controls(&mut self, ui: &mut egui::Ui) {
+        let mut dirty = false;
+        ui.horizontal(|ui| {
+            ui.label("Fenêtre");
+            for m in GRAPH_WINDOWS {
+                let selected = self.settings.graph_window_minutes == m;
+                if ui.selectable_label(selected, format!("{m}m")).clicked() && !selected {
+                    self.settings.graph_window_minutes = m;
+                    dirty = true;
+                }
+            }
+            ui.separator();
+            ui.label("Échantillonnage");
+            for s in GRAPH_SAMPLES {
+                let selected = self.settings.graph_sample_secs == s;
+                if ui.selectable_label(selected, format!("{s}s")).clicked() && !selected {
+                    self.settings.graph_sample_secs = s;
+                    dirty = true;
+                }
+            }
+        });
+        if dirty {
+            self.settings.clamp_graph_options();
+            self.settings.save();
+            self.cpu_history.configure(
+                self.settings.graph_window_minutes,
+                self.settings.graph_sample_secs,
+            );
+        }
+    }
+
+    fn show_pawnio_dialog(&mut self, ctx: &egui::Context) {
+        let Some(kind) = self.pawnio_dialog else {
+            return;
+        };
+        let mut open = true;
+        let title = match kind {
+            PawnioDialogKind::NotInstalled => "PawnIO non installé",
+            PawnioDialogKind::NeedsAdmin => "PawnIO — droits administrateur",
+        };
+        egui::Window::new(title)
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .open(&mut open)
+            .show(ctx, |ui| {
+                ui.set_max_width(440.0);
+                ui.label(
+                    "PawnIO est un pilote kernel d'I/O pour Super I/O (capteurs / ventilateurs), \
+                     plus sûr que WinRing0.",
+                );
+                ui.add_space(6.0);
+                match kind {
+                    PawnioDialogKind::NotInstalled => {
+                        ui.label(
+                            "PawnIO n'est pas installé sur cette machine. Installez-le depuis \
+                             le site officiel, puis relancez l'application en Administrateur.",
+                        );
+                    }
+                    PawnioDialogKind::NeedsAdmin => {
+                        ui.label(
+                            "PawnIO est installé, mais l'exécuteur n'est pas accessible \
+                             (souvent : droits administrateur manquants, ou service fermé).",
+                        );
+                        ui.label("Relancez fancontrol-rs en tant qu'Administrateur.");
+                    }
+                }
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    ui.label("Site :");
+                    ui.hyperlink_to("pawnio.eu", PAWNIO_URL);
+                });
+                ui.add_space(10.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Ouvrir pawnio.eu").clicked() {
+                        ui.ctx().open_url(egui::OpenUrl::new_tab(PAWNIO_URL));
+                    }
+                    if ui.button("Continuer sans hardware").clicked() {
+                        self.pawnio_dialog = None;
+                    }
+                    if ui.button("Fermer").clicked() {
+                        self.pawnio_dialog = None;
+                    }
+                });
+                ui.small("L'app reste utilisable (mock / config). Aucune installation automatique.");
+            });
+        if !open {
+            self.pawnio_dialog = None;
+        }
+    }
+
     fn ui_curves_panel(&mut self, ui: &mut egui::Ui, live_temp: Option<f64>) {
         ui.horizontal(|ui| {
             ui.heading("Profiles & curves");
