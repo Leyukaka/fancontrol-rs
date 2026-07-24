@@ -63,7 +63,7 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 
 1. Never embed or ship WinRing0 or known-vulnerable ring-0 drivers.
 2. Graceful degrade if PawnIO missing (clear UI message; app still starts for mock/config).
-3. **Hardware is read-only by default.** PWM writes require explicit `--allow-hw-write`.
+3. **PWM writes are on by default** for the product UI. Use `--read-only` for diagnostics. Prefer elevated process for real HWM.
 4. Prefer `sample` / `list-sensors` / `list-controls` for validation; never write casually.
 5. **Windows Defender** may false-positive unsigned builds that call PawnIO. Do **not** disable AV; document folder exclusion for `target\` (see README). Do not change Defender settings without explicit user approval.
 

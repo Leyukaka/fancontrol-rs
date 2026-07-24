@@ -38,7 +38,7 @@ impl Default for UiOptions {
         Self {
             include_mock: true,
             include_hw: true,
-            allow_hw_write: false,
+            allow_hw_write: true,
         }
     }
 }
@@ -250,7 +250,7 @@ impl eframe::App for FanApp {
             if self.settings.auto_apply_curves && !self.options.allow_hw_write {
                 ui.colored_label(
                     egui::Color32::YELLOW,
-                    "Curve control ON but hardware is read-only — launch with --allow-hw-write",
+                    "Curve control ON but hardware is read-only — drop --read-only to write PWM",
                 );
             }
             ui.label(&self.status);
@@ -261,7 +261,7 @@ impl eframe::App for FanApp {
                 ui.colored_label(egui::Color32::RED, format!("write: {err}"));
             }
             if !self.options.allow_hw_write {
-                ui.small("Hardware sliders locked · cargo run -- --allow-hw-write ui");
+                ui.small("Hardware sliders locked · launched with --read-only");
             }
             ui.small(format!(
                 "temps {} · fans {} · controls {} · tick {}",
@@ -301,7 +301,7 @@ impl eframe::App for FanApp {
                     if self.settings.auto_apply_curves && !self.options.allow_hw_write {
                         ui.colored_label(
                             egui::Color32::YELLOW,
-                            "Auto-apply needs --allow-hw-write",
+                            "Auto-apply needs writes (drop --read-only)",
                         );
                     }
                     ui.small("GPU: nvidia-smi · SSD: DeviceIoControl (no PowerShell)");

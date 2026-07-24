@@ -18,8 +18,8 @@ pub struct UiSettings {
     pub show_cpu_graph: bool,
     #[serde(default = "default_true")]
     pub show_host_sensors: bool,
-    /// When true and --allow-hw-write, apply profile curves each poll tick.
-    #[serde(default)]
+    /// When true and hardware writes allowed, apply profile curves each poll tick.
+    #[serde(default = "default_true")]
     pub auto_apply_curves: bool,
     /// Visible history window for the CPU graph (minutes).
     #[serde(default = "default_graph_window_minutes")]
@@ -27,6 +27,9 @@ pub struct UiSettings {
     /// Minimum interval between graph samples (seconds).
     #[serde(default = "default_graph_sample_secs")]
     pub graph_sample_secs: u16,
+    /// One-shot migration marker: product defaults (curve control on, etc.).
+    #[serde(default)]
+    pub product_defaults_applied: bool,
 }
 
 fn default_true() -> bool {
@@ -47,9 +50,10 @@ impl Default for UiSettings {
             hide_zero_rpm: true,
             show_cpu_graph: true,
             show_host_sensors: true,
-            auto_apply_curves: false,
+            auto_apply_curves: true,
             graph_window_minutes: default_graph_window_minutes(),
             graph_sample_secs: default_graph_sample_secs(),
+            product_defaults_applied: true,
         }
     }
 }
@@ -68,6 +72,12 @@ impl UiSettings {
         };
         let mut s: Self = serde_json::from_str(&data).unwrap_or_default();
         s.clamp_graph_options();
+        // Upgrade older installs: enable curve control once (user can still turn it off).
+        if !s.product_defaults_applied {
+            s.auto_apply_curves = true;
+            s.product_defaults_applied = true;
+            s.save();
+        }
         s
     }
 

@@ -32,10 +32,13 @@ struct Cli {
     #[arg(long, global = true)]
     no_hw: bool,
 
-    /// Allow real hardware PWM writes (default: **off**, read-only).
-    /// Required for `set-duty` / `run` against pawnio.* controls.
+    /// Allow real hardware PWM writes (accepted for scripts; writes are **on by default**).
     #[arg(long, global = true)]
     allow_hw_write: bool,
+
+    /// Disable hardware PWM writes (read-only sensors / CLI / UI).
+    #[arg(long, global = true)]
+    read_only: bool,
 
     #[command(subcommand)]
     command: Option<Commands>,
@@ -53,7 +56,7 @@ enum Commands {
         id: String,
     },
     /// Set fan duty cycle (0-100).
-    /// Hardware (`pawnio.*`) requires global `--allow-hw-write`. Mock always allowed.
+    /// Hardware (`pawnio.*`) writes are on by default; use `--read-only` to block. Mock always allowed.
     SetDuty {
         /// Control id
         id: String,
@@ -93,8 +96,8 @@ enum Commands {
         temp: f64,
     },
     /// Apply a saved profile in a loop.
-    /// Default is **dry-run** (compute duties only). Real set_duty needs
-    /// `--allow-hw-write --apply` together.
+    /// Default is **dry-run** (compute duties only). Real set_duty needs `--apply`
+    /// (and must not use `--read-only`).
     Run {
         /// Profile id (default: default)
         #[arg(long, default_value = "default")]
@@ -110,7 +113,7 @@ enum Commands {
         apply: bool,
     },
     /// Safe single-control write probe: set duty briefly, sample, **restore**.
-    /// Requires `--allow-hw-write`. Prefer a case fan (e.g. ctrl with moderate RPM).
+    /// Prefer a case fan. Use without `--read-only` (writes are on by default).
     TestDuty {
         /// Control id (e.g. pawnio.0.ctrl0)
         #[arg(long)]
@@ -139,7 +142,7 @@ enum Commands {
         #[arg(long)]
         force: bool,
     },
-    /// Launch desktop UI (egui). Same global flags: --hw-only, --allow-hw-write, --no-hw
+    /// Launch desktop UI (egui). Default when no subcommand. Flags: --hw-only, --read-only, --no-hw
     Ui,
 }
 
@@ -210,18 +213,21 @@ fn main() -> anyhow::Result<()> {
         .init();
 
     let cli = Cli::parse();
-    // Default: mock ON (safe) + hardware probe ON unless --no-hw / --hw-only.
-    // Hardware PWM writes OFF unless --allow-hw-write.
+    // Default product launch: hardware probe ON, PWM writes ON, subcommand UI.
+    // Use --read-only / --no-hw / --hw-only for diagnostics.
     let include_mock = !cli.hw_only;
     let include_hw = !cli.no_hw;
-    let allow_hw_write = cli.allow_hw_write;
-    let _ = cli.mock; // reserved: force-mock flag for future
+    // Writes **enabled by default**. Only `--read-only` disables PWM.
+    // `--allow-hw-write` remains valid for old scripts (no-op when already default-on).
+    let allow_hw_write = !cli.read_only;
+    let _ = (cli.mock, cli.allow_hw_write); // reserved / back-compat
 
     if allow_hw_write {
-        tracing::warn!("--allow-hw-write is set: real fan PWM writes are permitted");
+        tracing::warn!("hardware PWM writes enabled (default; use --read-only to disable)");
     }
 
-    match cli.command.unwrap_or(Commands::ListSensors) {
+    // Double-click / bare `fancontrol-rs.exe` → desktop UI
+    match cli.command.unwrap_or(Commands::Ui) {
         Commands::ListSensors => {
             let reg = build_registry(include_mock, include_hw, allow_hw_write);
             let map = ChannelMap::load_or_seed().unwrap_or_default();
@@ -273,8 +279,8 @@ fn main() -> anyhow::Result<()> {
         Commands::SetDuty { id, percent } => {
             if id.starts_with("pawnio.") && !allow_hw_write {
                 anyhow::bail!(
-                    "refusing hardware write on {id}: read-only by default.\n\
-                     When ready, re-run with: cargo run -- --allow-hw-write set-duty {id} {percent}"
+                    "refusing hardware write on {id}: --read-only is set.\n\
+                     Drop --read-only to allow PWM, e.g.: fancontrol-rs set-duty {id} {percent}"
                 );
             }
             if id.starts_with("pawnio.") {
@@ -368,7 +374,7 @@ fn main() -> anyhow::Result<()> {
             let do_apply = apply;
             if do_apply && include_hw && !allow_hw_write {
                 anyhow::bail!(
-                    "refusing profile apply with hardware: pass --allow-hw-write together with --apply. \
+                    "refusing profile apply with hardware: drop --read-only and pass --apply. \
                      Default is dry-run / read-only."
                 );
             }
@@ -596,8 +602,8 @@ fn run_test_duty(
 ) -> anyhow::Result<()> {
     if control.starts_with("pawnio.") && !allow_hw_write {
         anyhow::bail!(
-            "refusing hardware test-duty: pass --allow-hw-write.\n\
-             Example:\n  cargo run -- --hw-only --allow-hw-write test-duty --control {control} --percent {percent}"
+            "refusing hardware test-duty: --read-only is set (or writes disabled).\n\
+             Example:\n  fancontrol-rs --hw-only test-duty --control {control} --percent {percent}"
         );
     }
     let percent = percent.min(100);

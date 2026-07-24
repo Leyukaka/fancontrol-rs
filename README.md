@@ -117,7 +117,7 @@ Signing + installer (later) should reduce SmartScreen friction for end users —
 ## Safety
 
 - **Never** WinRing0 or known-vulnerable ring-0 drivers.
-- Hardware is **read-only by default**. PWM writes require explicit `--allow-hw-write`.
+- Hardware PWM writes are **on by default** when you launch the app (double-click / bare exe → UI + curve control). Use `--read-only` for diagnostics without writes.
 - Prefer `sample` / `list-sensors` / `list-controls` for validation; do not write casually.
 
 ## CLI (current harness)
@@ -134,15 +134,21 @@ cargo run -- init-profile --hw
 
 ## UI (egui)
 
+Default: bare exe / no subcommand launches the **UI** with **PWM writes on** and **curve control on**.
+
 ```bash
+# Double-click fancontrol-rs.exe  — or:
+cargo run --release
+# same as: cargo run --release -- ui
+
 # Mock only (no admin, rarely flagged)
 cargo run -- --no-hw ui
 
-# Live hardware (Administrator recommended)
+# Live hardware, writes on (Administrator recommended)
 cargo run -- --hw-only ui
 
-# Live + PWM sliders enabled (most likely to trip Defender)
-cargo run -- --hw-only --allow-hw-write ui
+# Live hardware, sensors only (no PWM)
+cargo run -- --hw-only --read-only ui
 ```
 
 Rename fans/sensors: edit `channel-map.json` under the app config dir (`map-init` creates it).
