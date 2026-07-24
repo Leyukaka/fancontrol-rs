@@ -48,16 +48,16 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 ## Status (keep updated)
 
 - Phase 0 foundation: **done**.
-- Phase 1 partial: PawnIOLib FFI + LpcIO Super I/O detect + Nuvoton banked HWM + control loop + CLI.
-- **Blocker on owner machine (2026-07-24):** `pawnio_open` → `HRESULT 0x80070005 E_ACCESSDENIED` without elevation. DLL loads, version works, driver present; executor open needs **admin terminal**.
-- Vendored modules: `crates/fancontrol-pawnio/modules/` (PawnIO.Modules 0.2.9 LpcIO+Echo, LGPL).
-- CLI: `list-sensors`, `list-controls`, `read`, `set-duty`, `demo`, `detect`, `backend-status`, `run`, `init-profile`, `list-profiles`, `ui` (stub).
-- Flags: `--hw-only`, `--no-hw`. Default includes mock + tries hardware.
+- Phase 1: PawnIOLib FFI + LpcIO + **NCT668x EC HWM** (owner chip id=0xD5 rev=0x92 @ 0x0A20) + banked NCT path + control loop + CLI.
+- Elevation required for `pawnio_open` (admin terminal).
+- Owner board: **Nuvoton NCT6687D-class** slot1 @0x4E hwm=0x0A20.
+- Vendored modules: `crates/fancontrol-pawnio/modules/` (PawnIO.Modules 0.2.9).
+- CLI: `list-sensors`, `list-controls`, `read`, `set-duty`, `demo`, `detect`, `backend-status`, `run`, …
 
 ## Next priorities (order)
 
-1. Re-test Super I/O detect/list-sensors from **elevated** PowerShell (user must elevate — agent must not UAC-elevate silently).
-2. Expand chip support (ITE / NCT668x) based on what detect finds.
+1. Validate elevated `list-sensors` / `list-controls` readings on owner NCT668x.
+2. Tune fan/temp labels for this board; MSI NCT6687DR write path if PWM write fails.
 3. Safer write path (confirm + restore defaults).
 4. UI MVP (egui).
 5. Packaging later.

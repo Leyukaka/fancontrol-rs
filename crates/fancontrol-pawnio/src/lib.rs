@@ -4,9 +4,11 @@
 //! (`modules/LpcIO.bin`). Super I/O detection and Nuvoton banked HWM reads
 //! are implemented; full chip coverage is incremental.
 
+mod device;
 mod ffi;
 mod lpcio;
 mod mutex_isa;
+mod nct668;
 mod provider;
 mod session;
 mod superio;

@@ -46,15 +46,20 @@ impl SuperIoChip {
     pub fn supports_banked_hwm(&self) -> bool {
         matches!(self, SuperIoChip::NctBanked { .. })
     }
+
+    pub fn supports_nct668_ec(&self) -> bool {
+        matches!(self, SuperIoChip::Nct668x { .. })
+    }
+
+    pub fn has_hwm_driver(&self) -> bool {
+        self.supports_banked_hwm() || self.supports_nct668_ec()
+    }
 }
 
 fn classify_winbond(id: u8, revision: u8) -> SuperIoChip {
-    // NCT668x family uses EC-style access — separate path (not implemented yet).
-    if matches!(
-        (id, revision),
-        (0xC7, 0x32) | (0xD4, 0x40 | 0x41) | (0xD5, 0x92)
-    ) || matches!(id, 0xC7) && matches!(revision, 0x32)
-    {
+    // NCT668x family uses EC-style page/index/data access.
+    // 0xD5/0x92 = NCT6687D (or MSI NCT6687DR variant — same EC bus, mode bits differ on write).
+    if matches!(id, 0xC7) || matches!((id, revision), (0xD4, 0x40 | 0x41) | (0xD5, 0x92)) {
         return SuperIoChip::Nct668x { id, revision };
     }
     // Known banked NCT / Winbond monitor chips (subset of LHM map).
@@ -102,7 +107,7 @@ pub fn detect_chips() -> Result<Vec<DetectedChip>, String> {
         if id != 0 && id != 0xFF {
             let chip = classify_winbond(id, revision);
             let mut hwm = None;
-            if chip.supports_banked_hwm() || matches!(chip, SuperIoChip::Nct668x { .. }) {
+            if chip.has_hwm_driver() {
                 let _ = lpc.find_bars();
                 let _ = lpc.select_ldn(WINBOND_NUVOTON_HWM_LDN);
                 // Disable IO space lock on NCT679x

@@ -1,6 +1,7 @@
 //! Plugin provider bridging Super I/O hardware into fancontrol traits.
 
-use crate::superio::{detect_chips, NctBankedDevice};
+use crate::device::SuperIoDevice;
+use crate::superio::detect_chips;
 use fancontrol_core::{
     ControlDescriptor, ControlId, SensorDescriptor, SensorId, SensorKind,
 };
@@ -8,13 +9,13 @@ use fancontrol_plugins::{ControlProvider, PluginError, Result, SensorProvider};
 use std::sync::Mutex;
 
 pub struct PawnioProvider {
-    devices: Vec<NctBankedDevice>,
+    devices: Vec<SuperIoDevice>,
     detect_notes: Mutex<Vec<String>>,
     init_error: Option<String>,
 }
 
 impl PawnioProvider {
-    /// Probe hardware and open any supported Nuvoton banked devices.
+    /// Probe hardware and open supported HWM devices.
     pub fn probe() -> Self {
         match detect_chips() {
             Ok(chips) => {
@@ -28,19 +29,19 @@ impl PawnioProvider {
                         c.chip.name(),
                         c.hwm_address.map(|a| format!("0x{a:04X}"))
                     ));
-                    if c.chip.supports_banked_hwm() {
-                        match NctBankedDevice::try_open(c) {
-                            Ok(dev) => {
-                                notes.push(format!(
-                                    "  opened banked HWM at 0x{:04X}",
-                                    dev.hwm_address()
-                                ));
-                                devices.push(dev);
-                            }
-                            Err(e) => notes.push(format!("  open failed: {e}")),
+                    match SuperIoDevice::try_open(c) {
+                        Ok(dev) => {
+                            notes.push(format!(
+                                "  opened {} HWM at 0x{:04X} (temps={} fans={} ctrls={})",
+                                dev.kind_label(),
+                                dev.hwm_address(),
+                                dev.temp_sources().len(),
+                                dev.fan_count(),
+                                dev.control_count()
+                            ));
+                            devices.push(dev);
                         }
-                    } else {
-                        notes.push("  (no banked HWM support yet for this chip)".into());
+                        Err(e) => notes.push(format!("  open skipped/failed: {e}")),
                     }
                 }
                 if chips.is_empty() {
@@ -114,7 +115,6 @@ impl SensorProvider for PawnioProvider {
 
     fn read(&self, id: &SensorId) -> Result<f64> {
         let s = id.as_str();
-        // pawnio.{di}.temp.{NAME} or pawnio.{di}.fan{N}
         let rest = s
             .strip_prefix("pawnio.")
             .ok_or_else(|| PluginError::SensorNotFound(s.into()))?;
@@ -132,15 +132,10 @@ impl SensorProvider for PawnioProvider {
             .ok_or_else(|| PluginError::SensorNotFound(s.into()))?;
 
         if let Some(name) = tail.strip_prefix("temp.") {
-            for ts in dev.temp_sources() {
-                if ts.name == name {
-                    return dev
-                        .read_temp_c(ts.reg, ts.half)
-                        .map_err(PluginError::Io)?
-                        .ok_or_else(|| PluginError::Other("temp out of range / missing".into()));
-                }
-            }
-            return Err(PluginError::SensorNotFound(s.into()));
+            return dev
+                .read_temp_named(name)
+                .map_err(PluginError::Io)?
+                .ok_or_else(|| PluginError::Other("temp out of range / missing".into()));
         }
         if let Some(idx) = tail.strip_prefix("fan") {
             let fi: usize = idx
