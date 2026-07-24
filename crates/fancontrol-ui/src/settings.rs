@@ -15,6 +15,9 @@ pub struct UiSettings {
     pub show_cpu_graph: bool,
     #[serde(default = "default_true")]
     pub show_host_sensors: bool,
+    /// When true and --allow-hw-write, apply profile curves each poll tick.
+    #[serde(default)]
+    pub auto_apply_curves: bool,
 }
 
 fn default_true() -> bool {
@@ -27,6 +30,7 @@ impl Default for UiSettings {
             hide_zero_rpm: true,
             show_cpu_graph: true,
             show_host_sensors: true,
+            auto_apply_curves: false,
         }
     }
 }

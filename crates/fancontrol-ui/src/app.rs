@@ -1,12 +1,16 @@
 //! egui application: live sensors, sliders, graph, rename, options.
 
+use crate::curve_editor::show_curve_editor;
 use crate::graph::{show_cpu_graph, TempHistory};
 use crate::poll::{spawn_poller, SharedMap, SharedSnapshot};
 use crate::registry::{backend_status_line, build_registry};
 use crate::settings::UiSettings;
 use crate::UiError;
 use eframe::egui;
-use fancontrol_core::{ChannelMap, ControlId};
+use fancontrol_core::{
+    evaluate_profile_step, list_profiles, load_profile, save_profile, ChannelMap, ControlId,
+    CurveEvalState, FanCurve, Profile,
+};
 use fancontrol_plugins::ProviderRegistry;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -40,6 +44,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
     let map = Arc::new(Mutex::new(ChannelMap::load_or_seed().unwrap_or_default()));
     let status = backend_status_line(options.include_hw);
     let snapshot = spawn_poller(Arc::clone(&reg), Arc::clone(&map), Duration::from_millis(750));
+    let profile = load_or_create_default_profile();
 
     let app = FanApp {
         options,
@@ -58,11 +63,19 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         rename_is_control: false,
         cpu_history: TempHistory::default(),
         show_settings: false,
+        show_curves: true,
+        profile,
+        profile_list: list_profiles().unwrap_or_default(),
+        selected_curve: 0,
+        curve_states: HashMap::new(),
+        last_curve_apply: Instant::now() - Duration::from_secs(10),
+        profile_status: None,
+        new_profile_name: "default".into(),
     };
 
     let native = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1120.0, 780.0])
+            .with_inner_size([1200.0, 860.0])
             .with_title("fancontrol-rs"),
         ..Default::default()
     };
@@ -95,6 +108,32 @@ struct FanApp {
     rename_is_control: bool,
     cpu_history: TempHistory,
     show_settings: bool,
+    show_curves: bool,
+    profile: Profile,
+    profile_list: Vec<String>,
+    selected_curve: usize,
+    curve_states: HashMap<String, CurveEvalState>,
+    last_curve_apply: Instant,
+    profile_status: Option<String>,
+    new_profile_name: String,
+}
+
+fn load_or_create_default_profile() -> Profile {
+    if let Ok(p) = load_profile("default") {
+        return p;
+    }
+    let mut p = Profile::new("default", "Default");
+    p.curves.push(FanCurve::linear("quiet", "Quiet", 30.0, 75.0, 25, 100));
+    p.assignments
+        .insert("pawnio.0.ctrl0".into(), "quiet".into());
+    p.sensor_bindings
+        .insert("pawnio.0.ctrl0".into(), "pawnio.0.temp.CPU".into());
+    p.assignments
+        .insert("pawnio.0.ctrl1".into(), "quiet".into());
+    p.sensor_bindings
+        .insert("pawnio.0.ctrl1".into(), "pawnio.0.temp.CPU".into());
+    let _ = save_profile(&p);
+    p
 }
 
 impl eframe::App for FanApp {
@@ -112,6 +151,15 @@ impl eframe::App for FanApp {
             self.cpu_history.push(t as f32);
         }
 
+        // Auto-apply curves ~1 Hz when enabled + write allowed
+        if self.settings.auto_apply_curves
+            && self.options.allow_hw_write
+            && self.last_curve_apply.elapsed() >= Duration::from_millis(1000)
+        {
+            self.apply_curves_from_snapshot(&snap);
+            self.last_curve_apply = Instant::now();
+        }
+
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.heading("fancontrol-rs");
@@ -124,6 +172,12 @@ impl eframe::App for FanApp {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("⚙ Options").clicked() {
                         self.show_settings = !self.show_settings;
+                    }
+                    if ui
+                        .selectable_label(self.show_curves, "Curves")
+                        .clicked()
+                    {
+                        self.show_curves = !self.show_curves;
                     }
                 });
             });
@@ -166,6 +220,18 @@ impl eframe::App for FanApp {
                             "GPU / SSD (host, si dispo)",
                         )
                         .changed();
+                    dirty |= ui
+                        .checkbox(
+                            &mut self.settings.auto_apply_curves,
+                            "Appliquer les courbes (auto, 1 Hz)",
+                        )
+                        .changed();
+                    if self.settings.auto_apply_curves && !self.options.allow_hw_write {
+                        ui.colored_label(
+                            egui::Color32::YELLOW,
+                            "Auto-apply needs --allow-hw-write",
+                        );
+                    }
                     ui.small("GPU: nvidia-smi · SSD: StorageReliabilityCounter");
                     ui.separator();
                     ui.label("RGB");
@@ -181,6 +247,15 @@ impl eframe::App for FanApp {
                     if ui.button("Fermer").clicked() {
                         self.show_settings = false;
                     }
+                });
+        }
+
+        if self.show_curves {
+            egui::TopBottomPanel::bottom("curves")
+                .resizable(true)
+                .default_height(280.0)
+                .show(ctx, |ui| {
+                    self.ui_curves_panel(ui, snap.cpu_temp);
                 });
         }
 
@@ -303,6 +378,51 @@ impl eframe::App for FanApp {
                                     ui.weak("RPM —");
                                 }
 
+                                // Curve assignment for this control
+                                let cur = self
+                                    .profile
+                                    .assignments
+                                    .get(&c.id)
+                                    .cloned()
+                                    .unwrap_or_else(|| "(none)".into());
+                                egui::ComboBox::from_id_salt(format!("asg-{}", c.id))
+                                    .selected_text(cur)
+                                    .show_ui(ui, |ui| {
+                                        if ui
+                                            .selectable_label(
+                                                !self.profile.assignments.contains_key(&c.id),
+                                                "(none)",
+                                            )
+                                            .clicked()
+                                        {
+                                            self.profile.assignments.remove(&c.id);
+                                            self.profile.sensor_bindings.remove(&c.id);
+                                        }
+                                        let curve_ids: Vec<String> = self
+                                            .profile
+                                            .curves
+                                            .iter()
+                                            .map(|cv| cv.id.as_str().to_string())
+                                            .collect();
+                                        for cid in curve_ids {
+                                            let selected = self
+                                                .profile
+                                                .assignments
+                                                .get(&c.id)
+                                                .map(|x| x == &cid)
+                                                .unwrap_or(false);
+                                            if ui.selectable_label(selected, &cid).clicked() {
+                                                self.profile
+                                                    .assignments
+                                                    .insert(c.id.clone(), cid);
+                                                self.profile.sensor_bindings.insert(
+                                                    c.id.clone(),
+                                                    "pawnio.0.temp.CPU".into(),
+                                                );
+                                            }
+                                        }
+                                    });
+
                                 let locked = self.is_user_locked(&c.id);
                                 if !locked {
                                     self.slider_state
@@ -356,6 +476,143 @@ impl eframe::App for FanApp {
 }
 
 impl FanApp {
+    fn ui_curves_panel(&mut self, ui: &mut egui::Ui, live_temp: Option<f64>) {
+        ui.horizontal(|ui| {
+            ui.heading("Profiles & curves");
+            if let Some(s) = &self.profile_status {
+                ui.small(s);
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label("Profile");
+            egui::ComboBox::from_id_salt("profile_pick")
+                .selected_text(self.profile.id.as_str())
+                .show_ui(ui, |ui| {
+                    for id in self.profile_list.clone() {
+                        if ui
+                            .selectable_label(self.profile.id.as_str() == id, &id)
+                            .clicked()
+                        {
+                            if let Ok(p) = load_profile(&id) {
+                                self.profile = p;
+                                self.selected_curve = 0;
+                                self.curve_states.clear();
+                                self.profile_status = Some(format!("Loaded {id}"));
+                            }
+                        }
+                    }
+                });
+            if ui.button("Reload list").clicked() {
+                self.profile_list = list_profiles().unwrap_or_default();
+            }
+            if ui.button("Save").clicked() {
+                match save_profile(&self.profile) {
+                    Ok(path) => {
+                        self.profile_status = Some(format!("Saved {}", path.display()));
+                        self.profile_list = list_profiles().unwrap_or_default();
+                    }
+                    Err(e) => self.profile_status = Some(format!("Save error: {e}")),
+                }
+            }
+            ui.text_edit_singleline(&mut self.new_profile_name);
+            if ui.button("New / Save as").clicked() {
+                let name = self.new_profile_name.trim();
+                if !name.is_empty() {
+                    self.profile.id = fancontrol_core::ProfileId::new(name);
+                    self.profile.name = name.to_string();
+                    match save_profile(&self.profile) {
+                        Ok(_) => {
+                            self.profile_list = list_profiles().unwrap_or_default();
+                            self.profile_status = Some(format!("Saved as {name}"));
+                        }
+                        Err(e) => self.profile_status = Some(format!("Save error: {e}")),
+                    }
+                }
+            }
+            if ui.button("Apply now").clicked() {
+                let s = self
+                    .snapshot
+                    .lock()
+                    .map(|g| g.clone())
+                    .unwrap_or_default();
+                self.apply_curves_from_snapshot(&s);
+                self.profile_status = Some("Curves applied once".into());
+            }
+        });
+
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                ui.label("Curves");
+                let n = self.profile.curves.len();
+                for i in 0..n {
+                    let name = self.profile.curves[i].name.clone();
+                    if ui
+                        .selectable_label(self.selected_curve == i, name)
+                        .clicked()
+                    {
+                        self.selected_curve = i;
+                    }
+                }
+                if ui.button("+ curve").clicked() {
+                    let id = format!("curve{}", self.profile.curves.len() + 1);
+                    self.profile.curves.push(FanCurve::linear(
+                        id,
+                        "New curve",
+                        30.0,
+                        80.0,
+                        20,
+                        100,
+                    ));
+                    self.selected_curve = self.profile.curves.len().saturating_sub(1);
+                }
+            });
+            ui.separator();
+            ui.vertical(|ui| {
+                if let Some(curve) = self.profile.curves.get_mut(self.selected_curve) {
+                    let mut name = curve.name.clone();
+                    if ui.text_edit_singleline(&mut name).changed() {
+                        curve.name = name;
+                    }
+                    if show_curve_editor(ui, curve, live_temp) {
+                        self.profile_status = Some("Curve edited (Save to persist)".into());
+                    }
+                } else {
+                    ui.label("No curve selected");
+                }
+            });
+        });
+    }
+
+    fn apply_curves_from_snapshot(&mut self, snap: &crate::poll::Snapshot) {
+        let mut temps: HashMap<String, f64> = snap
+            .temps
+            .iter()
+            .map(|(id, _, v)| (id.clone(), *v))
+            .collect();
+        if let Some(t) = snap.cpu_temp {
+            temps
+                .entry("pawnio.0.temp.CPU".into())
+                .or_insert(t);
+        }
+        let step = evaluate_profile_step(&self.profile, &temps, &mut self.curve_states);
+        for (ctrl, duty) in step.duties {
+            if self.is_user_locked(&ctrl) {
+                continue; // don't fight manual slider
+            }
+            match self.reg.set_duty(&ControlId::new(ctrl.clone()), duty) {
+                Ok(()) => {
+                    self.slider_state.insert(ctrl.clone(), f32::from(duty));
+                }
+                Err(e) => {
+                    self.write_error = Some(format!("{ctrl}: {e}"));
+                }
+            }
+        }
+        for e in step.errors {
+            tracing::debug!(error = %e, "curve apply");
+        }
+    }
+
     fn begin_rename(&mut self, id: &str, current: &str, is_control: bool) {
         self.rename_id = Some(id.to_string());
         self.rename_buf = current.to_string();

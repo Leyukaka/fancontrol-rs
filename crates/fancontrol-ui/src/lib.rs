@@ -1,6 +1,7 @@
 //! Desktop UI for fancontrol-rs (egui + eframe).
 
 mod app;
+mod curve_editor;
 mod graph;
 mod poll;
 mod registry;
