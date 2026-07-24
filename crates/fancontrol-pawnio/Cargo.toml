@@ -12,7 +12,7 @@ fancontrol-core = { workspace = true }
 fancontrol-plugins = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-libloading = "0.8"
+libloading = "0.9"
 windows-sys = { version = "0.59", features = [
     "Win32_Foundation",
     "Win32_System_Threading",
