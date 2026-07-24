@@ -13,12 +13,12 @@ use windows_sys::Win32::Foundation::{CloseHandle, GENERIC_READ, HANDLE, INVALID_
 use windows_sys::Win32::Storage::FileSystem::{
     CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
 };
-use windows_sys::Win32::System::IO::DeviceIoControl;
 use windows_sys::Win32::System::Ioctl::{
-    IOCTL_STORAGE_QUERY_PROPERTY, PropertyStandardQuery, STORAGE_PROPERTY_QUERY,
-    STORAGE_TEMPERATURE_DATA_DESCRIPTOR, STORAGE_TEMPERATURE_VALUE_NOT_REPORTED,
-    StorageDeviceProperty, StorageDeviceTemperatureProperty,
+    PropertyStandardQuery, StorageDeviceProperty, StorageDeviceTemperatureProperty,
+    IOCTL_STORAGE_QUERY_PROPERTY, STORAGE_PROPERTY_QUERY, STORAGE_TEMPERATURE_DATA_DESCRIPTOR,
+    STORAGE_TEMPERATURE_VALUE_NOT_REPORTED,
 };
+use windows_sys::Win32::System::IO::DeviceIoControl;
 
 /// Probe `\\.\PhysicalDrive0` … for temperatures reported by the storage stack.
 pub fn probe_storage_temps() -> Vec<(String, String, f64)> {

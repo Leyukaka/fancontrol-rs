@@ -207,7 +207,9 @@ fn resolve_nvidia_smi() -> Option<std::path::PathBuf> {
             }
         }
         // Common defaults if env is odd in a sandbox
-        candidates.push(PathBuf::from(r"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe"));
+        candidates.push(PathBuf::from(
+            r"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe",
+        ));
         candidates.push(PathBuf::from(
             r"C:\Program Files (x86)\NVIDIA Corporation\NVSMI\nvidia-smi.exe",
         ));
