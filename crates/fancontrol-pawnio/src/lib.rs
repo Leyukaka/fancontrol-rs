@@ -91,9 +91,14 @@ pub fn status_message() -> String {
     parts.join("\n")
 }
 
-/// Probe and build a provider (may be empty if no supported chip).
+/// Probe and build a **read-only** provider (may be empty if no supported chip).
 pub fn try_provider() -> PawnioProvider {
     PawnioProvider::probe()
+}
+
+/// Probe with optional hardware write permission (`allow_write=false` by default policy).
+pub fn try_provider_with_writes(allow_write: bool) -> PawnioProvider {
+    PawnioProvider::probe_with_writes(allow_write)
 }
 
 #[cfg(test)]

@@ -66,7 +66,9 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 
 1. Never embed or ship WinRing0 or known-vulnerable ring-0 drivers.
 2. Graceful degrade if PawnIO missing (clear message, app still starts for config/mock).
-3. Prefer read-only hardware access until write path is validated on real fans.
+3. **Hardware is read-only by default.** PWM writes require explicit `--allow-hw-write`.
+   Current owner preference: validate **reads** fully before any single-fan write test.
+4. Prefer `sample` / `list-sensors` / `list-controls` for validation; never write casually.
 
 ## Commands
 

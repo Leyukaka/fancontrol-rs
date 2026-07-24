@@ -12,15 +12,29 @@ pub struct PawnioProvider {
     devices: Vec<SuperIoDevice>,
     detect_notes: Mutex<Vec<String>>,
     init_error: Option<String>,
+    /// When false (default), `set_duty` is refused and controls report `writable=false`.
+    /// Reads (temps, RPM, current duty %) always allowed.
+    write_enabled: bool,
 }
 
 impl PawnioProvider {
-    /// Probe hardware and open supported HWM devices.
+    /// Probe hardware and open supported HWM devices (**read-only** by default).
     pub fn probe() -> Self {
+        Self::probe_with_writes(false)
+    }
+
+    /// Probe with optional hardware write permission.
+    pub fn probe_with_writes(write_enabled: bool) -> Self {
         match detect_chips() {
             Ok(chips) => {
                 let mut notes = Vec::new();
                 let mut devices = Vec::new();
+                notes.push(if write_enabled {
+                    "mode=READ+WRITE (hardware writes enabled)".into()
+                } else {
+                    "mode=READ-ONLY (hardware writes blocked; pass --allow-hw-write to enable)"
+                        .into()
+                });
                 for c in &chips {
                     notes.push(format!(
                         "slot{} @0x{:02X}: {} hwm={:?}",
@@ -51,14 +65,20 @@ impl PawnioProvider {
                     devices,
                     detect_notes: Mutex::new(notes),
                     init_error: None,
+                    write_enabled,
                 }
             }
             Err(e) => Self {
                 devices: Vec::new(),
                 detect_notes: Mutex::new(vec![format!("detect failed: {e}")]),
                 init_error: Some(e),
+                write_enabled,
             },
         }
+    }
+
+    pub fn write_enabled(&self) -> bool {
+        self.write_enabled
     }
 
     pub fn detection_report(&self) -> String {
@@ -163,7 +183,7 @@ impl ControlProvider for PawnioProvider {
                     id: ControlId::new(format!("pawnio.{di}.ctrl{ci}")),
                     name: format!("SIO{di} Control {ci}"),
                     provider: "pawnio".into(),
-                    writable: true,
+                    writable: self.write_enabled,
                     rpm_sensor: Some(SensorId::new(format!("pawnio.{di}.fan{ci}"))),
                 });
             }
@@ -172,6 +192,11 @@ impl ControlProvider for PawnioProvider {
     }
 
     fn set_duty(&self, id: &ControlId, percent: u8) -> Result<()> {
+        if !self.write_enabled {
+            return Err(PluginError::NotWritable(format!(
+                "{id}: hardware writes disabled (read-only mode). Re-run with --allow-hw-write when ready."
+            )));
+        }
         let (di, ci) = parse_ctrl(id.as_str())?;
         let dev = self
             .devices

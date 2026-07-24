@@ -32,6 +32,11 @@ struct Cli {
     #[arg(long, global = true)]
     no_hw: bool,
 
+    /// Allow real hardware PWM writes (default: **off**, read-only).
+    /// Required for `set-duty` / `run` against pawnio.* controls.
+    #[arg(long, global = true)]
+    allow_hw_write: bool,
+
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -47,7 +52,8 @@ enum Commands {
         /// Sensor id (e.g. mock.cpu_temp or pawnio.0.temp.CPUTIN)
         id: String,
     },
-    /// Set fan duty cycle (0-100). **Writes hardware** when id is pawnio.*
+    /// Set fan duty cycle (0-100).
+    /// Hardware (`pawnio.*`) requires global `--allow-hw-write`. Mock always allowed.
     SetDuty {
         /// Control id
         id: String,
@@ -58,6 +64,15 @@ enum Commands {
     BackendStatus,
     /// Probe Super I/O chips only
     Detect,
+    /// Read-only snapshot: temps + fan RPMs + current duties (no writes)
+    Sample {
+        /// How many times to sample
+        #[arg(long, default_value_t = 1)]
+        times: u32,
+        /// Delay between samples in ms
+        #[arg(long, default_value_t = 1000)]
+        interval_ms: u64,
+    },
     /// Demo curve on mock (does not touch hardware fans)
     Demo {
         #[arg(long, default_value_t = 10)]
@@ -65,20 +80,22 @@ enum Commands {
         #[arg(long, default_value_t = 40.0)]
         temp: f64,
     },
-    /// Apply a saved profile in a loop (reads sensors, sets duties)
+    /// Apply a saved profile in a loop.
+    /// Default is **dry-run** (compute duties only). Real set_duty needs
+    /// `--allow-hw-write --apply` together.
     Run {
         /// Profile id (default: default)
         #[arg(long, default_value = "default")]
         profile: String,
-        /// Seconds to run (0 = until Ctrl+C — currently finite only)
+        /// Seconds to run (finite)
         #[arg(long, default_value_t = 30)]
         seconds: u64,
         /// Interval between steps in ms
         #[arg(long, default_value_t = 1000)]
         interval_ms: u64,
-        /// Dry-run: evaluate but do not set_duty
+        /// Actually call set_duty (requires --allow-hw-write for pawnio)
         #[arg(long)]
-        dry_run: bool,
+        apply: bool,
     },
     /// Save a sample default profile (mock bindings)
     InitProfile,
@@ -88,28 +105,24 @@ enum Commands {
     Ui,
 }
 
-fn build_registry(include_mock: bool, include_hw: bool) -> ProviderRegistry {
+fn build_registry(include_mock: bool, include_hw: bool, allow_hw_write: bool) -> ProviderRegistry {
     let mut reg = ProviderRegistry::new();
     if include_mock {
         reg.register_both(MockProvider::new());
     }
     if include_hw {
-        let p = fancontrol_pawnio::try_provider();
+        let p = fancontrol_pawnio::try_provider_with_writes(allow_hw_write);
         tracing::info!(
             devices = p.device_count(),
+            write_enabled = p.write_enabled(),
             "PawnIO provider probed\n{}",
             p.detection_report()
         );
-        // Provider implements both traits but is not Clone — register separately.
-        // We need Arc or dual-box. PawnioProvider is not Clone.
-        // Use a simple approach: probe twice is expensive. Wrap in std::sync::Arc...
-        // For now re-probe is OK for CLI one-shots; for run loop we restructure.
         let report = p.detection_report();
         let count = p.device_count();
         if count == 0 {
             tracing::warn!("no supported Super I/O HWM opened\n{report}");
         }
-        // Register by splitting ownership via Arc wrappers
         let arc = std::sync::Arc::new(p);
         reg.register_sensor_provider(Box::new(ArcSensor(arc.clone())));
         reg.register_control_provider(Box::new(ArcControl(arc)));
@@ -158,13 +171,19 @@ fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
     // Default: mock ON (safe) + hardware probe ON unless --no-hw / --hw-only.
+    // Hardware PWM writes OFF unless --allow-hw-write.
     let include_mock = !cli.hw_only;
     let include_hw = !cli.no_hw;
+    let allow_hw_write = cli.allow_hw_write;
     let _ = cli.mock; // reserved: force-mock flag for future
+
+    if allow_hw_write {
+        tracing::warn!("--allow-hw-write is set: real fan PWM writes are permitted");
+    }
 
     match cli.command.unwrap_or(Commands::ListSensors) {
         Commands::ListSensors => {
-            let reg = build_registry(include_mock, include_hw);
+            let reg = build_registry(include_mock, include_hw, allow_hw_write);
             println!("Sensors:");
             for s in reg.all_sensors() {
                 let value = reg.read_sensor(&s.id).ok();
@@ -186,8 +205,8 @@ fn main() -> anyhow::Result<()> {
             }
         }
         Commands::ListControls => {
-            let reg = build_registry(include_mock, include_hw);
-            println!("Controls:");
+            let reg = build_registry(include_mock, include_hw, allow_hw_write);
+            println!("Controls (duty is read-only current PWM %):");
             for c in reg.all_controls() {
                 let duty = reg.get_duty(&c.id).ok();
                 let duty_str = duty
@@ -204,19 +223,25 @@ fn main() -> anyhow::Result<()> {
             }
         }
         Commands::Read { id } => {
-            let reg = build_registry(include_mock, include_hw);
+            let reg = build_registry(include_mock, include_hw, false);
             let sid = SensorId::new(id);
             let v = reg.read_sensor(&sid)?;
             println!("{sid} = {v}");
         }
         Commands::SetDuty { id, percent } => {
+            if id.starts_with("pawnio.") && !allow_hw_write {
+                anyhow::bail!(
+                    "refusing hardware write on {id}: read-only by default.\n\
+                     When ready, re-run with: cargo run -- --allow-hw-write set-duty {id} {percent}"
+                );
+            }
             if id.starts_with("pawnio.") {
                 eprintln!(
                     "WARNING: writing real hardware duty on {id} → {percent}%. Ctrl+C now to abort…"
                 );
-                thread::sleep(Duration::from_millis(800));
+                thread::sleep(Duration::from_millis(1500));
             }
-            let reg = build_registry(include_mock, include_hw);
+            let reg = build_registry(include_mock, include_hw, allow_hw_write);
             let cid = ControlId::new(id);
             reg.set_duty(&cid, percent)?;
             let now = reg.get_duty(&cid)?;
@@ -228,6 +253,7 @@ fn main() -> anyhow::Result<()> {
             let p = fancontrol_pawnio::try_provider();
             println!("\nProvider probe:\n{}", p.detection_report());
             println!("opened_devices={}", p.device_count());
+            println!("hw_write_enabled={}", p.write_enabled());
         }
         Commands::Detect => {
             match fancontrol_pawnio::detect_chips() {
@@ -246,6 +272,43 @@ fn main() -> anyhow::Result<()> {
                 Err(e) => anyhow::bail!("detect failed: {e}"),
             }
         }
+        Commands::Sample { times, interval_ms } => {
+            let reg = build_registry(include_mock, include_hw, false);
+            let times = times.max(1);
+            for n in 0..times {
+                if times > 1 {
+                    println!("--- sample {}/{} ---", n + 1, times);
+                }
+                println!("Temperatures:");
+                for s in reg.all_sensors() {
+                    if s.kind == SensorKind::Temperature {
+                        match reg.read_sensor(&s.id) {
+                            Ok(v) => println!("  {:>28}  {v:6.1} °C  ({})", s.id, s.name),
+                            Err(e) => println!("  {:>28}  n/a ({e})", s.id),
+                        }
+                    }
+                }
+                println!("Fan RPM:");
+                for s in reg.all_sensors() {
+                    if s.kind == SensorKind::FanRpm {
+                        match reg.read_sensor(&s.id) {
+                            Ok(v) => println!("  {:>28}  {v:7.0} RPM  ({})", s.id, s.name),
+                            Err(e) => println!("  {:>28}  n/a ({e})", s.id),
+                        }
+                    }
+                }
+                println!("Control duty (read):");
+                for c in reg.all_controls() {
+                    match reg.get_duty(&c.id) {
+                        Ok(d) => println!("  {:>28}  {d:3}%  writable={}", c.id, c.writable),
+                        Err(e) => println!("  {:>28}  n/a ({e})", c.id),
+                    }
+                }
+                if n + 1 < times {
+                    thread::sleep(Duration::from_millis(interval_ms));
+                }
+            }
+        }
         Commands::Demo { seconds, temp } => {
             run_demo(seconds, temp)?;
         }
@@ -253,14 +316,26 @@ fn main() -> anyhow::Result<()> {
             profile,
             seconds,
             interval_ms,
-            dry_run,
+            apply,
         } => {
-            let reg = build_registry(include_mock, include_hw);
+            let do_apply = apply;
+            if do_apply && include_hw && !allow_hw_write {
+                anyhow::bail!(
+                    "refusing profile apply with hardware: pass --allow-hw-write together with --apply. \
+                     Default is dry-run / read-only."
+                );
+            }
+            if do_apply && include_hw {
+                eprintln!("WARNING: profile apply will write hardware duties. 1.5s to abort…");
+                thread::sleep(Duration::from_millis(1500));
+            }
+            let reg = build_registry(include_mock, include_hw, allow_hw_write && do_apply);
             let profile = load_profile(&profile)?;
             let mut states: HashMap<String, CurveEvalState> = HashMap::new();
             let steps = seconds.max(1);
+            let mode = if do_apply { "APPLY" } else { "DRY-RUN" };
             println!(
-                "Running profile '{}' for {seconds}s (interval={interval_ms}ms dry_run={dry_run})",
+                "Running profile '{}' for {seconds}s (interval={interval_ms}ms mode={mode})",
                 profile.name
             );
             for i in 0..steps {
@@ -277,7 +352,7 @@ fn main() -> anyhow::Result<()> {
                     eprintln!("  warn: {err}");
                 }
                 for (ctrl, duty) in &step.duties {
-                    if dry_run {
+                    if !do_apply {
                         println!("  t={i:03} {ctrl} → {duty}% (dry-run)");
                     } else {
                         match reg.set_duty(&ControlId::new(ctrl.clone()), *duty) {
