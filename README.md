@@ -1,12 +1,36 @@
-# fancontrol-rs
+<p align="center">
+  <img src="assets/logo.svg" alt="fancontrol-rs logo" width="160">
+</p>
 
-**A modern, full-featured fan control application for Windows written in Rust.**
+<h1 align="center">fancontrol-rs</h1>
 
-Spiritual successor to [FanControl](https://github.com/Rem0o/FanControl.Releases) by Rem0o.
+<p align="center">
+  <strong>A modern, full-featured fan control application for Windows written in Rust.</strong><br>
+  Spiritual successor to <a href="https://github.com/Rem0o/FanControl.Releases">FanControl</a> by Rem0o.<br>
+  Security-first · Plugin-ready · Spec-driven
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/rust-edition%202021-orange?logo=rust&logoColor=white" alt="Rust">
+  <img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue" alt="License">
+  <img src="https://img.shields.io/badge/status-early%20stage-yellow" alt="Status">
+  <img src="https://img.shields.io/badge/backend-PawnIO-success" alt="PawnIO">
+  <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-blue" alt="Windows">
+</p>
+
+---
 
 > This project is developed using **Spec-Driven Design**.  
 > All important decisions and requirements live in the [`specs/`](./specs) folder.  
 > Read those documents before writing code.
+
+## ✨ Features
+
+- 🔒 **Security first** — Uses [PawnIO](https://pawnio.eu/) only. Never ships WinRing0 or custom ring-0 drivers
+- 🎛️ Full control — Curves, profiles, live sliders, temperature graphs
+- 🧩 Plugin architecture — Extensible sensors & controls
+- 📊 Real-time UI — Built with egui (live sensors, curve editor MVP)
+- 🦀 Pure Rust — Core, UI, hardware backend and CLI
 
 ## Specs
 
@@ -29,14 +53,9 @@ Spiritual successor to [FanControl](https://github.com/Rem0o/FanControl.Releases
 | [docs/SIGNING_AND_DISTRIBUTION.md](./docs/SIGNING_AND_DISTRIBUTION.md) | Signing options, release checklist, CI notes |
 | [docs/SECURITY.md](./docs/SECURITY.md) | Reporting, CodeQL/audit, SHA256 verify, signing/auto-update status |
 
-## Contributing
-
-Bug reports and pull requests are welcome on this repository.
-Please read [CONTRIBUTING.md](./CONTRIBUTING.md) (includes a strict policy for AI-assisted patches).
-
 ## Status
 
-🚧 **Early stage** — Phase 1 hardware (PawnIO / NCT668x) + Phase 2 UI (live sensors, sliders, curve editor MVP, temp graph).
+🚧 **Early stage** — Phase 1 hardware (PawnIO / NCT668x) + Phase 2 UI (live sensors, sliders, curve editor MVP, temp graph).  
 Public source of truth: this repo (issues, PRs, and [Releases](https://github.com/Leyukaka/fancontrol-rs/releases)).
 
 | Crate | Status |
@@ -47,7 +66,8 @@ Public source of truth: this repo (issues, PRs, and [Releases](https://github.co
 | `fancontrol-ui` | egui live + sliders + curve editor + graph |
 | `fancontrol-rs` (CLI) | sample, watch, test-duty, ui, map-init, … |
 
-Validated hardware summary: **Nuvoton NCT6687D-class** EC (id `0xD5` rev `0x92` @ `0x0A20`) — reads and PWM writes via PawnIO. Details: [docs/SUPPORTED_HARDWARE.md](./docs/SUPPORTED_HARDWARE.md).
+Validated hardware summary: **Nuvoton NCT6687D-class** EC (id `0xD5` rev `0x92` @ `0x0A20`) — reads and PWM writes via PawnIO.  
+Details: [docs/SUPPORTED_HARDWARE.md](./docs/SUPPORTED_HARDWARE.md).
 
 ## Download
 
@@ -80,8 +100,6 @@ This app talks to **PawnIO** (kernel I/O), may spawn **nvidia-smi** for optional
 
 - Prefer official Releases + verify **SHA256** — see [docs/SECURITY.md](./docs/SECURITY.md).
 - Especially with `--allow-hw-write` (real PWM control), Defender can be noisier.
-
-
 
 **Do not disable Defender entirely.** Prefer a folder exclusion for local development:
 
@@ -131,7 +149,8 @@ Rename fans/sensors: edit `channel-map.json` under the app config dir (`map-init
 
 ## Contributing
 
-See **[CONTRIBUTING.md](./CONTRIBUTING.md)** — issue-first for non-trivial work, quality gates (fmt/clippy/tests), hardware safety, and a **strict AI disclosure** policy.
+Bug reports and pull requests are welcome on this repository.  
+Please read **[CONTRIBUTING.md](./CONTRIBUTING.md)** — issue-first for non-trivial work, quality gates (fmt/clippy/tests), hardware safety, and a **strict AI disclosure** policy.
 
 ## License
 
