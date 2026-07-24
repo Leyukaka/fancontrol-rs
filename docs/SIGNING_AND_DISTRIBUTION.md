@@ -29,6 +29,8 @@ Signing does **not** replace:
 
 **Recommendation for early public tags:** ship **unsigned** release artifacts with a **SHA256** file, document PawnIO + admin + SmartScreen honestly, then add Trusted Signing or SignPath when ready for broader audience.
 
+**Current project choice:** remain **unsigned + SHA256** until a maintainer configures a signing provider. Integrity checks and scanning are documented in [SECURITY.md](./SECURITY.md).
+
 ---
 
 ## Pipeline shape

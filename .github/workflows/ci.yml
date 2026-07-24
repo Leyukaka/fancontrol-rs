@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+# Least privilege for build/test (release workflow keeps contents: write).
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
