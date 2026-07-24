@@ -22,12 +22,32 @@ Spiritual successor to [FanControl](https://github.com/Rem0o/FanControl.Releases
 
 ## Status
 
-🚧 **Early stage** — Specs written, implementation not started yet.
+🚧 **Early stage** — Specs complete, Phase 0 foundation in progress.
+
+| Crate | Status |
+|-------|--------|
+| `fancontrol-core` | Models, curve engine, profile JSON |
+| `fancontrol-plugins` | Traits + mock provider |
+| `fancontrol-pawnio` | Stub (availability probe only) |
+| `fancontrol-ui` | Stub (egui locked, not implemented) |
+| `fancontrol-rs` (CLI) | `list-sensors`, `set-duty`, `demo`, … |
 
 ## Building
 
 ```bash
 cargo build --release
+cargo test
+```
+
+## CLI (current harness)
+
+```bash
+cargo run -- list-sensors
+cargo run -- list-controls
+cargo run -- set-duty mock.cpu_fan 45
+cargo run -- demo --seconds 5
+cargo run -- backend-status
+cargo run -- init-profile
 ```
 
 ## License

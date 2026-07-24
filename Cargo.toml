@@ -1,33 +1,67 @@
-[package]
-name = "fancontrol-rs"
+[workspace]
+resolver = "2"
+members = [
+    "crates/fancontrol-core",
+    "crates/fancontrol-plugins",
+    "crates/fancontrol-pawnio",
+    "crates/fancontrol-ui",
+    ".",
+]
+default-members = ["."]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
-description = "A modern, full-featured fan control application for Windows written in Rust"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Leyukaka/fancontrol-rs"
+authors = ["Leyukaka"]
+
+[workspace.dependencies]
+fancontrol-core = { path = "crates/fancontrol-core" }
+fancontrol-plugins = { path = "crates/fancontrol-plugins" }
+fancontrol-pawnio = { path = "crates/fancontrol-pawnio" }
+fancontrol-ui = { path = "crates/fancontrol-ui" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4", features = ["derive"] }
+directories = "5"
+
+# UI (locked: egui + eframe)
+egui = "0.29"
+eframe = "0.29"
+
+[package]
+name = "fancontrol-rs"
+version.workspace = true
+edition.workspace = true
+description = "A modern, full-featured fan control application for Windows written in Rust"
+license.workspace = true
+repository.workspace = true
 readme = "README.md"
 keywords = ["fan", "control", "hardware", "sensors", "windows"]
 categories = ["hardware-support", "gui"]
 
+[[bin]]
+name = "fancontrol-rs"
+path = "src/main.rs"
+
 [dependencies]
-# UI (decision pending: egui vs iced)
-# egui = "0.29"
-# eframe = "0.29"
+fancontrol-core = { workspace = true }
+fancontrol-plugins = { workspace = true }
+fancontrol-pawnio = { workspace = true }
+fancontrol-ui = { workspace = true }
 
-# Async / channels
-tokio = { version = "1", features = ["full"] }
-
-# Serialization
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-
-# Logging
-tracing = "0.1"
-tracing-subscriber = "0.3"
-
-# Error handling
-anyhow = "1"
-thiserror = "1"
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+clap = { workspace = true }
+serde_json = { workspace = true }
 
 [profile.release]
 lto = true

@@ -1,0 +1,13 @@
+[package]
+name = "fancontrol-plugins"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Plugin traits and built-in providers for fancontrol-rs"
+publish = false
+
+[dependencies]
+fancontrol-core = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }

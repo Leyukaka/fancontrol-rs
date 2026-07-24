@@ -1,0 +1,15 @@
+[package]
+name = "fancontrol-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Desktop UI for fancontrol-rs (egui + eframe)"
+publish = false
+
+[dependencies]
+fancontrol-core = { workspace = true }
+# egui / eframe will be enabled when the UI is implemented
+# egui = { workspace = true }
+# eframe = { workspace = true }
+tracing = { workspace = true }

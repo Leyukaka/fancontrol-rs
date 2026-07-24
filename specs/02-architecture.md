@@ -45,9 +45,8 @@
 - Core defines traits: `SensorProvider`, `ControlProvider`.
 - Plugins are loaded dynamically (or compiled in for official ones).
 
-### 3. UI choice (pending final decision)
-- Preferred candidates: **egui + eframe** (fast iteration, pure Rust) or **iced**.
-- Decision will be locked in `specs/04-ui.md`.
+### 3. UI choice (locked)
+- **egui + eframe** for v1 (see `specs/04-ui.md`).
 
 ### 4. Data flow
 ```

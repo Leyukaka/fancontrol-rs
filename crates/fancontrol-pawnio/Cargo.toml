@@ -1,0 +1,14 @@
+[package]
+name = "fancontrol-pawnio"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "PawnIO hardware backend for fancontrol-rs (stub)"
+publish = false
+
+[dependencies]
+fancontrol-core = { workspace = true }
+fancontrol-plugins = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }

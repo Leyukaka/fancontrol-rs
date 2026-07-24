@@ -2,9 +2,12 @@
 
 ## Phase 0 — Foundation (current)
 - [x] Repository + Spec-Driven Design documents
-- [ ] Workspace structure (`crates/`)
-- [ ] Final UI technology decision
-- [ ] Basic `fancontrol-core` domain models
+- [x] Workspace structure (`crates/`)
+- [x] Final UI technology decision (egui + eframe)
+- [x] Basic `fancontrol-core` domain models + curve engine + profile JSON
+- [x] Plugin traits + mock provider
+- [x] CLI harness (`list-sensors`, `set-duty`, `demo`, …)
+- [x] CI (GitHub Actions)
 
 ## Phase 1 — Hardware & Core
 - [ ] `fancontrol-pawnio` crate (PawnIO bindings + basic sensor/control discovery)
