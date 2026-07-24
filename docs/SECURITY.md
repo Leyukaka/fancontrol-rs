@@ -9,6 +9,17 @@ How this project is protected, what we ship, and how to verify downloads.
 2. **Do not** paste tokens, private keys, or full dumps of personal configs into issues or PRs.
 3. For routine bugs (UI crash, wrong sensor label), a normal [issue](https://github.com/Leyukaka/fancontrol-rs/issues) is fine.
 
+## Branch, tags, and releases (who decides)
+
+| Control | Who |
+|---------|-----|
+| Force-push / delete `main` | Blocked |
+| Merge PR to `main` | Needs green CI (`Test (Windows)`, `cargo audit`) |
+| Create tags `v*` | **Repository admin only** (owner) |
+| Publish Release exe (workflow) | **Owner approval** on GitHub environment `release` |
+
+You are the sole release decision-maker: even after a tag exists, the Release workflow waits for your **Review deployments** click before uploading `fancontrol-rs.exe`.
+
 ## Automated scanning (public repository)
 
 | Mechanism | What it does |

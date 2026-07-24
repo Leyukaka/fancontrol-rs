@@ -50,6 +50,16 @@ Signing does **not** replace:
 
 Implementation today: **[`.github/workflows/release.yml`](../.github/workflows/release.yml)** — build + upload only. Signing steps are **not** wired yet (no secrets required to land the workflow).
 
+### Who can release (maintainer control)
+
+| Control | Effect |
+|---------|--------|
+| Branch protection on `main` | No force-push / no delete; PRs need green `Test (Windows)` + `cargo audit` |
+| Tag ruleset `v*` | Only **repository admins** can create/update/delete version tags |
+| Environment **`release`** | Workflow waits for **owner approval** before build/publish |
+
+So a random collaborator (if ever granted write) cannot silently ship a tagged exe: tags are admin-gated, and publishing waits for your approval in the Actions UI (**Review deployments**).
+
 ### GitHub Actions format note
 
 GitHub Actions **requires YAML** under `.github/workflows/`. That is the native platform format — not optional and not a “generator” like cargo-dist. Keep workflows **minimal**: checkout → toolchain → cache → build → artifact/release. Prefer small, readable YAML over large generated matrices until packaging needs grow.
