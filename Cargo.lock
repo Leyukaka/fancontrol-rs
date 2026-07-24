@@ -1177,7 +1177,7 @@ dependencies = [
 
 [[package]]
 name = "fancontrol-core"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "directories",
  "serde",
@@ -1189,7 +1189,7 @@ dependencies = [
 
 [[package]]
 name = "fancontrol-pawnio"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "fancontrol-core",
  "fancontrol-plugins",
@@ -1201,16 +1201,17 @@ dependencies = [
 
 [[package]]
 name = "fancontrol-plugins"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "fancontrol-core",
  "thiserror 1.0.69",
  "tracing",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
 name = "fancontrol-rs"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -1225,7 +1226,7 @@ dependencies = [
 
 [[package]]
 name = "fancontrol-ui"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "eframe",
  "egui",

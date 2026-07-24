@@ -152,7 +152,10 @@ impl SensorProvider for HostSensorProvider {
 }
 
 fn probe_nvidia() -> Vec<(String, String, f64)> {
-    let mut cmd = Command::new("nvidia-smi");
+    let Some(smi) = resolve_nvidia_smi() else {
+        return Vec::new();
+    };
+    let mut cmd = Command::new(&smi);
     cmd.args([
         "--query-gpu=index,name,temperature.gpu",
         "--format=csv,noheader,nounits",
@@ -185,6 +188,65 @@ fn probe_nvidia() -> Vec<(String, String, f64)> {
         ));
     }
     rows
+}
+
+/// Prefer absolute NVIDIA install paths so we do **not** walk a polluted `PATH`
+/// (VirusTotal sandboxes often list every `…\javapath\nvidia-smi.exe` probe as a
+/// "file opened"). Bare `nvidia-smi` on PATH is last resort only.
+fn resolve_nvidia_smi() -> Option<std::path::PathBuf> {
+    use std::path::PathBuf;
+
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    #[cfg(windows)]
+    {
+        const REL: &str = r"NVIDIA Corporation\NVSMI\nvidia-smi.exe";
+        for env_key in ["ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"] {
+            if let Ok(root) = std::env::var(env_key) {
+                candidates.push(PathBuf::from(root).join(REL));
+            }
+        }
+        // Common defaults if env is odd in a sandbox
+        candidates.push(PathBuf::from(r"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe"));
+        candidates.push(PathBuf::from(
+            r"C:\Program Files (x86)\NVIDIA Corporation\NVSMI\nvidia-smi.exe",
+        ));
+        // Some driver layouts also place a copy under System32
+        if let Ok(sys) = std::env::var("SystemRoot") {
+            candidates.push(PathBuf::from(sys).join(r"System32\nvidia-smi.exe"));
+        }
+    }
+
+    for p in &candidates {
+        if p.is_file() {
+            return Some(p.clone());
+        }
+    }
+
+    // No bare PATH lookup on Windows: CreateProcess("nvidia-smi") and manual PATH
+    // walks both produce VirusTotal "files opened" noise under every odd PATH entry
+    // (Oracle javapath, Unrar, …). Non-Windows: allow PATH for dev convenience.
+    #[cfg(not(windows))]
+    {
+        which_on_path("nvidia-smi")
+    }
+    #[cfg(windows)]
+    {
+        None
+    }
+}
+
+#[cfg(not(windows))]
+fn which_on_path(name: &str) -> Option<std::path::PathBuf> {
+    use std::path::PathBuf;
+    let path = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path) {
+        let bare = dir.join(name);
+        if bare.is_file() {
+            return Some(bare);
+        }
+    }
+    None
 }
 
 fn probe_storage_temps() -> Vec<(String, String, f64)> {
