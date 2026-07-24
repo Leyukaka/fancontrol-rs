@@ -379,6 +379,7 @@ impl Nct668Device {
         }
     }
 
+    /// Caller must hold `IsaBusGuard` for the whole batch when using repeatedly.
     fn read_byte(&self, address: u16) -> Result<u8, String> {
         let page = (address >> 8) as u8;
         let index = (address & 0xFF) as u8;
@@ -386,6 +387,9 @@ impl Nct668Device {
         self.lpc.write_port(self.hwm + EC_PAGE_OFF, page)?;
         self.lpc.write_port(self.hwm + EC_INDEX_OFF, index)?;
         let result = self.lpc.read_port(self.hwm + EC_DATA_OFF)?;
+        // Keep page selected for same-page follow-ups; free only if needed by protocol.
+        // Always free to stay compatible with other tools between bytes is safer for
+        // single-register paths; batch path uses read_byte_batch-friendly sequence.
         let _ = self.lpc.write_port(self.hwm + EC_PAGE_OFF, EC_PAGE_SELECT);
         Ok(result)
     }
@@ -399,6 +403,42 @@ impl Nct668Device {
         self.lpc.write_port(self.hwm + EC_DATA_OFF, value)?;
         let _ = self.lpc.write_port(self.hwm + EC_PAGE_OFF, EC_PAGE_SELECT);
         Ok(())
+    }
+
+    /// Full HWM sample under **one** ISA/process lock (major poll speedup).
+    pub fn sample_all(&self) -> Result<HwmSample, String> {
+        let _g = IsaBusGuard::acquire(Duration::from_millis(200));
+        let mut sample = HwmSample::default();
+
+        for ts in TEMP_REGS {
+            let value = self.read_byte(ts.1)? as i8;
+            let half = (self.read_byte(ts.1.wrapping_add(1))? >> 7) & 1;
+            let t = f64::from(value) + 0.5 * f64::from(half);
+            let v = if !(-55.0..=125.0).contains(&t) || t == 0.0 {
+                None
+            } else {
+                Some(t)
+            };
+            sample.temps.push((ts.0.to_string(), v));
+        }
+
+        for (i, &reg) in self.fan_rpm_regs.iter().enumerate() {
+            let high = self.read_byte(reg)?;
+            let low = self.read_byte(reg + 1)?;
+            let rpm = decode_fan_rpm(reg, high, low);
+            sample.fans.push((i, rpm));
+        }
+
+        for (slot, &reg) in self.control_out.iter().enumerate() {
+            if reg == 0xFFFF {
+                continue;
+            }
+            let value = self.read_byte(reg)?;
+            let duty = ((f64::from(value) / 2.55).round() as u8).min(100);
+            sample.duties.push((slot, Some(duty)));
+        }
+
+        Ok(sample)
     }
 
     fn update_byte(&self, address: u16, and_mask: u8, or_mask: u8) -> Result<(), String> {
@@ -426,27 +466,7 @@ impl Nct668Device {
         let reg = self.fan_rpm_regs[index];
         let high = self.read_byte(reg)?;
         let low = self.read_byte(reg + 1)?;
-
-        if high == 0xFF && (low == 0xF8 || low == 0xFF || low == 0x00) {
-            return Ok(None);
-        }
-
-        if reg == 0x852 {
-            let count = (u16::from(high) << 5) | (u16::from(low) & 0x1F);
-            if count >= 0x1FFF {
-                return Ok(Some(0.0));
-            }
-            if count < 0x15 {
-                return Ok(None);
-            }
-            return Ok(Some(1.35e6 / f64::from(count)));
-        }
-
-        let rpm = (u16::from(high) << 8) | u16::from(low);
-        if rpm == 0xFFFF {
-            return Ok(None);
-        }
-        Ok(Some(f64::from(rpm)))
+        Ok(decode_fan_rpm(reg, high, low))
     }
 
     pub fn read_duty_percent(&self, control_slot: usize) -> Result<u8, String> {
@@ -621,5 +641,35 @@ impl Nct668Device {
         }
         let engine = self.read_byte(REG_FAN_ENGINE_STS)?;
         Ok(engine & FAN_CFG_INVALID == 0)
+    }
+}
+
+/// One complete HWM poll (temps by name, fans by index, duties by control slot).
+#[derive(Debug, Clone, Default)]
+pub struct HwmSample {
+    pub temps: Vec<(String, Option<f64>)>,
+    pub fans: Vec<(usize, Option<f64>)>,
+    pub duties: Vec<(usize, Option<u8>)>,
+}
+
+fn decode_fan_rpm(reg: u16, high: u8, low: u8) -> Option<f64> {
+    if high == 0xFF && (low == 0xF8 || low == 0xFF || low == 0x00) {
+        return None;
+    }
+    if reg == 0x852 {
+        let count = (u16::from(high) << 5) | (u16::from(low) & 0x1F);
+        if count >= 0x1FFF {
+            return Some(0.0);
+        }
+        if count < 0x15 {
+            return None;
+        }
+        return Some(1.35e6 / f64::from(count));
+    }
+    let rpm = (u16::from(high) << 8) | u16::from(low);
+    if rpm == 0xFFFF {
+        None
+    } else {
+        Some(f64::from(rpm))
     }
 }

@@ -5,13 +5,13 @@ use crate::graph::{show_cpu_graph, TempHistory};
 use crate::poll::{spawn_poller, SharedMap, SharedSnapshot};
 use crate::registry::{backend_status_line, build_registry};
 use crate::settings::UiSettings;
+use crate::write_queue::WriteQueue;
 use crate::UiError;
 use eframe::egui;
 use fancontrol_core::{
-    evaluate_profile_step, list_profiles, load_profile, save_profile, ChannelMap, ControlId,
-    CurveEvalState, FanCurve, Profile,
+    evaluate_profile_step, list_profiles, load_profile, save_profile, ChannelMap, CurveEvalState,
+    FanCurve, Profile,
 };
-use fancontrol_plugins::ProviderRegistry;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -35,33 +35,39 @@ impl Default for UiOptions {
 
 pub fn run_native(options: UiOptions) -> Result<(), UiError> {
     let settings = UiSettings::load();
-    let reg = Arc::new(build_registry(
+    let built = build_registry(
         options.include_mock,
         options.include_hw,
         options.allow_hw_write,
         settings.show_host_sensors,
-    ));
+    );
+    let reg = Arc::new(built.reg);
     let map = Arc::new(Mutex::new(ChannelMap::load_or_seed().unwrap_or_default()));
     let status = backend_status_line(options.include_hw);
-    let snapshot = spawn_poller(Arc::clone(&reg), Arc::clone(&map), Duration::from_millis(750));
+    let snapshot = spawn_poller(
+        Arc::clone(&reg),
+        built.pawnio,
+        Arc::clone(&map),
+        Duration::from_millis(750),
+    );
+    let writes = WriteQueue::start(Arc::clone(&reg));
     let profile = load_or_create_default_profile();
 
     let app = FanApp {
         options,
-        reg,
         map,
         snapshot,
+        writes,
         status,
         settings,
         slider_state: HashMap::new(),
         user_lock_until: HashMap::new(),
-        pending_write: HashMap::new(),
-        last_hw_write: HashMap::new(),
         write_error: None,
         rename_id: None,
         rename_buf: String::new(),
         rename_is_control: false,
         cpu_history: TempHistory::default(),
+        last_history_tick: None,
         show_settings: false,
         show_curves: true,
         profile,
@@ -69,6 +75,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         selected_curve: 0,
         curve_states: HashMap::new(),
         last_curve_apply: Instant::now() - Duration::from_secs(10),
+        last_applied_duty: HashMap::new(),
         profile_status: None,
         new_profile_name: "default".into(),
     };
@@ -93,20 +100,19 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
 
 struct FanApp {
     options: UiOptions,
-    reg: Arc<ProviderRegistry>,
     map: SharedMap,
     snapshot: SharedSnapshot,
+    writes: WriteQueue,
     status: String,
     settings: UiSettings,
     slider_state: HashMap<String, f32>,
     user_lock_until: HashMap<String, Instant>,
-    pending_write: HashMap<String, u8>,
-    last_hw_write: HashMap<String, Instant>,
     write_error: Option<String>,
     rename_id: Option<String>,
     rename_buf: String,
     rename_is_control: bool,
     cpu_history: TempHistory,
+    last_history_tick: Option<u64>,
     show_settings: bool,
     show_curves: bool,
     profile: Profile,
@@ -114,6 +120,7 @@ struct FanApp {
     selected_curve: usize,
     curve_states: HashMap<String, CurveEvalState>,
     last_curve_apply: Instant,
+    last_applied_duty: HashMap<String, u8>,
     profile_status: Option<String>,
     new_profile_name: String,
 }
@@ -139,7 +146,9 @@ fn load_or_create_default_profile() -> Profile {
 impl eframe::App for FanApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.request_repaint_after(Duration::from_millis(200));
-        self.flush_pending_writes();
+        if let Some(e) = self.writes.take_error() {
+            self.write_error = Some(e);
+        }
 
         let snap = self
             .snapshot
@@ -147,8 +156,11 @@ impl eframe::App for FanApp {
             .map(|g| g.clone())
             .unwrap_or_default();
 
-        if let Some(t) = snap.cpu_temp {
-            self.cpu_history.push(t as f32);
+        if self.last_history_tick != Some(snap.tick) {
+            if let Some(t) = snap.cpu_temp {
+                self.cpu_history.push(t as f32);
+            }
+            self.last_history_tick = Some(snap.tick);
         }
 
         // Auto-apply curves ~1 Hz when enabled + write allowed
@@ -343,14 +355,7 @@ impl eframe::App for FanApp {
                             ui.label("(none)");
                         }
                         for c in &snap.controls {
-                            // Optionally hide controls whose paired fan is 0 rpm and hide_zero
-                            if self.settings.hide_zero_rpm {
-                                if let Some(rpm) = c.rpm {
-                                    if rpm < 1.0 {
-                                        continue;
-                                    }
-                                }
-                            }
+                            // Never hide controls when hide_zero_rpm (that option is for fan list only)
                             ui.group(|ui| {
                                 if ui
                                     .add(
@@ -424,21 +429,26 @@ impl eframe::App for FanApp {
                                     });
 
                                 let locked = self.is_user_locked(&c.id);
+                                let hw_duty = c.duty.unwrap_or(0);
                                 if !locked {
-                                    self.slider_state
-                                        .insert(c.id.clone(), f32::from(c.duty));
+                                    if let Some(d) = c.duty {
+                                        self.slider_state.insert(c.id.clone(), f32::from(d));
+                                    }
                                 }
                                 let mut value = *self
                                     .slider_state
                                     .get(&c.id)
-                                    .unwrap_or(&f32::from(c.duty));
+                                    .unwrap_or(&f32::from(hw_duty));
 
                                 let enabled = c.writable
                                     && (self.options.allow_hw_write
                                         || c.id.starts_with("mock."));
 
+                                if c.duty.is_none() {
+                                    ui.weak("duty —");
+                                }
+
                                 let mut changed = false;
-                                let mut dragging = false;
                                 ui.add_enabled_ui(enabled, |ui| {
                                     let resp = ui.add(
                                         egui::Slider::new(&mut value, 0.0..=100.0)
@@ -447,20 +457,21 @@ impl eframe::App for FanApp {
                                             .clamping(egui::SliderClamping::Always),
                                     );
                                     changed = resp.changed();
-                                    dragging = resp.dragged() || resp.has_focus();
+                                    if resp.dragged() || resp.has_focus() {
+                                        self.lock_user(&c.id, Duration::from_millis(2000));
+                                    }
+                                    // Write only on release — avoids EC spam + UI freezes
                                     if resp.drag_stopped() {
                                         self.lock_user(&c.id, Duration::from_millis(1500));
-                                        self.queue_write(&c.id, value, true);
+                                        self.queue_write(&c.id, value);
+                                    } else if changed && !resp.dragged() {
+                                        // Keyboard / click step
+                                        self.lock_user(&c.id, Duration::from_millis(1500));
+                                        self.queue_write(&c.id, value);
                                     }
                                 });
 
                                 self.slider_state.insert(c.id.clone(), value);
-                                if dragging || changed {
-                                    self.lock_user(&c.id, Duration::from_millis(2000));
-                                }
-                                if changed {
-                                    self.queue_write(&c.id, value, false);
-                                }
                                 if !enabled {
                                     ui.small("locked");
                                 }
@@ -590,23 +601,19 @@ impl FanApp {
             .map(|(id, _, v)| (id.clone(), *v))
             .collect();
         if let Some(t) = snap.cpu_temp {
-            temps
-                .entry("pawnio.0.temp.CPU".into())
-                .or_insert(t);
+            temps.entry("pawnio.0.temp.CPU".into()).or_insert(t);
         }
         let step = evaluate_profile_step(&self.profile, &temps, &mut self.curve_states);
         for (ctrl, duty) in step.duties {
             if self.is_user_locked(&ctrl) {
-                continue; // don't fight manual slider
+                continue;
             }
-            match self.reg.set_duty(&ControlId::new(ctrl.clone()), duty) {
-                Ok(()) => {
-                    self.slider_state.insert(ctrl.clone(), f32::from(duty));
-                }
-                Err(e) => {
-                    self.write_error = Some(format!("{ctrl}: {e}"));
-                }
+            if self.last_applied_duty.get(&ctrl) == Some(&duty) {
+                continue;
             }
+            self.writes.enqueue(&ctrl, duty);
+            self.last_applied_duty.insert(ctrl.clone(), duty);
+            self.slider_state.insert(ctrl, f32::from(duty));
         }
         for e in step.errors {
             tracing::debug!(error = %e, "curve apply");
@@ -669,40 +676,9 @@ impl FanApp {
             .insert(id.to_string(), Instant::now() + for_dur);
     }
 
-    fn queue_write(&mut self, id: &str, duty: f32, force: bool) {
+    fn queue_write(&mut self, id: &str, duty: f32) {
         let percent = duty.round().clamp(0.0, 100.0) as u8;
-        self.pending_write.insert(id.to_string(), percent);
-        if force {
-            self.last_hw_write.remove(id);
-        }
-    }
-
-    fn flush_pending_writes(&mut self) {
-        let now = Instant::now();
-        let ids: Vec<String> = self.pending_write.keys().cloned().collect();
-        for id in ids {
-            if let Some(t) = self.last_hw_write.get(&id) {
-                if now.duration_since(*t) < Duration::from_millis(200) {
-                    continue;
-                }
-            }
-            let Some(percent) = self.pending_write.remove(&id) else {
-                continue;
-            };
-            let mut result = self.reg.set_duty(&ControlId::new(id.clone()), percent);
-            if result.is_err() {
-                std::thread::sleep(Duration::from_millis(50));
-                result = self.reg.set_duty(&ControlId::new(id.clone()), percent);
-            }
-            match result {
-                Ok(()) => {
-                    self.last_hw_write.insert(id, now);
-                    self.write_error = None;
-                }
-                Err(e) => {
-                    self.write_error = Some(format!("{id}: {e}"));
-                }
-            }
-        }
+        self.writes.enqueue(id, percent);
+        self.last_applied_duty.insert(id.to_string(), percent);
     }
 }

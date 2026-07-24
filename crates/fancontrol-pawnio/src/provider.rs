@@ -1,6 +1,7 @@
 //! Plugin provider bridging Super I/O hardware into fancontrol traits.
 
 use crate::device::SuperIoDevice;
+use crate::nct668::HwmSample;
 use crate::superio::detect_chips;
 use fancontrol_core::{
     ControlDescriptor, ControlId, SensorDescriptor, SensorId, SensorKind,
@@ -90,6 +91,18 @@ impl PawnioProvider {
 
     pub fn device_count(&self) -> usize {
         self.devices.len()
+    }
+
+    /// Batch-read all Super I/O channels (one bus lock per device).
+    pub fn sample_all_devices(&self) -> Vec<(usize, HwmSample)> {
+        let mut out = Vec::new();
+        for (di, dev) in self.devices.iter().enumerate() {
+            match dev.sample_all() {
+                Ok(s) => out.push((di, s)),
+                Err(e) => tracing::warn!(di, error = %e, "HWM sample_all failed"),
+            }
+        }
+        out
     }
 }
 

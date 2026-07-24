@@ -7,13 +7,19 @@ use fancontrol_plugins::{
 use fancontrol_pawnio::PawnioProvider;
 use std::sync::Arc;
 
+pub struct BuiltProviders {
+    pub reg: ProviderRegistry,
+    pub pawnio: Option<Arc<PawnioProvider>>,
+}
+
 pub fn build_registry(
     include_mock: bool,
     include_hw: bool,
     allow_hw_write: bool,
     include_host: bool,
-) -> ProviderRegistry {
+) -> BuiltProviders {
     let mut reg = ProviderRegistry::new();
+    let mut pawnio = None;
     if include_mock {
         reg.register_both(MockProvider::new());
     }
@@ -27,12 +33,13 @@ pub fn build_registry(
         );
         let arc = Arc::new(p);
         reg.register_sensor_provider(Box::new(ArcSensor(arc.clone())));
-        reg.register_control_provider(Box::new(ArcControl(arc)));
+        reg.register_control_provider(Box::new(ArcControl(arc.clone())));
+        pawnio = Some(arc);
     }
     if include_host {
         reg.register_sensor_provider(Box::new(HostSensorProvider::new()));
     }
-    reg
+    BuiltProviders { reg, pawnio }
 }
 
 struct ArcSensor(Arc<PawnioProvider>);

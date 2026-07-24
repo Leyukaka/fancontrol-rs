@@ -1,6 +1,6 @@
 //! Unified Super I/O device handle (banked NCT + EC NCT668x).
 
-use crate::nct668::Nct668Device;
+use crate::nct668::{HwmSample, Nct668Device};
 use crate::superio::{DetectedChip, NctBankedDevice, TempSource};
 
 pub enum SuperIoDevice {
@@ -103,6 +103,28 @@ impl SuperIoDevice {
         match self {
             Self::Banked(d) => d.set_duty_percent(control_slot, percent),
             Self::Nct668(d) => d.set_duty_percent(control_slot, percent),
+        }
+    }
+
+    /// Batch sample when supported (NCT668x). Banked falls back to sequential reads.
+    pub fn sample_all(&self) -> Result<HwmSample, String> {
+        match self {
+            Self::Nct668(d) => d.sample_all(),
+            Self::Banked(d) => {
+                let mut s = HwmSample::default();
+                for ts in d.temp_sources() {
+                    let v = d.read_temp_c(ts.reg, ts.half)?;
+                    s.temps.push((ts.name.to_string(), v));
+                }
+                for i in 0..d.fan_count() {
+                    s.fans.push((i, d.read_fan_rpm(i)?));
+                }
+                for i in 0..d.control_count() {
+                    let duty = d.read_duty_percent(i).ok();
+                    s.duties.push((i, duty));
+                }
+                Ok(s)
+            }
         }
     }
 }

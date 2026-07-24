@@ -13,6 +13,7 @@ mod provider;
 mod session;
 mod superio;
 
+pub use nct668::HwmSample;
 pub use provider::PawnioProvider;
 pub use superio::{detect_chips, DetectedChip, SuperIoChip};
 
