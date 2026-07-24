@@ -166,3 +166,9 @@ MIT OR Apache-2.0
 
 - Inspired by the excellent work of Rémi Mercier ([@Rem0o](https://github.com/Rem0o)) and the LibreHardwareMonitor team.
 - PawnIO by [namazso](https://github.com/namazso).
+
+## Support
+
+If you find this project useful, you can support development here:
+
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/leyukaka)
