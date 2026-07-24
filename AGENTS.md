@@ -29,7 +29,7 @@ Spec-Driven Design: product/architecture decisions live in `specs/`.
 - Communicate in **French** with the owner.
 - **Code freely** for project edits once a direction is clear — don’t interrupt for every small file change.
 - Switch to **agent/implementation mode** as soon as the task is clear; don’t stay in endless planning.
-- **Propose questions** when blocked or when a decision has lasting product impact (don’t silently invent product scope).
+- **Questions**: only on real blockers, risky permissions (install/admin/destructive/remote), or lasting product decisions. **Propose** them briefly — no cosmetic “shall I…?” when the next step is already implied. Don’t invent product scope silently.
 - **Never claim “terminé / done”** unless verified (build/tests/smoke ran, or uncertainty is stated clearly).
 - After context compaction, re-read this file + `specs/06-roadmap.md` + latest commits.
 
