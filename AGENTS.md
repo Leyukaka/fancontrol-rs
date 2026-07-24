@@ -57,11 +57,10 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 
 ## Next priorities (order)
 
-1. Validate elevated `list-sensors` / `list-controls` readings on owner NCT668x.
-2. Tune fan/temp labels for this board; MSI NCT6687DR write path if PWM write fails.
-3. Safer write path (confirm + restore defaults).
-4. UI MVP (egui).
-5. Packaging later.
+1. Owner: dry-run profile `init-profile --hw` + `run`; optional careful `test-duty` on one fan.
+2. Labels / fan header mapping for this board.
+3. UI MVP (egui) showing live sample.
+4. Packaging later.
 
 ## Safety product rules
 

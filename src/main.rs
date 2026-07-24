@@ -72,6 +72,18 @@ enum Commands {
         /// Delay between samples in ms
         #[arg(long, default_value_t = 1000)]
         interval_ms: u64,
+        /// Show empty / n/a channels too
+        #[arg(long)]
+        all: bool,
+    },
+    /// Live read-only monitor (Ctrl+C to stop)
+    Watch {
+        /// Interval between samples in ms
+        #[arg(long, default_value_t = 1000)]
+        interval_ms: u64,
+        /// Show empty channels
+        #[arg(long)]
+        all: bool,
     },
     /// Demo curve on mock (does not touch hardware fans)
     Demo {
@@ -97,8 +109,28 @@ enum Commands {
         #[arg(long)]
         apply: bool,
     },
-    /// Save a sample default profile (mock bindings)
-    InitProfile,
+    /// Safe single-control write probe: set duty briefly, sample, **restore**.
+    /// Requires `--allow-hw-write`. Prefer a case fan (e.g. ctrl with moderate RPM).
+    TestDuty {
+        /// Control id (e.g. pawnio.0.ctrl0)
+        #[arg(long)]
+        control: String,
+        /// Temporary duty percent to apply
+        #[arg(long)]
+        percent: u8,
+        /// How long to hold the test duty before restore (ms)
+        #[arg(long, default_value_t = 3000)]
+        hold_ms: u64,
+    },
+    /// Save a profile (mock by default, or hardware bindings with --hw)
+    InitProfile {
+        /// Bind to first live NCT668x CPU temp + ctrl0/ctrl1 style ids
+        #[arg(long)]
+        hw: bool,
+        /// Profile id
+        #[arg(long, default_value = "default")]
+        id: String,
+    },
     /// List saved profile ids
     ListProfiles,
     /// Launch the GUI (Phase 2 — not implemented yet)
@@ -272,45 +304,50 @@ fn main() -> anyhow::Result<()> {
                 Err(e) => anyhow::bail!("detect failed: {e}"),
             }
         }
-        Commands::Sample { times, interval_ms } => {
+        Commands::Sample {
+            times,
+            interval_ms,
+            all,
+        } => {
             let reg = build_registry(include_mock, include_hw, false);
             let times = times.max(1);
             for n in 0..times {
                 if times > 1 {
                     println!("--- sample {}/{} ---", n + 1, times);
                 }
-                println!("Temperatures:");
-                for s in reg.all_sensors() {
-                    if s.kind == SensorKind::Temperature {
-                        match reg.read_sensor(&s.id) {
-                            Ok(v) => println!("  {:>28}  {v:6.1} °C  ({})", s.id, s.name),
-                            Err(e) => println!("  {:>28}  n/a ({e})", s.id),
-                        }
-                    }
-                }
-                println!("Fan RPM:");
-                for s in reg.all_sensors() {
-                    if s.kind == SensorKind::FanRpm {
-                        match reg.read_sensor(&s.id) {
-                            Ok(v) => println!("  {:>28}  {v:7.0} RPM  ({})", s.id, s.name),
-                            Err(e) => println!("  {:>28}  n/a ({e})", s.id),
-                        }
-                    }
-                }
-                println!("Control duty (read):");
-                for c in reg.all_controls() {
-                    match reg.get_duty(&c.id) {
-                        Ok(d) => println!("  {:>28}  {d:3}%  writable={}", c.id, c.writable),
-                        Err(e) => println!("  {:>28}  n/a ({e})", c.id),
-                    }
-                }
+                print_sample(&reg, all);
                 if n + 1 < times {
                     thread::sleep(Duration::from_millis(interval_ms));
                 }
             }
         }
+        Commands::Watch { interval_ms, all } => {
+            let reg = build_registry(include_mock, include_hw, false);
+            println!("Watching (read-only). Ctrl+C to stop.\n");
+            loop {
+                let ts = chrono_like_now();
+                println!("======== {ts} ========");
+                print_sample(&reg, all);
+                println!();
+                thread::sleep(Duration::from_millis(interval_ms.max(200)));
+            }
+        }
         Commands::Demo { seconds, temp } => {
             run_demo(seconds, temp)?;
+        }
+        Commands::TestDuty {
+            control,
+            percent,
+            hold_ms,
+        } => {
+            run_test_duty(
+                &control,
+                percent,
+                hold_ms,
+                include_mock,
+                include_hw,
+                allow_hw_write,
+            )?;
         }
         Commands::Run {
             profile,
@@ -367,8 +404,8 @@ fn main() -> anyhow::Result<()> {
                 thread::sleep(Duration::from_millis(interval_ms));
             }
         }
-        Commands::InitProfile => {
-            let mut profile = Profile::new("default", "Default");
+        Commands::InitProfile { hw, id } => {
+            let mut profile = Profile::new(&id, if hw { "Hardware default" } else { "Default" });
             profile.curves.push(FanCurve::linear(
                 "quiet",
                 "Quiet linear",
@@ -377,14 +414,34 @@ fn main() -> anyhow::Result<()> {
                 25,
                 100,
             ));
-            profile
-                .assignments
-                .insert("mock.cpu_fan".into(), "quiet".into());
-            profile
-                .sensor_bindings
-                .insert("mock.cpu_fan".into(), "mock.cpu_temp".into());
+            if hw {
+                // Matches owner NCT668x layout from validated sample.
+                profile
+                    .assignments
+                    .insert("pawnio.0.ctrl0".into(), "quiet".into());
+                profile
+                    .sensor_bindings
+                    .insert("pawnio.0.ctrl0".into(), "pawnio.0.temp.CPU".into());
+                // Optional second channel if present
+                profile
+                    .assignments
+                    .insert("pawnio.0.ctrl1".into(), "quiet".into());
+                profile
+                    .sensor_bindings
+                    .insert("pawnio.0.ctrl1".into(), "pawnio.0.temp.CPU".into());
+            } else {
+                profile
+                    .assignments
+                    .insert("mock.cpu_fan".into(), "quiet".into());
+                profile
+                    .sensor_bindings
+                    .insert("mock.cpu_fan".into(), "mock.cpu_temp".into());
+            }
             let path = save_profile(&profile)?;
             println!("Wrote profile to {}", path.display());
+            if hw {
+                println!("Tip: dry-run with: cargo run -- --hw-only run --profile {id}");
+            }
         }
         Commands::ListProfiles => match fancontrol_core::list_profiles() {
             Ok(ids) if ids.is_empty() => println!("No profiles saved yet. Try: init-profile"),
@@ -410,6 +467,158 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
+    Ok(())
+}
+
+fn chrono_like_now() -> String {
+    // Avoid extra dep: local time via system clock formatting.
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    format!("unix={secs}")
+}
+
+fn print_sample(reg: &ProviderRegistry, show_all: bool) {
+    println!("Temperatures:");
+    let mut any_t = false;
+    for s in reg.all_sensors() {
+        if s.kind != SensorKind::Temperature {
+            continue;
+        }
+        match reg.read_sensor(&s.id) {
+            Ok(v) => {
+                any_t = true;
+                println!("  {:>28}  {v:6.1} °C  ({})", s.id, s.name);
+            }
+            Err(e) => {
+                if show_all {
+                    println!("  {:>28}  n/a ({e})", s.id);
+                }
+            }
+        }
+    }
+    if !any_t {
+        println!("  (none with valid readings)");
+    }
+
+    println!("Fan RPM:");
+    let mut any_f = false;
+    for s in reg.all_sensors() {
+        if s.kind != SensorKind::FanRpm {
+            continue;
+        }
+        match reg.read_sensor(&s.id) {
+            Ok(v) => {
+                if !show_all && v < 1.0 {
+                    continue;
+                }
+                any_f = true;
+                println!("  {:>28}  {v:7.0} RPM  ({})", s.id, s.name);
+            }
+            Err(e) => {
+                if show_all {
+                    println!("  {:>28}  n/a ({e})", s.id);
+                }
+            }
+        }
+    }
+    if !any_f {
+        println!("  (none with valid readings)");
+    }
+
+    println!("Control duty (read):");
+    let mut any_c = false;
+    for c in reg.all_controls() {
+        match reg.get_duty(&c.id) {
+            Ok(d) => {
+                if !show_all && d == 0 {
+                    continue;
+                }
+                any_c = true;
+                let rpm = c
+                    .rpm_sensor
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or("-");
+                println!(
+                    "  {:>28}  {d:3}%  writable={}  rpm={rpm}",
+                    c.id, c.writable
+                );
+            }
+            Err(e) => {
+                if show_all {
+                    println!("  {:>28}  n/a ({e})", c.id);
+                }
+            }
+        }
+    }
+    if !any_c {
+        println!("  (none with non-zero duty — use --all to list zeros)");
+    }
+}
+
+fn run_test_duty(
+    control: &str,
+    percent: u8,
+    hold_ms: u64,
+    include_mock: bool,
+    include_hw: bool,
+    allow_hw_write: bool,
+) -> anyhow::Result<()> {
+    if control.starts_with("pawnio.") && !allow_hw_write {
+        anyhow::bail!(
+            "refusing hardware test-duty: pass --allow-hw-write.\n\
+             Example:\n  cargo run -- --hw-only --allow-hw-write test-duty --control {control} --percent {percent}"
+        );
+    }
+    let percent = percent.min(100);
+    let reg = build_registry(include_mock, include_hw, allow_hw_write);
+    let cid = ControlId::new(control);
+
+    let ctrl_meta = reg
+        .all_controls()
+        .into_iter()
+        .find(|c| c.id.as_str() == control);
+    let rpm_id = ctrl_meta.and_then(|c| c.rpm_sensor.clone());
+
+    let baseline_duty = reg.get_duty(&cid)?;
+    let baseline_rpm = rpm_id
+        .as_ref()
+        .and_then(|id| reg.read_sensor(id).ok());
+
+    println!("test-duty on {control}");
+    println!("  baseline duty={baseline_duty}%  rpm={baseline_rpm:?}");
+    println!("  will set {percent}% for {hold_ms}ms then restore {baseline_duty}%");
+    eprintln!("WARNING: real PWM write in 2s — Ctrl+C to abort…");
+    thread::sleep(Duration::from_secs(2));
+
+    reg.set_duty(&cid, percent)?;
+    let after = reg.get_duty(&cid)?;
+    println!("  applied duty={after}%");
+
+    let steps = (hold_ms / 500).max(1);
+    for i in 0..steps {
+        thread::sleep(Duration::from_millis(500));
+        let d = reg.get_duty(&cid).unwrap_or(0);
+        let rpm = rpm_id
+            .as_ref()
+            .and_then(|id| reg.read_sensor(id).ok());
+        println!("  hold {i}: duty={d}% rpm={rpm:?}");
+    }
+
+    println!("  restoring baseline {baseline_duty}%…");
+    reg.set_duty(&cid, baseline_duty)?;
+    thread::sleep(Duration::from_millis(500));
+    let restored = reg.get_duty(&cid)?;
+    let rpm_restored = rpm_id
+        .as_ref()
+        .and_then(|id| reg.read_sensor(id).ok());
+    println!("  restored duty={restored}% rpm={rpm_restored:?}");
+    if restored != baseline_duty {
+        eprintln!("warn: restored duty {restored}% != baseline {baseline_duty}%");
+    }
     Ok(())
 }
 
