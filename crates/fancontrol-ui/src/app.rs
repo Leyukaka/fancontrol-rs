@@ -184,6 +184,15 @@ impl eframe::App for FanApp {
                             ui.group(|ui| {
                                 ui.label(&c.label);
                                 ui.small(&c.id);
+                                let slot = c
+                                    .id
+                                    .rsplit("ctrl")
+                                    .next()
+                                    .and_then(|s| s.parse::<u32>().ok())
+                                    .unwrap_or(0);
+                                if slot >= 9 {
+                                    ui.small("EC/BIOS may reclaim (SmartFan)");
+                                }
                                 if let Some(rpm) = c.rpm {
                                     ui.monospace(format!("RPM {rpm:.0}"));
                                 } else {
