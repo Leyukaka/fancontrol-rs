@@ -63,7 +63,11 @@ tracing-subscriber = { workspace = true }
 clap = { workspace = true }
 serde_json = { workspace = true }
 
+[build-dependencies]
+winresource = "0.1"
+
 [profile.release]
 lto = true
 codegen-units = 1
 strip = true
+

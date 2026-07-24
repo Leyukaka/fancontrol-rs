@@ -107,10 +107,14 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         pawnio_dialog,
     };
 
+    let icon = eframe::icon_data::from_png_bytes(include_bytes!("../../../assets/icon.png"))
+        .map_err(|e| UiError::Eframe(format!("app icon: {e}")))?;
+
     let native = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1200.0, 860.0])
-            .with_title("fancontrol-rs"),
+            .with_title("fancontrol-rs")
+            .with_icon(icon),
         ..Default::default()
     };
 

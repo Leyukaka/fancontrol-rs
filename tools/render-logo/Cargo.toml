@@ -1,0 +1,14 @@
+[package]
+name = "render-logo"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Standalone tool — not part of the app workspace
+[workspace]
+
+[dependencies]
+resvg = "0.45"
+usvg = "0.45"
+tiny-skia = "0.11"
+ico = "0.4"
