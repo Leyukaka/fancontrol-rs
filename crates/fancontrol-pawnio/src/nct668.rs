@@ -71,17 +71,9 @@ impl Nct668Device {
         let lpc = LpcIo::open()?;
         {
             let _g = IsaBusGuard::acquire(Duration::from_millis(200));
-            lpc.select_slot(detected.slot as u32)?;
-            lpc.write_port(detected.register_port, 0x87)?;
-            lpc.write_port(detected.register_port, 0x87)?;
-            let _ = lpc.find_bars();
-            lpc.select_ldn(WINBOND_NUVOTON_HWM_LDN)?;
-            if let Ok(options) = lpc.superio_inb(NUVOTON_IO_SPACE_LOCK) {
-                if options & 0x10 != 0 {
-                    let _ = lpc.superio_outb(NUVOTON_IO_SPACE_LOCK, options & !0x10);
-                }
-            }
-            let _ = lpc.write_port(detected.register_port, 0xAA);
+            // select_slot + find_bars once; do NOT call select_slot again later
+            // (it resets the BAR allow-list → ACCESS_DENIED on HWM ports).
+            lpc.setup_nuvoton_hwm_bars(detected.slot, detected.register_port)?;
         }
 
         let dev = Self {
@@ -92,6 +84,20 @@ impl Nct668Device {
             chip: detected.chip,
             duties: Mutex::new(vec![0u8; FAN_PWM_OUT.len()]),
         };
+
+        // Prove HWM PIO is allowed (EC page register).
+        {
+            let _g = IsaBusGuard::acquire(Duration::from_millis(100));
+            dev.lpc
+                .read_port(hwm + EC_PAGE_OFF)
+                .map_err(|e| {
+                    format!(
+                        "HWM port 0x{:04X} not readable after find_bars: {e}. \
+                         BAR allow-list may not include this region.",
+                        hwm + EC_PAGE_OFF
+                    )
+                })?;
+        }
 
         // Init EC monitor bit + enable SIO voltage channels (LHM does this).
         {
@@ -108,7 +114,7 @@ impl Nct668Device {
             let _ = dev.write_byte(0x1BF, 0x65);
         }
 
-        let _ = dev.register_port;
+        let _ = (dev.register_port, dev.slot, WINBOND_NUVOTON_HWM_LDN, NUVOTON_IO_SPACE_LOCK);
         Ok(dev)
     }
 
@@ -175,8 +181,7 @@ impl Nct668Device {
 
     pub fn read_temp_c(&self, reg: u16) -> Result<Option<f64>, String> {
         let _g = IsaBusGuard::acquire(Duration::from_millis(50));
-        // Ensure BAR slot selected for port access
-        let _ = self.lpc.select_slot(self.slot as u32);
+        // Do not call select_slot here — it clears BARs.
         let value = self.read_byte(reg)? as i8;
         let half = (self.read_byte(reg.wrapping_add(1))? >> 7) & 1;
         let t = f64::from(value) + 0.5 * f64::from(half);
@@ -192,7 +197,6 @@ impl Nct668Device {
             return Ok(None);
         }
         let _g = IsaBusGuard::acquire(Duration::from_millis(50));
-        let _ = self.lpc.select_slot(self.slot as u32);
         let reg = FAN_RPM_REGS[index];
         let high = self.read_byte(reg)?;
         let low = self.read_byte(reg + 1)?;
@@ -213,7 +217,6 @@ impl Nct668Device {
             return Err("control index out of range".into());
         }
         let _g = IsaBusGuard::acquire(Duration::from_millis(50));
-        let _ = self.lpc.select_slot(self.slot as u32);
         let value = self.read_byte(FAN_PWM_OUT[index])?;
         Ok(((f64::from(value) / 2.55).round() as u8).min(100))
     }
@@ -228,7 +231,7 @@ impl Nct668Device {
 
         let _g = IsaBusGuard::acquire(Duration::from_millis(200))
             .ok_or_else(|| "could not acquire ISA bus mutex".to_string());
-        self.lpc.select_slot(self.slot as u32)?;
+        // Do not select_slot (would wipe BARs).
 
         // Request config
         self.write_byte(FAN_PWM_REQUEST, 0x80)?;

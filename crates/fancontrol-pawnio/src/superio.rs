@@ -187,20 +187,14 @@ impl NctBankedDevice {
             .ok_or_else(|| "no HWM address for chip".to_string())?;
 
         let lpc = LpcIo::open()?;
-        // Re-enter config, re-select LDN so bars stay valid for this session.
         {
             let _g = IsaBusGuard::acquire(Duration::from_millis(200));
-            lpc.select_slot(detected.slot as u32)?;
-            lpc.write_port(detected.register_port, 0x87)?;
-            lpc.write_port(detected.register_port, 0x87)?;
-            let _ = lpc.find_bars();
-            lpc.select_ldn(WINBOND_NUVOTON_HWM_LDN)?;
-            if let Ok(options) = lpc.superio_inb(NUVOTON_IO_SPACE_LOCK) {
-                if options & 0x10 != 0 {
-                    let _ = lpc.superio_outb(NUVOTON_IO_SPACE_LOCK, options & !0x10);
-                }
-            }
-            let _ = lpc.write_port(detected.register_port, 0xAA);
+            // Once only — select_slot again would clear BARs.
+            lpc.setup_nuvoton_hwm_bars(detected.slot, detected.register_port)?;
+            // Smoke-test banked index/data ports
+            lpc.read_port(hwm + ADDR_OFF).map_err(|e| {
+                format!("HWM port 0x{:04X} not readable after find_bars: {e}", hwm + ADDR_OFF)
+            })?;
         }
 
         // Classic NCT679x: up to 7 fans/controls
@@ -312,15 +306,13 @@ impl NctBankedDevice {
 
         let _g = IsaBusGuard::acquire(Duration::from_millis(100))
             .ok_or_else(|| "could not acquire ISA bus mutex".to_string());
-        // Ensure BAR access (re-select slot bars lightly)
-        self.lpc.select_slot(self.slot as u32)?;
-        // Manual mode (0) then command
+        // Do not select_slot (clears BARs).
         self.write_byte(mode_regs[index], 0)?;
         self.write_byte(cmd_regs[index], pwm)?;
         if let Ok(mut d) = self.duties.lock() {
             d[index] = percent;
         }
-        let _ = self.register_port; // silence if unused in some builds
+        let _ = (self.register_port, self.slot, WINBOND_NUVOTON_HWM_LDN, NUVOTON_IO_SPACE_LOCK);
         Ok(())
     }
 
