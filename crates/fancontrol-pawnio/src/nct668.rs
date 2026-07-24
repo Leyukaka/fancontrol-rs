@@ -185,7 +185,8 @@ impl Nct668Device {
         let value = self.read_byte(reg)? as i8;
         let half = (self.read_byte(reg.wrapping_add(1))? >> 7) & 1;
         let t = f64::from(value) + 0.5 * f64::from(half);
-        if !(-55.0..=125.0).contains(&t) {
+        // 0 °C on this family is almost always an unused/unwired channel.
+        if !(-55.0..=125.0).contains(&t) || t == 0.0 {
             Ok(None)
         } else {
             Ok(Some(t))
