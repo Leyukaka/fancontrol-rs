@@ -595,8 +595,10 @@ fn run_test_duty(
     thread::sleep(Duration::from_secs(2));
 
     reg.set_duty(&cid, percent)?;
+    // NCT668x PWM-out register can lag one EC poll after a command write.
+    thread::sleep(Duration::from_millis(100));
     let after = reg.get_duty(&cid)?;
-    println!("  applied duty={after}%");
+    println!("  applied duty={after}% (target {percent}%)");
 
     let steps = (hold_ms / 500).max(1);
     for i in 0..steps {

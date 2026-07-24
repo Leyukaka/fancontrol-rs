@@ -51,7 +51,8 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 - Phase 1: PawnIOLib FFI + LpcIO + **NCT668x EC HWM** (owner chip id=0xD5 rev=0x92 @ 0x0A20) + banked NCT path + control loop + CLI.
 - Elevation required for `pawnio_open` (admin terminal).
 - Owner board: **Nuvoton NCT6687D-class** slot1 @0x4E hwm=0x0A20.
-- **Reads validated (2026-07-24):** CPU~56°C, System~36, fans 0/1/12/13/14 live, ctrl0~38% ctrl1~54%. Writes still gated.
+- **Reads validated (2026-07-24):** CPU~56°C, System~36, fans 0/1/12/13/14 live, ctrl0~38% ctrl1~54%.
+- **Writes validated (2026-07-24):** `test-duty pawnio.0.ctrl1` 54%→40%→54% with RPM 2150→~1826→~1954. NCT6687D EC write path OK.
 - Vendored modules: `crates/fancontrol-pawnio/modules/` (PawnIO.Modules 0.2.9).
 - CLI: `list-sensors`, `list-controls`, `read`, `set-duty`, `demo`, `detect`, `backend-status`, `run`, …
 
