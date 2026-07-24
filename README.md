@@ -22,15 +22,15 @@ Spiritual successor to [FanControl](https://github.com/Rem0o/FanControl.Releases
 
 ## Status
 
-🚧 **Early stage** — Specs complete, Phase 0 foundation in progress.
+🚧 **Early stage** — Phase 1 hardware (PawnIO / NCT668x) + Phase 2 UI MVP.
 
 | Crate | Status |
 |-------|--------|
-| `fancontrol-core` | Models, curve engine, profile JSON |
+| `fancontrol-core` | Models, curves, profiles, channel map |
 | `fancontrol-plugins` | Traits + mock provider |
-| `fancontrol-pawnio` | Stub (availability probe only) |
-| `fancontrol-ui` | Stub (egui locked, not implemented) |
-| `fancontrol-rs` (CLI) | `list-sensors`, `set-duty`, `demo`, … |
+| `fancontrol-pawnio` | PawnIO + NCT668x EC HWM |
+| `fancontrol-ui` | egui live + sliders |
+| `fancontrol-rs` (CLI) | sample, watch, test-duty, ui, … |
 
 ## Building
 
@@ -38,6 +38,23 @@ Spiritual successor to [FanControl](https://github.com/Rem0o/FanControl.Releases
 cargo build --release
 cargo test
 ```
+
+## Windows Defender / SmartScreen
+
+This app talks to **PawnIO** (kernel I/O). Like FanControl / LibreHardwareMonitor, Windows Defender may flag the **unsigned debug/release binary** as a false positive — especially with `--allow-hw-write` (real PWM control).
+
+**Do not disable Defender entirely.** Prefer a folder exclusion for local development:
+
+1. Windows Security → Virus & threat protection → Manage settings  
+2. **Exclusions** → Add exclusion → **Folder**  
+3. Add at least:
+   - `C:\projet\fancontrol-rs\target`  
+   - optionally the whole repo `C:\projet\fancontrol-rs`  
+4. If it already quarantined the exe: Protection history → restore `fancontrol-rs.exe`
+
+Also run an **elevated** (Admin) terminal when using hardware, or PawnIO open fails with access denied.
+
+Signing + installer (later) will reduce SmartScreen prompts for end users.
 
 ## CLI (current harness)
 
@@ -54,13 +71,13 @@ cargo run -- init-profile --hw
 ## UI (egui)
 
 ```bash
-# Mock only (no admin)
+# Mock only (no admin, rarely flagged)
 cargo run -- --no-hw ui
 
 # Live hardware (Administrator recommended)
 cargo run -- --hw-only ui
 
-# Live + PWM sliders enabled
+# Live + PWM sliders enabled (most likely to trip Defender)
 cargo run -- --hw-only --allow-hw-write ui
 ```
 
