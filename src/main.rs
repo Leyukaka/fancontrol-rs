@@ -8,7 +8,7 @@ use fancontrol_core::{
     evaluate_curve, evaluate_profile_step, load_profile, save_profile, ChannelMap, ControlId,
     CurveEvalState, FanCurve, Profile, SensorId, SensorKind,
 };
-use fancontrol_plugins::{MockProvider, ProviderRegistry};
+use fancontrol_plugins::{HostSensorProvider, MockProvider, ProviderRegistry};
 use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
@@ -165,6 +165,8 @@ fn build_registry(include_mock: bool, include_hw: bool, allow_hw_write: bool) ->
         reg.register_sensor_provider(Box::new(ArcSensor(arc.clone())));
         reg.register_control_provider(Box::new(ArcControl(arc)));
     }
+    // Best-effort GPU/SSD (nvidia-smi / PowerShell) — no privilege required
+    reg.register_sensor_provider(Box::new(HostSensorProvider::new()));
     reg
 }
 

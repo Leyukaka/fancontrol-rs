@@ -1,22 +1,19 @@
 //! Desktop UI for fancontrol-rs (egui + eframe).
-//!
-//! Live temperatures, fan RPM, and duty sliders. Hardware PWM writes require
-//! `UiOptions::allow_hw_write` (same policy as the CLI).
 
 mod app;
+mod graph;
 mod poll;
 mod registry;
+mod settings;
 
 pub use app::UiOptions;
 
 use std::fmt;
 
-/// Whether a real GUI is available.
 pub fn is_implemented() -> bool {
     true
 }
 
-/// Launch the egui application (blocking until the window closes).
 pub fn run(options: UiOptions) -> Result<(), UiError> {
     app::run_native(options)
 }

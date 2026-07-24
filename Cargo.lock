@@ -1232,6 +1232,8 @@ dependencies = [
  "fancontrol-core",
  "fancontrol-pawnio",
  "fancontrol-plugins",
+ "serde",
+ "serde_json",
  "tracing",
 ]
 

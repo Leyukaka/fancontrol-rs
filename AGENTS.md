@@ -60,10 +60,10 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 
 ## Next priorities (order)
 
-1. User renames fans in `%APPDATA%/…/channel-map.json` as needed.
-2. Curve editor + profiles in UI.
-3. System tray.
-4. Packaging later.
+1. Curve editor + profiles in UI.
+2. System tray.
+3. RGB (future — not Super I/O).
+4. Packaging / code signing (Defender).
 
 ## Safety product rules
 

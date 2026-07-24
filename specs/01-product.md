@@ -46,6 +46,6 @@ Replace FanControl with a modern, secure, open-source alternative written in Rus
 
 ## Non-goals (for now)
 
-- RGB control
+- RGB control (**planned later** — separate subsystem, not Super I/O)
 - Overclocking
 - Cross-platform parity in v1

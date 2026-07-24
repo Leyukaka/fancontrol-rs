@@ -2,12 +2,17 @@
 
 use fancontrol_core::{ControlDescriptor, ControlId, SensorDescriptor, SensorId};
 use fancontrol_plugins::{
-    ControlProvider, MockProvider, ProviderRegistry, Result, SensorProvider,
+    ControlProvider, HostSensorProvider, MockProvider, ProviderRegistry, Result, SensorProvider,
 };
 use fancontrol_pawnio::PawnioProvider;
 use std::sync::Arc;
 
-pub fn build_registry(include_mock: bool, include_hw: bool, allow_hw_write: bool) -> ProviderRegistry {
+pub fn build_registry(
+    include_mock: bool,
+    include_hw: bool,
+    allow_hw_write: bool,
+    include_host: bool,
+) -> ProviderRegistry {
     let mut reg = ProviderRegistry::new();
     if include_mock {
         reg.register_both(MockProvider::new());
@@ -23,6 +28,9 @@ pub fn build_registry(include_mock: bool, include_hw: bool, allow_hw_write: bool
         let arc = Arc::new(p);
         reg.register_sensor_provider(Box::new(ArcSensor(arc.clone())));
         reg.register_control_provider(Box::new(ArcControl(arc)));
+    }
+    if include_host {
+        reg.register_sensor_provider(Box::new(HostSensorProvider::new()));
     }
     reg
 }
@@ -75,4 +83,3 @@ pub fn backend_status_line(include_hw: bool) -> String {
         "PawnIO not installed".into()
     }
 }
-

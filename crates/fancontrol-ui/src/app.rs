@@ -1,13 +1,15 @@
-//! egui application: live sensors + duty sliders.
+//! egui application: live sensors, sliders, graph, rename, options.
 
-use crate::poll::{spawn_poller, SharedSnapshot};
+use crate::graph::{show_cpu_graph, TempHistory};
+use crate::poll::{spawn_poller, SharedMap, SharedSnapshot};
 use crate::registry::{backend_status_line, build_registry};
+use crate::settings::UiSettings;
 use crate::UiError;
 use eframe::egui;
 use fancontrol_core::{ChannelMap, ControlId};
 use fancontrol_plugins::ProviderRegistry;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone)]
@@ -28,14 +30,16 @@ impl Default for UiOptions {
 }
 
 pub fn run_native(options: UiOptions) -> Result<(), UiError> {
+    let settings = UiSettings::load();
     let reg = Arc::new(build_registry(
         options.include_mock,
         options.include_hw,
         options.allow_hw_write,
+        settings.show_host_sensors,
     ));
-    let map = ChannelMap::load_or_seed().unwrap_or_default();
+    let map = Arc::new(Mutex::new(ChannelMap::load_or_seed().unwrap_or_default()));
     let status = backend_status_line(options.include_hw);
-    let snapshot = spawn_poller(Arc::clone(&reg), map.clone(), Duration::from_millis(750));
+    let snapshot = spawn_poller(Arc::clone(&reg), Arc::clone(&map), Duration::from_millis(750));
 
     let app = FanApp {
         options,
@@ -43,17 +47,22 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         map,
         snapshot,
         status,
+        settings,
         slider_state: HashMap::new(),
-        // While Instant is in the future, do not overwrite slider from HW.
         user_lock_until: HashMap::new(),
         pending_write: HashMap::new(),
         last_hw_write: HashMap::new(),
         write_error: None,
+        rename_id: None,
+        rename_buf: String::new(),
+        rename_is_control: false,
+        cpu_history: TempHistory::default(),
+        show_settings: false,
     };
 
     let native = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1040.0, 720.0])
+            .with_inner_size([1120.0, 780.0])
             .with_title("fancontrol-rs"),
         ..Default::default()
     };
@@ -72,15 +81,20 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
 struct FanApp {
     options: UiOptions,
     reg: Arc<ProviderRegistry>,
-    map: ChannelMap,
+    map: SharedMap,
     snapshot: SharedSnapshot,
     status: String,
+    settings: UiSettings,
     slider_state: HashMap<String, f32>,
     user_lock_until: HashMap<String, Instant>,
-    /// Desired duty queued while dragging (applied throttled / on release).
     pending_write: HashMap<String, u8>,
     last_hw_write: HashMap<String, Instant>,
     write_error: Option<String>,
+    rename_id: Option<String>,
+    rename_buf: String,
+    rename_is_control: bool,
+    cpu_history: TempHistory,
+    show_settings: bool,
 }
 
 impl eframe::App for FanApp {
@@ -94,6 +108,10 @@ impl eframe::App for FanApp {
             .map(|g| g.clone())
             .unwrap_or_default();
 
+        if let Some(t) = snap.cpu_temp {
+            self.cpu_history.push(t as f32);
+        }
+
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.heading("fancontrol-rs");
@@ -103,6 +121,11 @@ impl eframe::App for FanApp {
                 } else {
                     ui.colored_label(egui::Color32::LIGHT_GREEN, "READ-ONLY");
                 }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("⚙ Options").clicked() {
+                        self.show_settings = !self.show_settings;
+                    }
+                });
             });
             ui.label(&self.status);
             if let Some(err) = &snap.error {
@@ -112,19 +135,63 @@ impl eframe::App for FanApp {
                 ui.colored_label(egui::Color32::RED, format!("write: {err}"));
             }
             if !self.options.allow_hw_write {
-                ui.small("Hardware sliders locked. CLI: cargo run -- --allow-hw-write ui");
+                ui.small("Hardware sliders locked · cargo run -- --allow-hw-write ui");
             }
             ui.small(format!(
-                "map: {} · fans {} · controls {} · tick {}",
-                self.map.sensors.len(),
+                "temps {} · fans {} · controls {} · tick {}",
+                snap.temps.len(),
                 snap.fans.len(),
                 snap.controls.len(),
                 snap.tick
             ));
         });
 
+        if self.show_settings {
+            egui::SidePanel::right("settings")
+                .resizable(true)
+                .default_width(260.0)
+                .show(ctx, |ui| {
+                    ui.heading("Options");
+                    ui.separator();
+                    let mut dirty = false;
+                    dirty |= ui
+                        .checkbox(&mut self.settings.hide_zero_rpm, "Cacher ventilos à 0 RPM")
+                        .changed();
+                    dirty |= ui
+                        .checkbox(&mut self.settings.show_cpu_graph, "Graphe température CPU")
+                        .changed();
+                    dirty |= ui
+                        .checkbox(
+                            &mut self.settings.show_host_sensors,
+                            "GPU / SSD (host, si dispo)",
+                        )
+                        .changed();
+                    ui.small("GPU: nvidia-smi · SSD: StorageReliabilityCounter");
+                    ui.separator();
+                    ui.label("RGB");
+                    ui.small(
+                        "Contrôle RGB prévu dans une version ultérieure (hors scope v1 hardware).",
+                    );
+                    ui.separator();
+                    ui.label("Noms");
+                    ui.small("Clic sur un nom de fan/control pour renommer (sauvé dans channel-map.json).");
+                    if dirty {
+                        self.settings.save();
+                    }
+                    if ui.button("Fermer").clicked() {
+                        self.show_settings = false;
+                    }
+                });
+        }
+
         egui::CentralPanel::default().show(ctx, |ui| {
+            if self.settings.show_cpu_graph {
+                show_cpu_graph(ui, &self.cpu_history, "CPU temperature");
+                ui.add_space(8.0);
+            }
+
             ui.columns(3, |cols| {
+                // Temps
                 cols[0].heading("Temperatures");
                 cols[0].separator();
                 egui::ScrollArea::vertical()
@@ -133,9 +200,15 @@ impl eframe::App for FanApp {
                         if snap.temps.is_empty() {
                             ui.label("(none)");
                         }
-                        for (_id, label, v) in &snap.temps {
+                        for (id, label, v) in &snap.temps {
                             ui.horizontal(|ui| {
-                                ui.label(label);
+                                if ui
+                                    .add(egui::Label::new(label.as_str()).sense(egui::Sense::click()))
+                                    .on_hover_text("Cliquer pour renommer")
+                                    .clicked()
+                                {
+                                    self.begin_rename(id, label, false);
+                                }
                                 ui.with_layout(
                                     egui::Layout::right_to_left(egui::Align::Center),
                                     |ui| {
@@ -143,20 +216,33 @@ impl eframe::App for FanApp {
                                     },
                                 );
                             });
+                            ui.small(id);
                         }
                     });
 
+                // Fans
                 cols[1].heading("Fans (RPM)");
                 cols[1].separator();
                 egui::ScrollArea::vertical()
                     .id_salt("fans")
                     .show(&mut cols[1], |ui| {
-                        if snap.fans.is_empty() {
+                        let fans: Vec<_> = snap
+                            .fans
+                            .iter()
+                            .filter(|(_, _, v)| !self.settings.hide_zero_rpm || *v >= 1.0)
+                            .collect();
+                        if fans.is_empty() {
                             ui.label("(none)");
                         }
-                        for (id, label, v) in &snap.fans {
+                        for (id, label, v) in fans {
                             ui.horizontal(|ui| {
-                                ui.label(label);
+                                if ui
+                                    .add(egui::Label::new(label.as_str()).sense(egui::Sense::click()))
+                                    .on_hover_text("Cliquer pour renommer")
+                                    .clicked()
+                                {
+                                    self.begin_rename(id, label, false);
+                                }
                                 ui.with_layout(
                                     egui::Layout::right_to_left(egui::Align::Center),
                                     |ui| {
@@ -172,6 +258,7 @@ impl eframe::App for FanApp {
                         }
                     });
 
+                // Controls
                 cols[2].heading("Controls");
                 cols[2].separator();
                 egui::ScrollArea::vertical()
@@ -181,8 +268,25 @@ impl eframe::App for FanApp {
                             ui.label("(none)");
                         }
                         for c in &snap.controls {
+                            // Optionally hide controls whose paired fan is 0 rpm and hide_zero
+                            if self.settings.hide_zero_rpm {
+                                if let Some(rpm) = c.rpm {
+                                    if rpm < 1.0 {
+                                        continue;
+                                    }
+                                }
+                            }
                             ui.group(|ui| {
-                                ui.label(&c.label);
+                                if ui
+                                    .add(
+                                        egui::Label::new(c.label.as_str())
+                                            .sense(egui::Sense::click()),
+                                    )
+                                    .on_hover_text("Cliquer pour renommer")
+                                    .clicked()
+                                {
+                                    self.begin_rename(&c.id, &c.label, true);
+                                }
                                 ui.small(&c.id);
                                 let slot = c
                                     .id
@@ -201,7 +305,6 @@ impl eframe::App for FanApp {
 
                                 let locked = self.is_user_locked(&c.id);
                                 if !locked {
-                                    // Only sync from HW when user is not interacting.
                                     self.slider_state
                                         .insert(c.id.clone(), f32::from(c.duty));
                                 }
@@ -226,7 +329,6 @@ impl eframe::App for FanApp {
                                     changed = resp.changed();
                                     dragging = resp.dragged() || resp.has_focus();
                                     if resp.drag_stopped() {
-                                        // Final commit on release
                                         self.lock_user(&c.id, Duration::from_millis(1500));
                                         self.queue_write(&c.id, value, true);
                                     }
@@ -237,7 +339,6 @@ impl eframe::App for FanApp {
                                     self.lock_user(&c.id, Duration::from_millis(2000));
                                 }
                                 if changed {
-                                    // Throttled live apply while dragging
                                     self.queue_write(&c.id, value, false);
                                 }
                                 if !enabled {
@@ -249,10 +350,56 @@ impl eframe::App for FanApp {
                     });
             });
         });
+
+        self.show_rename_modal(ctx);
     }
 }
 
 impl FanApp {
+    fn begin_rename(&mut self, id: &str, current: &str, is_control: bool) {
+        self.rename_id = Some(id.to_string());
+        self.rename_buf = current.to_string();
+        self.rename_is_control = is_control;
+    }
+
+    fn show_rename_modal(&mut self, ctx: &egui::Context) {
+        let Some(id) = self.rename_id.clone() else {
+            return;
+        };
+        let mut open = true;
+        egui::Window::new("Renommer")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .open(&mut open)
+            .show(ctx, |ui| {
+                ui.label(&id);
+                ui.text_edit_singleline(&mut self.rename_buf);
+                ui.horizontal(|ui| {
+                    if ui.button("Enregistrer").clicked() {
+                        let name = self.rename_buf.trim().to_string();
+                        if !name.is_empty() {
+                            if let Ok(mut map) = self.map.lock() {
+                                if self.rename_is_control {
+                                    map.set_control_name(&id, &name);
+                                } else {
+                                    map.set_sensor_name(&id, &name);
+                                }
+                                let _ = map.save();
+                            }
+                        }
+                        self.rename_id = None;
+                    }
+                    if ui.button("Annuler").clicked() {
+                        self.rename_id = None;
+                    }
+                });
+            });
+        if !open {
+            self.rename_id = None;
+        }
+    }
+
     fn is_user_locked(&self, id: &str) -> bool {
         self.user_lock_until
             .get(id)
@@ -285,7 +432,6 @@ impl FanApp {
             let Some(percent) = self.pending_write.remove(&id) else {
                 continue;
             };
-            // One retry: poller may hold the process SIO lock briefly.
             let mut result = self.reg.set_duty(&ControlId::new(id.clone()), percent);
             if result.is_err() {
                 std::thread::sleep(Duration::from_millis(50));

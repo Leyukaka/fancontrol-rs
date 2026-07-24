@@ -99,6 +99,14 @@ impl ChannelMap {
             .unwrap_or(fallback)
     }
 
+    pub fn set_sensor_name(&mut self, id: impl Into<String>, name: impl Into<String>) {
+        self.sensors.insert(id.into(), name.into());
+    }
+
+    pub fn set_control_name(&mut self, id: impl Into<String>, name: impl Into<String>) {
+        self.controls.insert(id.into(), name.into());
+    }
+
     pub fn load() -> Result<Self> {
         let path = Self::map_path()?;
         if !path.exists() {
