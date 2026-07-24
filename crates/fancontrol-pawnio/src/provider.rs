@@ -12,18 +12,14 @@ pub struct PawnioProvider {
     devices: Vec<SuperIoDevice>,
     detect_notes: Mutex<Vec<String>>,
     init_error: Option<String>,
-    /// When false (default), `set_duty` is refused and controls report `writable=false`.
-    /// Reads (temps, RPM, current duty %) always allowed.
     write_enabled: bool,
 }
 
 impl PawnioProvider {
-    /// Probe hardware and open supported HWM devices (**read-only** by default).
     pub fn probe() -> Self {
         Self::probe_with_writes(false)
     }
 
-    /// Probe with optional hardware write permission.
     pub fn probe_with_writes(write_enabled: bool) -> Self {
         match detect_chips() {
             Ok(chips) => {
@@ -51,7 +47,7 @@ impl PawnioProvider {
                                 dev.hwm_address(),
                                 dev.temp_sources().len(),
                                 dev.fan_count(),
-                                dev.control_count()
+                                dev.control_slots().len()
                             ));
                             devices.push(dev);
                         }
@@ -161,10 +157,11 @@ impl SensorProvider for PawnioProvider {
             let fi: usize = idx
                 .parse()
                 .map_err(|_| PluginError::SensorNotFound(s.into()))?;
-            return dev
-                .read_fan_rpm(fi)
-                .map_err(PluginError::Io)?
-                .ok_or_else(|| PluginError::Other("fan not present".into()));
+            // Present but stopped → 0.0; disconnected header → error (filtered in UI unless --all)
+            return match dev.read_fan_rpm(fi).map_err(PluginError::Io)? {
+                Some(v) => Ok(v),
+                None => Err(PluginError::Other("fan not present".into())),
+            };
         }
         Err(PluginError::SensorNotFound(s.into()))
     }
@@ -178,13 +175,14 @@ impl ControlProvider for PawnioProvider {
     fn controls(&self) -> Vec<ControlDescriptor> {
         let mut out = Vec::new();
         for (di, dev) in self.devices.iter().enumerate() {
-            for ci in 0..dev.control_count() {
+            for (slot, rpm_idx) in dev.control_slots() {
+                let rpm_sensor = rpm_idx.map(|fi| SensorId::new(format!("pawnio.{di}.fan{fi}")));
                 out.push(ControlDescriptor {
-                    id: ControlId::new(format!("pawnio.{di}.ctrl{ci}")),
-                    name: format!("SIO{di} Control {ci}"),
+                    id: ControlId::new(format!("pawnio.{di}.ctrl{slot}")),
+                    name: format!("SIO{di} Control {slot}"),
                     provider: "pawnio".into(),
                     writable: self.write_enabled,
-                    rpm_sensor: Some(SensorId::new(format!("pawnio.{di}.fan{ci}"))),
+                    rpm_sensor,
                 });
             }
         }
@@ -197,21 +195,21 @@ impl ControlProvider for PawnioProvider {
                 "{id}: hardware writes disabled (read-only mode). Re-run with --allow-hw-write when ready."
             )));
         }
-        let (di, ci) = parse_ctrl(id.as_str())?;
+        let (di, slot) = parse_ctrl(id.as_str())?;
         let dev = self
             .devices
             .get(di)
             .ok_or_else(|| PluginError::ControlNotFound(id.to_string()))?;
-        dev.set_duty_percent(ci, percent).map_err(PluginError::Io)
+        dev.set_duty_percent(slot, percent).map_err(PluginError::Io)
     }
 
     fn get_duty(&self, id: &ControlId) -> Result<u8> {
-        let (di, ci) = parse_ctrl(id.as_str())?;
+        let (di, slot) = parse_ctrl(id.as_str())?;
         let dev = self
             .devices
             .get(di)
             .ok_or_else(|| PluginError::ControlNotFound(id.to_string()))?;
-        dev.read_duty_percent(ci).map_err(PluginError::Io)
+        dev.read_duty_percent(slot).map_err(PluginError::Io)
     }
 }
 
@@ -227,9 +225,9 @@ fn parse_ctrl(s: &str) -> Result<(usize, usize)> {
     let tail = parts
         .next()
         .ok_or_else(|| PluginError::ControlNotFound(s.into()))?;
-    let ci: usize = tail
+    let slot: usize = tail
         .strip_prefix("ctrl")
         .and_then(|p| p.parse().ok())
         .ok_or_else(|| PluginError::ControlNotFound(s.into()))?;
-    Ok((di, ci))
+    Ok((di, slot))
 }

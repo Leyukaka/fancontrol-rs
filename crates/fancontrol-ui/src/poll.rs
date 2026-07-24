@@ -9,8 +9,8 @@ use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Default)]
 pub struct Snapshot {
-    pub temps: Vec<(String, String, f64)>, // id, label, °C
-    pub fans: Vec<(String, String, f64)>,  // id, label, RPM
+    pub temps: Vec<(String, String, f64)>,
+    pub fans: Vec<(String, String, f64)>,
     pub controls: Vec<ControlSnap>,
     pub error: Option<String>,
     pub tick: u64,
@@ -68,29 +68,31 @@ fn take_snapshot(reg: &ProviderRegistry, map: &fancontrol_core::ChannelMap, tick
                     let label = map.sensor_name(s.id.as_str(), &s.name).to_string();
                     temps.push((s.id.as_str().to_string(), label, v));
                 }
-                SensorKind::FanRpm if v >= 1.0 => {
+                // Include 0 RPM (stopped) so headers stay visible
+                SensorKind::FanRpm if v >= 0.0 && !v.is_nan() => {
                     let label = map.sensor_name(s.id.as_str(), &s.name).to_string();
                     fans.push((s.id.as_str().to_string(), label, v));
                 }
                 _ => {}
             },
             Err(e) => {
-                if error.is_none() {
-                    error = Some(e.to_string());
+                let msg = e.to_string();
+                // Don't treat "fan not present" as global poll failure
+                if !msg.contains("fan not present") && error.is_none() {
+                    error = Some(msg);
                 }
             }
         }
     }
 
-    // Cache RPMs by sensor id for control pairing
     let rpm_by_id: HashMap<String, f64> = fans
         .iter()
         .map(|(id, _, rpm)| (id.clone(), *rpm))
         .collect();
 
+    // Always list every control the backend exposes (no activity filter).
     for c in reg.all_controls() {
         let duty = reg.get_duty(&c.id).unwrap_or(0);
-        // Show control if duty > 0 or has paired live RPM or always show writable mock
         let rpm = c
             .rpm_sensor
             .as_ref()
@@ -100,13 +102,7 @@ fn take_snapshot(reg: &ProviderRegistry, map: &fancontrol_core::ChannelMap, tick
                     .as_ref()
                     .and_then(|sid| reg.read_sensor(sid).ok())
             });
-        let show = duty > 0 || rpm.map(|r| r >= 1.0).unwrap_or(false) || c.provider == "mock";
-        if !show {
-            continue;
-        }
-        let label = map
-            .control_name(c.id.as_str(), &c.name)
-            .to_string();
+        let label = map.control_name(c.id.as_str(), &c.name).to_string();
         controls.push(ControlSnap {
             id: c.id.as_str().to_string(),
             label,
@@ -116,9 +112,10 @@ fn take_snapshot(reg: &ProviderRegistry, map: &fancontrol_core::ChannelMap, tick
         });
     }
 
+    // Sort fans by numeric suffix when possible
+    fans.sort_by(|a, b| a.0.cmp(&b.0));
+    controls.sort_by(|a, b| a.id.cmp(&b.id));
     temps.sort_by(|a, b| a.1.cmp(&b.1));
-    fans.sort_by(|a, b| a.1.cmp(&b.1));
-    controls.sort_by(|a, b| a.label.cmp(&b.label));
 
     Snapshot {
         temps,

@@ -34,7 +34,7 @@ impl SuperIoDevice {
     pub fn kind_label(&self) -> &'static str {
         match self {
             Self::Banked(_) => "banked",
-            Self::Nct668(_) => "nct668-ec",
+            Self::Nct668(d) => d.layout_label(),
         }
     }
 
@@ -45,10 +45,15 @@ impl SuperIoDevice {
         }
     }
 
-    pub fn control_count(&self) -> usize {
+    /// (control_slot, optional paired fan index)
+    pub fn control_slots(&self) -> Vec<(usize, Option<usize>)> {
         match self {
-            Self::Banked(d) => d.control_count(),
-            Self::Nct668(d) => d.control_count(),
+            Self::Banked(d) => (0..d.control_count()).map(|i| (i, Some(i))).collect(),
+            Self::Nct668(d) => d
+                .control_slots()
+                .into_iter()
+                .map(|(slot, _)| (slot, d.rpm_index_for_control(slot)))
+                .collect(),
         }
     }
 
@@ -87,17 +92,17 @@ impl SuperIoDevice {
         }
     }
 
-    pub fn read_duty_percent(&self, index: usize) -> Result<u8, String> {
+    pub fn read_duty_percent(&self, control_slot: usize) -> Result<u8, String> {
         match self {
-            Self::Banked(d) => d.read_duty_percent(index),
-            Self::Nct668(d) => d.read_duty_percent(index),
+            Self::Banked(d) => d.read_duty_percent(control_slot),
+            Self::Nct668(d) => d.read_duty_percent(control_slot),
         }
     }
 
-    pub fn set_duty_percent(&self, index: usize, percent: u8) -> Result<(), String> {
+    pub fn set_duty_percent(&self, control_slot: usize, percent: u8) -> Result<(), String> {
         match self {
-            Self::Banked(d) => d.set_duty_percent(index, percent),
-            Self::Nct668(d) => d.set_duty_percent(index, percent),
+            Self::Banked(d) => d.set_duty_percent(control_slot, percent),
+            Self::Nct668(d) => d.set_duty_percent(control_slot, percent),
         }
     }
 }

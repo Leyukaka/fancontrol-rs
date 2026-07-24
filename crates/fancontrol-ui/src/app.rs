@@ -44,7 +44,10 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         snapshot,
         status,
         slider_state: HashMap::new(),
-        last_write: HashMap::new(),
+        // While Instant is in the future, do not overwrite slider from HW.
+        user_lock_until: HashMap::new(),
+        pending_write: HashMap::new(),
+        last_hw_write: HashMap::new(),
         write_error: None,
     };
 
@@ -72,16 +75,18 @@ struct FanApp {
     map: ChannelMap,
     snapshot: SharedSnapshot,
     status: String,
-    /// Local slider values (id → duty f32)
     slider_state: HashMap<String, f32>,
-    last_write: HashMap<String, Instant>,
+    user_lock_until: HashMap<String, Instant>,
+    /// Desired duty queued while dragging (applied throttled / on release).
+    pending_write: HashMap<String, u8>,
+    last_hw_write: HashMap<String, Instant>,
     write_error: Option<String>,
 }
 
 impl eframe::App for FanApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Continuous repaint so live values refresh
         ctx.request_repaint_after(Duration::from_millis(200));
+        self.flush_pending_writes();
 
         let snap = self
             .snapshot
@@ -110,124 +115,175 @@ impl eframe::App for FanApp {
                 ui.small("Hardware sliders locked. CLI: cargo run -- --allow-hw-write ui");
             }
             ui.small(format!(
-                "map: {} sensors · tick {}",
+                "map: {} · fans {} · controls {} · tick {}",
                 self.map.sensors.len(),
+                snap.fans.len(),
+                snap.controls.len(),
                 snap.tick
             ));
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.columns(3, |cols| {
-                // Temperatures
                 cols[0].heading("Temperatures");
                 cols[0].separator();
-                egui::ScrollArea::vertical().show(&mut cols[0], |ui| {
-                    if snap.temps.is_empty() {
-                        ui.label("(none)");
-                    }
-                    for (_id, label, v) in &snap.temps {
-                        ui.horizontal(|ui| {
-                            ui.label(label);
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                ui.monospace(format!("{v:5.1} °C"));
+                egui::ScrollArea::vertical()
+                    .id_salt("temps")
+                    .show(&mut cols[0], |ui| {
+                        if snap.temps.is_empty() {
+                            ui.label("(none)");
+                        }
+                        for (_id, label, v) in &snap.temps {
+                            ui.horizontal(|ui| {
+                                ui.label(label);
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        ui.monospace(format!("{v:5.1} °C"));
+                                    },
+                                );
                             });
-                        });
-                    }
-                });
+                        }
+                    });
 
-                // Fans
                 cols[1].heading("Fans (RPM)");
                 cols[1].separator();
-                egui::ScrollArea::vertical().show(&mut cols[1], |ui| {
-                    if snap.fans.is_empty() {
-                        ui.label("(none)");
-                    }
-                    for (_id, label, v) in &snap.fans {
-                        ui.horizontal(|ui| {
-                            ui.label(label);
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                ui.monospace(format!("{v:6.0}"));
+                egui::ScrollArea::vertical()
+                    .id_salt("fans")
+                    .show(&mut cols[1], |ui| {
+                        if snap.fans.is_empty() {
+                            ui.label("(none)");
+                        }
+                        for (id, label, v) in &snap.fans {
+                            ui.horizontal(|ui| {
+                                ui.label(label);
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        if *v < 1.0 {
+                                            ui.weak("0");
+                                        } else {
+                                            ui.monospace(format!("{v:6.0}"));
+                                        }
+                                    },
+                                );
                             });
-                        });
-                    }
-                });
+                            ui.small(id);
+                        }
+                    });
 
-                // Controls + sliders
                 cols[2].heading("Controls");
                 cols[2].separator();
-                egui::ScrollArea::vertical().show(&mut cols[2], |ui| {
-                    if snap.controls.is_empty() {
-                        ui.label("(none with activity — mock or live fans)");
-                    }
-                    for c in &snap.controls {
-                        ui.group(|ui| {
-                            ui.label(&c.label);
-                            ui.small(&c.id);
-                            if let Some(rpm) = c.rpm {
-                                ui.monospace(format!("RPM {rpm:.0}"));
-                            }
-                            let pull = self
-                                .last_write
-                                .get(&c.id)
-                                .map(|t| t.elapsed() > Duration::from_millis(800))
-                                .unwrap_or(true);
-                            if pull {
-                                self.slider_state
-                                    .insert(c.id.clone(), f32::from(c.duty));
-                            } else {
-                                self.slider_state
-                                    .entry(c.id.clone())
-                                    .or_insert(f32::from(c.duty));
-                            }
-                            let mut value = *self
-                                .slider_state
-                                .get(&c.id)
-                                .unwrap_or(&f32::from(c.duty));
+                egui::ScrollArea::vertical()
+                    .id_salt("ctrls")
+                    .show(&mut cols[2], |ui| {
+                        if snap.controls.is_empty() {
+                            ui.label("(none)");
+                        }
+                        for c in &snap.controls {
+                            ui.group(|ui| {
+                                ui.label(&c.label);
+                                ui.small(&c.id);
+                                if let Some(rpm) = c.rpm {
+                                    ui.monospace(format!("RPM {rpm:.0}"));
+                                } else {
+                                    ui.weak("RPM —");
+                                }
 
-                            let enabled = c.writable
-                                && (self.options.allow_hw_write
-                                    || c.id.starts_with("mock."));
-                            let mut changed = false;
-                            ui.add_enabled_ui(enabled, |ui| {
-                                let resp = ui.add(
-                                    egui::Slider::new(&mut value, 0.0..=100.0)
-                                        .suffix("%")
-                                        .integer(),
-                                );
-                                changed = resp.changed();
+                                let locked = self.is_user_locked(&c.id);
+                                if !locked {
+                                    // Only sync from HW when user is not interacting.
+                                    self.slider_state
+                                        .insert(c.id.clone(), f32::from(c.duty));
+                                }
+                                let mut value = *self
+                                    .slider_state
+                                    .get(&c.id)
+                                    .unwrap_or(&f32::from(c.duty));
+
+                                let enabled = c.writable
+                                    && (self.options.allow_hw_write
+                                        || c.id.starts_with("mock."));
+
+                                let mut changed = false;
+                                let mut dragging = false;
+                                ui.add_enabled_ui(enabled, |ui| {
+                                    let resp = ui.add(
+                                        egui::Slider::new(&mut value, 0.0..=100.0)
+                                            .suffix("%")
+                                            .integer()
+                                            .clamping(egui::SliderClamping::Always),
+                                    );
+                                    changed = resp.changed();
+                                    dragging = resp.dragged() || resp.has_focus();
+                                    if resp.drag_stopped() {
+                                        // Final commit on release
+                                        self.lock_user(&c.id, Duration::from_millis(1500));
+                                        self.queue_write(&c.id, value, true);
+                                    }
+                                });
+
+                                self.slider_state.insert(c.id.clone(), value);
+                                if dragging || changed {
+                                    self.lock_user(&c.id, Duration::from_millis(2000));
+                                }
+                                if changed {
+                                    // Throttled live apply while dragging
+                                    self.queue_write(&c.id, value, false);
+                                }
+                                if !enabled {
+                                    ui.small("locked");
+                                }
                             });
-                            self.slider_state.insert(c.id.clone(), value);
-                            if changed {
-                                self.apply_slider(&c.id, value);
-                            }
-                            if !enabled {
-                                ui.small("locked");
-                            }
-                        });
-                        ui.add_space(6.0);
-                    }
-                });
+                            ui.add_space(6.0);
+                        }
+                    });
             });
         });
     }
 }
 
 impl FanApp {
-    fn apply_slider(&mut self, id: &str, duty: f32) {
+    fn is_user_locked(&self, id: &str) -> bool {
+        self.user_lock_until
+            .get(id)
+            .map(|t| Instant::now() < *t)
+            .unwrap_or(false)
+    }
+
+    fn lock_user(&mut self, id: &str, for_dur: Duration) {
+        self.user_lock_until
+            .insert(id.to_string(), Instant::now() + for_dur);
+    }
+
+    fn queue_write(&mut self, id: &str, duty: f32, force: bool) {
         let percent = duty.round().clamp(0.0, 100.0) as u8;
-        // Throttle hardware writes
-        if let Some(t) = self.last_write.get(id) {
-            if t.elapsed() < Duration::from_millis(120) {
-                return;
-            }
+        self.pending_write.insert(id.to_string(), percent);
+        if force {
+            self.last_hw_write.remove(id);
         }
-        match self.reg.set_duty(&ControlId::new(id), percent) {
-            Ok(()) => {
-                self.last_write.insert(id.to_string(), Instant::now());
-                self.write_error = None;
+    }
+
+    fn flush_pending_writes(&mut self) {
+        let now = Instant::now();
+        let ids: Vec<String> = self.pending_write.keys().cloned().collect();
+        for id in ids {
+            if let Some(t) = self.last_hw_write.get(&id) {
+                if now.duration_since(*t) < Duration::from_millis(150) {
+                    continue;
+                }
             }
-            Err(e) => {
-                self.write_error = Some(format!("{id}: {e}"));
+            let Some(percent) = self.pending_write.remove(&id) else {
+                continue;
+            };
+            match self.reg.set_duty(&ControlId::new(id.clone()), percent) {
+                Ok(()) => {
+                    self.last_hw_write.insert(id, now);
+                    self.write_error = None;
+                }
+                Err(e) => {
+                    self.write_error = Some(format!("{id}: {e}"));
+                }
             }
         }
     }

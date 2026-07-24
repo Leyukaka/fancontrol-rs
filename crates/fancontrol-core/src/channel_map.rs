@@ -62,11 +62,25 @@ impl ChannelMap {
         let controls = [
             ("pawnio.0.ctrl0", "Control 0 / Fan 0"),
             ("pawnio.0.ctrl1", "Control 1 / Fan 1"),
+            ("pawnio.0.ctrl2", "Control 2"),
+            ("pawnio.0.ctrl3", "Control 3"),
+            ("pawnio.0.ctrl9", "Control 9 (ext)"),
+            ("pawnio.0.ctrl10", "Control 10 (ext)"),
+            ("pawnio.0.ctrl11", "Control 11 (ext)"),
+            ("pawnio.0.ctrl12", "Control 12 (ext)"),
+            ("pawnio.0.ctrl13", "Control 13 (ext)"),
+            ("pawnio.0.ctrl14", "Control 14 (ext)"),
+            ("pawnio.0.ctrl15", "Control 15 (ext)"),
             ("mock.cpu_fan", "CPU Fan (mock)"),
             ("mock.case_fan", "Case Fan (mock)"),
         ];
         for (id, name) in controls {
             m.controls.insert(id.into(), name.into());
+        }
+        for i in 0..17 {
+            m.sensors
+                .entry(format!("pawnio.0.fan{i}"))
+                .or_insert_with(|| format!("Fan {i}"));
         }
         m
     }
