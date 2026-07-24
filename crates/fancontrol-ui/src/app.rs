@@ -300,7 +300,7 @@ impl eframe::App for FanApp {
                             "Auto-apply needs --allow-hw-write",
                         );
                     }
-                    ui.small("GPU: nvidia-smi · SSD: StorageReliabilityCounter");
+                    ui.small("GPU: nvidia-smi · SSD: DeviceIoControl (no PowerShell)");
                     ui.separator();
                     ui.label("RGB");
                     ui.small(

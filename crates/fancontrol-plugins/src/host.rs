@@ -1,7 +1,7 @@
 //! Best-effort host sensors (GPU / storage) without privileged drivers.
 //!
-//! - NVIDIA GPU: `nvidia-smi` if present on PATH
-//! - Storage: PowerShell StorageReliabilityCounter (slow → long TTL, background refresh)
+//! - NVIDIA GPU: `nvidia-smi` if present on PATH (no PowerShell)
+//! - Storage (Windows): `DeviceIoControl` temperature property — **no PowerShell**
 
 use crate::traits::{PluginError, Result, SensorProvider};
 use fancontrol_core::{SensorDescriptor, SensorId, SensorKind};
@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
-/// CREATE_NO_WINDOW — avoid flashing a console when spawning powershell/nvidia-smi.
+/// CREATE_NO_WINDOW — avoid flashing a console when spawning nvidia-smi.
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -60,7 +60,7 @@ impl HostSensorProvider {
         *started = true;
         let cache = Arc::clone(&self.cache);
         let gpu_ttl = self.gpu_ttl;
-        // Background loop: only nvidia-smi frequently; storage less often via separate path
+        // Background loop: nvidia-smi frequently; storage refreshed on demand (merge_storage_if_due)
         thread::Builder::new()
             .name("host-sensors".into())
             .spawn(move || loop {
@@ -116,8 +116,6 @@ impl HostSensorProvider {
 
     fn snapshot(&self) -> Arc<Vec<(String, String, f64)>> {
         self.ensure_bg_refresh();
-        // Storage refresh is expensive: only when due, and not blocking every read —
-        // try_lock style: only run storage if we can take last_storage quickly.
         self.merge_storage_if_due();
         let g = self.cache.lock().unwrap_or_else(|e| e.into_inner());
         g.as_ref()
@@ -190,46 +188,12 @@ fn probe_nvidia() -> Vec<(String, String, f64)> {
 }
 
 fn probe_storage_temps() -> Vec<(String, String, f64)> {
-    // Read-only Storage module probes. Intentionally **no** `-ExecutionPolicy Bypass`:
-    // that flag is a common malware (e.g. SolarMarker) behavioral IOC and trips
-    // VirusTotal / Sigma rules even when the script is benign. Inline `-Command`
-    // does not require Bypass for these built-in cmdlets on a normal Windows install.
-    let script = r#"
-$ErrorActionPreference='SilentlyContinue'
-Get-PhysicalDisk | ForEach-Object {
-  $n = $_.FriendlyName
-  $t = ($_ | Get-StorageReliabilityCounter).Temperature
-  if ($null -ne $t) { "{0}|{1}" -f $n, $t }
-}
-"#;
-    let mut cmd = Command::new("powershell.exe");
-    cmd.args(["-NoProfile", "-NonInteractive", "-Command", script]);
     #[cfg(windows)]
-    cmd.creation_flags(CREATE_NO_WINDOW);
-    let output = cmd.output();
-    let Ok(out) = output else {
-        return Vec::new();
-    };
-    if !out.status.success() {
-        return Vec::new();
+    {
+        crate::storage_win::probe_storage_temps()
     }
-    let text = String::from_utf8_lossy(&out.stdout);
-    let mut rows = Vec::new();
-    for (i, line) in text.lines().enumerate() {
-        let Some((name, temp_s)) = line.split_once('|') else {
-            continue;
-        };
-        let Ok(temp) = temp_s.trim().parse::<f64>() else {
-            continue;
-        };
-        if !(0.0..=120.0).contains(&temp) {
-            continue;
-        }
-        rows.push((
-            format!("host.ssd{i}"),
-            format!("Storage ({})", name.trim()),
-            temp,
-        ));
+    #[cfg(not(windows))]
+    {
+        Vec::new()
     }
-    rows
 }

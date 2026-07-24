@@ -76,7 +76,7 @@ Release binary: `target/release/fancontrol-rs.exe`.
 
 ## Windows Defender / SmartScreen / VirusTotal
 
-This app talks to **PawnIO** (kernel I/O) and may spawn **nvidia-smi** / **PowerShell** for optional GPU/SSD temps. Like FanControl / LibreHardwareMonitor, scanners may flag the **unsigned** binary (heuristic / behavioral rules, not a proof of malware).
+This app talks to **PawnIO** (kernel I/O), may spawn **nvidia-smi** for optional GPU temps, and reads SSD temps via native Windows storage APIs (no PowerShell). Like FanControl / LibreHardwareMonitor, scanners may still flag the **unsigned** binary (heuristic / behavioral rules, not a proof of malware).
 
 - Prefer official Releases + verify **SHA256** — see [docs/SECURITY.md](./docs/SECURITY.md).
 - Especially with `--allow-hw-write` (real PWM control), Defender can be noisier.

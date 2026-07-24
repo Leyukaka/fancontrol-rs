@@ -35,7 +35,7 @@ Vendored PawnIO modules (e.g. `LpcIO.bin`) ship under `crates/fancontrol-pawnio/
 | **Higher control indices** (NCT668x) | Fan duty | **Experimental / DR path** | Direct-register style path; less trusted than ctrl0–3. Validate carefully before relying on it. |
 | **Banked Nuvoton NCT / ITE IT87** (classic Super I/O HWM) | Detect / sensors | **Experimental** | Detection helpers exist; not the primary validated path. |
 | **Host: GPU** (`nvidia-smi`) | Temperature | **Read-only** | Process spawn; no fan curve write through nvidia-smi. |
-| **Host: storage** (PowerShell / StorageReliabilityCounter) | Temperature | **Read-only** | SSD/HDD temp when OS exposes it. |
+| **Host: storage** (`DeviceIoControl` temperature property) | Temperature | **Read-only** | Win10+ storage stack via `\\.\PhysicalDriveN` (no PowerShell). Often needs elevation. |
 | **Mock provider** | Dev / UI without hardware | Always available | `--no-hw` |
 
 ---

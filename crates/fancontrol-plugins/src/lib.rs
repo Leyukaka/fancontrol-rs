@@ -5,6 +5,8 @@
 
 pub mod host;
 pub mod mock;
+#[cfg(windows)]
+mod storage_win;
 pub mod traits;
 
 pub use host::HostSensorProvider;

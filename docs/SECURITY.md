@@ -90,7 +90,7 @@ Unsigned Windows tools that touch **kernel I/O (PawnIO)** and spawn **host helpe
 |----------|------------------|
 | Load PawnIO / talk to Super I/O | Fan/temp hardware access (not WinRing0) |
 | Spawn `nvidia-smi` | Optional GPU temperature (read-only) |
-| Spawn `powershell.exe -Command …` | Optional SSD/HDD temperature via `Get-PhysicalDisk` / `Get-StorageReliabilityCounter` (**read-only**) |
+| Open `\\.\PhysicalDriveN` + `DeviceIoControl` | Optional SSD/HDD temperature (**no PowerShell**; Win10+ storage stack) |
 | Run elevated | Required for `pawnio_open` on many systems |
 
 ### Rules you may see (and why they fire)
@@ -99,10 +99,10 @@ Examples reported against early builds:
 
 | Behavioral rule (examples) | Likely trigger |
 |----------------------------|----------------|
-| PowerShell / **SolarMarker**-style “initial execution” | Spawning PowerShell from an unsigned EXE (sandbox heuristic) |
-| **Change PowerShell Policies to an Insecure Level** | Older builds used `-ExecutionPolicy Bypass` for storage probes — **removed** (unnecessary for inline `-Command`) |
+| PowerShell / **SolarMarker**-style (older builds) | Early builds spawned PowerShell for SSD temps — **removed**; storage uses native `DeviceIoControl` now |
+| **Change PowerShell Policies…** (older builds) | Was `-ExecutionPolicy Bypass` — **gone** with PowerShell removal for host storage |
 | **Unsigned image loaded into LSASS** | Often sandbox / third-party noise; our app does not inject into LSASS. **Code signing** later reduces this class of alerts |
-| **PowerShell deleted mounted share** | Common sandbox false positive around storage cmdlets; we do not intentionally unmount shares |
+| **PowerShell deleted mounted share** (older builds) | Sandbox FP around storage cmdlets — no longer applicable to storage path |
 
 ### What we do / don’t do
 
