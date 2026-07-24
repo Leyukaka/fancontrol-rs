@@ -5,7 +5,7 @@
 ```
 ┌─────────────────────────────────────────────────────┐
 │                    fancontrol-rs                    │
-│                   (main binary)                     │
+│              (CLI + ui subcommand binary)           │
 └───────────────────────┬─────────────────────────────┘
                         │
         ┌───────────────┼───────────────┐
@@ -13,55 +13,79 @@
         ▼               ▼               ▼
 ┌───────────────┐ ┌──────────────┐ ┌────────────────┐
 │ fancontrol-ui │ │fancontrol-   │ │ fancontrol-    │
-│   (egui/iced) │ │   core       │ │   plugins      │
+│  (egui 0.35)  │ │   core       │ │   plugins      │
 └───────────────┘ └──────┬───────┘ └───────┬────────┘
                          │                 │
                          ▼                 ▼
                 ┌─────────────────┐  ┌─────────────┐
-                │fancontrol-pawnio│  │ 3rd-party   │
-                │  (backend)      │  │ plugins     │
+                │fancontrol-pawnio│  │ Host / mock │
+                │  (PawnIO HWM)   │  │  providers  │
                 └─────────────────┘  └─────────────┘
 ```
 
-## Crates (planned workspace)
+## Crates (workspace — current)
 
 | Crate | Responsibility |
 |-------|----------------|
-| `fancontrol-core` | Domain models (Sensor, Control, Curve, Profile), business logic, curve evaluation |
-| `fancontrol-pawnio` | Low-level hardware access via PawnIO |
-| `fancontrol-plugins` | Plugin loading, trait definitions, discovery |
-| `fancontrol-ui` | Desktop UI |
-| `fancontrol-rs` | Binary that wires everything together |
+| `fancontrol-core` | Domain models (Sensor, Control, Curve, Profile), curve eval, channel map, config paths |
+| `fancontrol-plugins` | Traits (`SensorProvider` / `ControlProvider`), registry, mock, host sensors |
+| `fancontrol-pawnio` | PawnIOLib FFI, LpcIO modules, Super I/O detect, NCT668x EC HWM |
+| `fancontrol-ui` | Desktop UI (egui + eframe **0.35**): live view, sliders, curves, graph, options |
+| `fancontrol-rs` | Binary: CLI harness + `ui` subcommand |
+
+Workspace version: **0.1.3** (see root `Cargo.toml`).
 
 ## Key design decisions
 
 ### 1. Backend: PawnIO (not custom driver)
-- We deliberately refuse to ship a custom WinRing0-style driver.
-- PawnIO is the current best secure alternative used by modern LibreHardwareMonitor builds.
-- All Super I/O / EC / MSR access goes through PawnIO modules.
 
-### 2. Plugin system
-- Plugins can provide additional sensors and controls.
-- Core defines traits: `SensorProvider`, `ControlProvider`.
-- Plugins are loaded dynamically (or compiled in for official ones).
+- Refuse to ship WinRing0-style vulnerable drivers.
+- PawnIO is a system prerequisite (install from https://pawnio.eu/) — **not** embedded in the exe.
+- Super I/O / EC access via vendored LpcIO module blobs + Rust control plane.
 
-### 3. UI choice (locked)
-- **egui + eframe** for v1 (see `specs/04-ui.md`).
+### 2. Plugin / provider system
 
-### 4. Data flow
+- Traits live in `fancontrol-plugins`.
+- **v1 shipping model**: official providers **compiled in** (mock, host, pawnio). Dynamic `.dll` plugins later.
+- Host sensors avoid PowerShell: GPU via fixed-path `nvidia-smi`; storage via `DeviceIoControl` temperature property.
+
+### 3. UI choice (locked for v1)
+
+- **egui + eframe 0.35** (see `specs/04-ui.md`).
+- Hardware writes off by default; UI reflects read-only vs write-enabled.
+
+### 4. Concurrency
+
+- UI poll thread for HWM `sample_all` batch reads.
+- Write queue off the UI thread for PWM.
+- Process-level ISA / SIO locking in pawnio path (see AGENTS / code).
+
+### 5. Data flow
+
 ```
-Hardware (PawnIO / Plugins)
+Hardware (PawnIO) + Host (nvidia-smi / storage IOCTL) + Mock
         ↓
    Sensor / Control values
         ↓
-   Core (curves evaluation)
+   Core (curve evaluation, profiles)
         ↓
-   UI (display + user input)
+   UI (display + user input) / CLI
         ↓
-   Core (apply new duties)
+   Write queue → ControlProvider::set_duty  (only if allow_hw_write)
 ```
 
-## Configuration
+## Configuration (Windows)
 
-- Profiles and curves stored as JSON (or TOML) in user config directory.
-- Location: `%APPDATA%/fancontrol-rs/` on Windows.
+Under the `directories` crate project dir for `fancontrol-rs` (typically under `%APPDATA%`):
+
+| File | Purpose |
+|------|---------|
+| `channel-map.json` | Display names for sensors/controls |
+| `ui-settings.json` | Graph window/sample rate, hide 0 RPM, curve auto-apply, etc. |
+| `profiles/*.json` | Fan profiles |
+
+## Distribution
+
+- GitHub Actions CI (fmt, clippy, test, release build) + CodeQL + cargo-audit + Dependabot.
+- Tag `v*.*.*` → Release workflow (environment **`release`**: owner approval) publishes `fancontrol-rs.exe` + `.sha256`.
+- Unsigned binaries today; signing roadmap in `docs/SIGNING_AND_DISTRIBUTION.md`.

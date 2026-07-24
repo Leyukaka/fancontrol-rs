@@ -2,50 +2,72 @@
 
 ## Goal
 
-Replace FanControl with a modern, secure, open-source alternative written in Rust while keeping the same level of power and usability.
+Replace FanControl with a modern, secure, open-source alternative written in Rust while keeping a high level of power and usability.
 
 ## Must-have features (v1)
 
 ### Sensors & Controls
-- Discover and list all available temperature sensors, fan speeds, and controllable fans
-- Support for motherboard Super I/O, EC, GPU, CPU package, etc. via PawnIO + plugins
-- Real-time reading of temperatures and fan RPMs
-- Manual control of fan duty cycles (%)
+
+| Capability | Status (v0.1.x) |
+|------------|-----------------|
+| Discover / list temps, fans, controls | **Done** (PawnIO NCT668x + mock + host) |
+| Motherboard Super I/O / EC via PawnIO | **Done** for NCT668x EC (validated); broader chips experimental |
+| Real-time temps + RPM | **Done** |
+| Manual duty % control | **Done** (CLI + UI sliders; write-gated) |
+| GPU / storage host sensors (read-only) | **Done** (`nvidia-smi` fixed paths; SSD via `DeviceIoControl`, no PowerShell) |
 
 ### Fan Curves
-- Create / edit / delete custom fan curves
-- Multiple points (temperature → duty)
-- Linear interpolation between points
-- Assign a curve to one or more controls
-- Hysteresis / response time settings
+
+| Capability | Status |
+|------------|--------|
+| Create / edit / delete curves | **Done** (core + UI editor MVP) |
+| Multi-point temp → duty, linear interp | **Done** |
+| Assign curve to controls | **Done** (profile assignments) |
+| Hysteresis | **Done** (core + UI field) |
+| Auto-apply curves to hardware | **Done** (UI “Curve control” + `--allow-hw-write`) |
 
 ### Profiles
-- Save / load complete configurations (curves + assignments)
-- Quick switch between profiles
-- Auto-apply last used profile on startup
 
-### UI Requirements
-- Clear overview of all sensors and controls
-- Visual fan curve editor (drag points)
-- Live graphs (temperature + RPM over time)
-- System tray icon with quick controls
-- Dark theme by default (light optional)
+| Capability | Status |
+|------------|--------|
+| Save / load JSON profiles | **Done** (core + UI list/save) |
+| Quick switch | **Partial** (UI profile list; polish ongoing) |
+| Auto-apply last profile on startup | **Partial** (default profile load; product polish later) |
+
+### UI
+
+| Capability | Status |
+|------------|--------|
+| Overview sensors + controls | **Done** |
+| Visual curve editor | **Done** (MVP; polish ongoing) |
+| Live temp graph | **Done** (CPU; windows 10/20/30/60 min + sample rate) |
+| Dark theme default | **Done** |
+| System tray | **Not started** |
+| Rename channels | **Done** (`channel-map.json`) |
+| Missing-PawnIO popup | **Done** |
 
 ### Reliability
-- Graceful degradation if PawnIO is not installed
-- Clear error messages when hardware is not supported
-- No silent failures
+
+| Capability | Status |
+|------------|--------|
+| Graceful degrade without PawnIO | **Done** (mock/config/host; UI dialog) |
+| Clear unsupported / admin messaging | **Done** / polish ongoing |
+| No silent PWM writes | **Done** (`--allow-hw-write` gate) |
 
 ## Nice-to-have (v1.x / v2)
 
 - Multi-sensor curves (e.g. max of CPU + GPU)
-- External sensor sources (HWInfo, plugins)
+- External sensor sources (HWInfo shared memory, more plugins)
 - Scheduling / time-based profiles
+- **In-app auto-update** (manual check + SHA256 verify — planned; not implemented)
 - Remote monitoring (optional)
 - Linux support
+- Authenticode **code signing** (docs ready; not wired)
 
 ## Non-goals (for now)
 
 - RGB control (**planned later** — separate subsystem, not Super I/O)
 - Overclocking
 - Cross-platform parity in v1
+- Bundling PawnIO inside the app binary
+- Shipping WinRing0 or disabling AV as a product requirement

@@ -40,14 +40,15 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 
 ## Status (keep updated)
 
+- Product line **v0.1.3** (public repo). Specs under `specs/` aligned with this status.
 - Phase 0 foundation: **done**.
 - Phase 1: PawnIOLib FFI + LpcIO + **NCT668x EC HWM** (validated class id `0xD5` rev `0x92` @ `0x0A20`) + banked NCT path (experimental) + control loop + CLI.
 - Elevation required for `pawnio_open` (Administrator). **PawnIO is a prerequisite** (not bundled) — UI shows a startup dialog if missing / not openable.
 - Validated path: **Nuvoton NCT6687D-class**; **ctrl0–3** reliable PWM; higher controls = DR/experimental. See `docs/SUPPORTED_HARDWARE.md`.
-- Host sensors: `nvidia-smi` + storage via `DeviceIoControl` (read-only, no PowerShell).
+- Host sensors: fixed-path `nvidia-smi` + storage via `DeviceIoControl` (read-only, no PowerShell, no PATH walk for GPU).
 - Vendored modules: `crates/fancontrol-pawnio/modules/` (PawnIO.Modules).
-- UI: live sensors, sliders, curve editor, curve auto-apply, CPU graph windows, rename map.
-- Packaging: `.github/workflows/release.yml` publishes unsigned `fancontrol-rs.exe` on version tags. Signing later — `docs/SIGNING_AND_DISTRIBUTION.md`.
+- UI: **egui/eframe 0.35** — live sensors, sliders, curve editor, curve auto-apply, CPU graph windows, rename map, options.
+- Packaging / sec: release workflow + owner `release` environment approval; CodeQL + cargo-audit + Dependabot; unsigned exe + SHA256. Signing later — `docs/SIGNING_AND_DISTRIBUTION.md`.
 
 ## Next priorities (order)
 
@@ -55,7 +56,8 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 2. Broader chip validation (IT87 / banked NCT still experimental).
 3. Profile UX polish in UI.
 4. Code signing (SmartScreen) — see `docs/SIGNING_AND_DISTRIBUTION.md`.
-5. RGB (future — not Super I/O).
+5. Auto-update (manual + SHA256) — see `docs/SECURITY.md`.
+6. RGB (future — not Super I/O).
 
 ## Safety product rules
 
