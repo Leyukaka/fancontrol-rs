@@ -43,7 +43,8 @@ unsafe impl Sync for PawnIoApi {}
 impl PawnIoApi {
     pub fn load_from(path: &Path) -> Result<Self, String> {
         // SAFETY: path points to the official PawnIOLib.dll; we only call documented exports.
-        let lib = unsafe { Library::new(path) }.map_err(|e| format!("LoadLibrary({}): {e}", path.display()))?;
+        let lib = unsafe { Library::new(path) }
+            .map_err(|e| format!("LoadLibrary({}): {e}", path.display()))?;
         unsafe {
             let version: Symbol<FnVersion> = lib
                 .get(b"pawnio_version\0")
@@ -149,7 +150,9 @@ static API: OnceLock<Result<PawnIoApi, String>> = OnceLock::new();
 pub fn dll_candidates() -> Vec<PathBuf> {
     let mut v = Vec::new();
     v.push(PathBuf::from(r"C:\Program Files\PawnIO\PawnIOLib.dll"));
-    v.push(PathBuf::from(r"C:\Program Files (x86)\PawnIO\PawnIOLib.dll"));
+    v.push(PathBuf::from(
+        r"C:\Program Files (x86)\PawnIO\PawnIOLib.dll",
+    ));
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             v.push(dir.join("PawnIOLib.dll"));

@@ -17,10 +17,7 @@ impl SuperIoDevice {
             crate::superio::SuperIoChip::Nct668x { .. } => {
                 Nct668Device::try_open(detected).map(Self::Nct668)
             }
-            _ => Err(format!(
-                "no HWM driver for chip {}",
-                detected.chip.name()
-            )),
+            _ => Err(format!("no HWM driver for chip {}", detected.chip.name())),
         }
     }
 

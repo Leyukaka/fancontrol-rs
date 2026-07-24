@@ -1,9 +1,7 @@
 //! In-memory mock provider for development without hardware.
 
 use crate::traits::{ControlProvider, PluginError, Result, SensorProvider};
-use fancontrol_core::{
-    ControlDescriptor, ControlId, SensorDescriptor, SensorId, SensorKind,
-};
+use fancontrol_core::{ControlDescriptor, ControlId, SensorDescriptor, SensorId, SensorKind};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 

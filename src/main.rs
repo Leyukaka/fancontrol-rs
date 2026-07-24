@@ -297,23 +297,21 @@ fn main() -> anyhow::Result<()> {
             println!("opened_devices={}", p.device_count());
             println!("hw_write_enabled={}", p.write_enabled());
         }
-        Commands::Detect => {
-            match fancontrol_pawnio::detect_chips() {
-                Ok(chips) if chips.is_empty() => println!("No Super I/O chips detected."),
-                Ok(chips) => {
-                    for c in chips {
-                        println!(
-                            "slot{} port=0x{:02X} chip={} hwm={:?}",
-                            c.slot,
-                            c.register_port,
-                            c.chip.name(),
-                            c.hwm_address.map(|a| format!("0x{a:04X}"))
-                        );
-                    }
+        Commands::Detect => match fancontrol_pawnio::detect_chips() {
+            Ok(chips) if chips.is_empty() => println!("No Super I/O chips detected."),
+            Ok(chips) => {
+                for c in chips {
+                    println!(
+                        "slot{} port=0x{:02X} chip={} hwm={:?}",
+                        c.slot,
+                        c.register_port,
+                        c.chip.name(),
+                        c.hwm_address.map(|a| format!("0x{a:04X}"))
+                    );
                 }
-                Err(e) => anyhow::bail!("detect failed: {e}"),
             }
-        }
+            Err(e) => anyhow::bail!("detect failed: {e}"),
+        },
         Commands::Sample {
             times,
             interval_ms,
@@ -474,7 +472,10 @@ fn main() -> anyhow::Result<()> {
             } else {
                 let (p, created) = ChannelMap::init_seed_if_missing()?;
                 if !created {
-                    println!("Map already exists at {} (use --force to overwrite)", p.display());
+                    println!(
+                        "Map already exists at {} (use --force to overwrite)",
+                        p.display()
+                    );
                     return Ok(());
                 }
                 p
@@ -567,11 +568,7 @@ fn print_sample(reg: &ProviderRegistry, map: &ChannelMap, show_all: bool) {
                 }
                 any_c = true;
                 let label = map.control_name(c.id.as_str(), &c.name);
-                let rpm = c
-                    .rpm_sensor
-                    .as_ref()
-                    .map(|s| s.as_str())
-                    .unwrap_or("-");
+                let rpm = c.rpm_sensor.as_ref().map(|s| s.as_str()).unwrap_or("-");
                 println!(
                     "  {:>28}  {d:3}%  {label}  writable={}  rpm={rpm}",
                     c.id, c.writable
@@ -614,9 +611,7 @@ fn run_test_duty(
     let rpm_id = ctrl_meta.and_then(|c| c.rpm_sensor.clone());
 
     let baseline_duty = reg.get_duty(&cid)?;
-    let baseline_rpm = rpm_id
-        .as_ref()
-        .and_then(|id| reg.read_sensor(id).ok());
+    let baseline_rpm = rpm_id.as_ref().and_then(|id| reg.read_sensor(id).ok());
 
     println!("test-duty on {control}");
     println!("  baseline duty={baseline_duty}%  rpm={baseline_rpm:?}");
@@ -634,9 +629,7 @@ fn run_test_duty(
     for i in 0..steps {
         thread::sleep(Duration::from_millis(500));
         let d = reg.get_duty(&cid).unwrap_or(0);
-        let rpm = rpm_id
-            .as_ref()
-            .and_then(|id| reg.read_sensor(id).ok());
+        let rpm = rpm_id.as_ref().and_then(|id| reg.read_sensor(id).ok());
         println!("  hold {i}: duty={d}% rpm={rpm:?}");
     }
 
@@ -644,9 +637,7 @@ fn run_test_duty(
     reg.set_duty(&cid, baseline_duty)?;
     thread::sleep(Duration::from_millis(500));
     let restored = reg.get_duty(&cid)?;
-    let rpm_restored = rpm_id
-        .as_ref()
-        .and_then(|id| reg.read_sensor(id).ok());
+    let rpm_restored = rpm_id.as_ref().and_then(|id| reg.read_sensor(id).ok());
     println!("  restored duty={restored}% rpm={rpm_restored:?}");
     if restored != baseline_duty {
         eprintln!("warn: restored duty {restored}% != baseline {baseline_duty}%");

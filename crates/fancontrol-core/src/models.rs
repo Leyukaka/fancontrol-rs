@@ -130,7 +130,14 @@ pub struct FanCurve {
 
 impl FanCurve {
     /// Create a simple two-point linear curve.
-    pub fn linear(id: impl Into<String>, name: impl Into<String>, min_temp: f64, max_temp: f64, min_duty: u8, max_duty: u8) -> Self {
+    pub fn linear(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        min_temp: f64,
+        max_temp: f64,
+        min_duty: u8,
+        max_duty: u8,
+    ) -> Self {
         Self {
             id: CurveId::new(id),
             name: name.into(),
@@ -145,8 +152,11 @@ impl FanCurve {
 
     /// Sort points by temperature ascending (stable for equal temps).
     pub fn sort_points(&mut self) {
-        self.points
-            .sort_by(|a, b| a.temperature.partial_cmp(&b.temperature).unwrap_or(std::cmp::Ordering::Equal));
+        self.points.sort_by(|a, b| {
+            a.temperature
+                .partial_cmp(&b.temperature)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
     }
 
     /// Validate curve shape. Returns an error message if invalid.
@@ -167,7 +177,11 @@ impl FanCurve {
         }
         // Ensure non-decreasing temperatures after sort check
         let mut sorted = self.points.clone();
-        sorted.sort_by(|a, b| a.temperature.partial_cmp(&b.temperature).unwrap_or(std::cmp::Ordering::Equal));
+        sorted.sort_by(|a, b| {
+            a.temperature
+                .partial_cmp(&b.temperature)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         for w in sorted.windows(2) {
             if w[1].temperature < w[0].temperature {
                 return Err("points must be sortable by temperature".into());

@@ -58,11 +58,7 @@ impl TempHistory {
 
     fn prune(&mut self, now: Instant) {
         // Prefer relative to newest sample when present; fall back to `now`.
-        let anchor = self
-            .samples
-            .back()
-            .map(|(t, _)| *t)
-            .unwrap_or(now);
+        let anchor = self.samples.back().map(|(t, _)| *t).unwrap_or(now);
         while let Some(&(t, _)) = self.samples.front() {
             if anchor.saturating_duration_since(t) > self.window {
                 self.samples.pop_front();

@@ -36,18 +36,22 @@ pub fn evaluate_profile_step(
             continue;
         };
 
-        let sensor_id = profile.sensor_bindings.get(control_id).cloned().or_else(|| {
-            // Deterministic fallbacks (never HashMap::keys().next())
-            if temps.contains_key("pawnio.0.temp.CPU") {
-                Some("pawnio.0.temp.CPU".into())
-            } else if temps.contains_key("mock.cpu_temp") {
-                Some("mock.cpu_temp".into())
-            } else {
-                let mut keys: Vec<_> = temps.keys().cloned().collect();
-                keys.sort();
-                keys.into_iter().next()
-            }
-        });
+        let sensor_id = profile
+            .sensor_bindings
+            .get(control_id)
+            .cloned()
+            .or_else(|| {
+                // Deterministic fallbacks (never HashMap::keys().next())
+                if temps.contains_key("pawnio.0.temp.CPU") {
+                    Some("pawnio.0.temp.CPU".into())
+                } else if temps.contains_key("mock.cpu_temp") {
+                    Some("mock.cpu_temp".into())
+                } else {
+                    let mut keys: Vec<_> = temps.keys().cloned().collect();
+                    keys.sort();
+                    keys.into_iter().next()
+                }
+            });
 
         let Some(sensor_id) = sensor_id else {
             result
@@ -91,10 +95,8 @@ mod tests {
             hysteresis_c: 0.0,
             response_time_s: 0.0,
         });
-        p.assignments
-            .insert("fan1".into(), "c".into());
-        p.sensor_bindings
-            .insert("fan1".into(), "cpu".into());
+        p.assignments.insert("fan1".into(), "c".into());
+        p.sensor_bindings.insert("fan1".into(), "cpu".into());
 
         let temps = HashMap::from([("cpu".into(), 50.0)]);
         let mut states = HashMap::new();

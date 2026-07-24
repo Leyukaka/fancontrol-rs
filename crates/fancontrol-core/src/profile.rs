@@ -26,9 +26,7 @@ fn profile_path(id: &str) -> Result<PathBuf> {
 
 /// Save a profile to disk (creates config dirs if needed).
 pub fn save_profile(profile: &Profile) -> Result<PathBuf> {
-    profile
-        .validate()
-        .map_err(CoreError::InvalidCurve)?;
+    profile.validate().map_err(CoreError::InvalidCurve)?;
     ensure_config_dirs()?;
     let path = profile_path(profile.id.as_str())?;
     let json = serde_json::to_string_pretty(profile)?;
@@ -45,9 +43,7 @@ pub fn load_profile(id: &str) -> Result<Profile> {
     }
     let data = fs::read_to_string(&path)?;
     let profile: Profile = serde_json::from_str(&data)?;
-    profile
-        .validate()
-        .map_err(CoreError::InvalidCurve)?;
+    profile.validate().map_err(CoreError::InvalidCurve)?;
     Ok(profile)
 }
 
@@ -55,9 +51,7 @@ pub fn load_profile(id: &str) -> Result<Profile> {
 pub fn load_profile_from_path(path: &Path) -> Result<Profile> {
     let data = fs::read_to_string(path)?;
     let profile: Profile = serde_json::from_str(&data)?;
-    profile
-        .validate()
-        .map_err(CoreError::InvalidCurve)?;
+    profile.validate().map_err(CoreError::InvalidCurve)?;
     Ok(profile)
 }
 
@@ -102,10 +96,7 @@ mod tests {
         p.curves.push(FanCurve {
             id: crate::models::CurveId::new("quiet"),
             name: "Quiet".into(),
-            points: vec![
-                CurvePoint::new(30.0, 20),
-                CurvePoint::new(70.0, 100),
-            ],
+            points: vec![CurvePoint::new(30.0, 20), CurvePoint::new(70.0, 100)],
             hysteresis_c: 2.0,
             response_time_s: 0.0,
         });
@@ -124,17 +115,13 @@ mod tests {
         let loaded = load_profile_from_path(&path).unwrap();
         assert_eq!(loaded.id.as_str(), "default");
         assert_eq!(loaded.curves.len(), 1);
-        assert_eq!(
-            loaded.assignment_for("mock.cpu_fan").unwrap().name,
-            "Quiet"
-        );
+        assert_eq!(loaded.assignment_for("mock.cpu_fan").unwrap().name, "Quiet");
     }
 
     #[test]
     fn validate_rejects_bad_assignment() {
         let mut p = sample_profile();
-        p.assignments
-            .insert("fan1".into(), "missing_curve".into());
+        p.assignments.insert("fan1".into(), "missing_curve".into());
         assert!(p.validate().is_err());
     }
 }

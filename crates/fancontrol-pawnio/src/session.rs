@@ -10,7 +10,9 @@ impl PawnSession {
     /// Open executor and load a module blob.
     pub fn open_with_blob(blob: &[u8]) -> Result<Self, String> {
         let api = ffi::api()?;
-        let handle = api.open().map_err(|hr| format!("pawnio_open: {}", format_hr(hr)))?;
+        let handle = api
+            .open()
+            .map_err(|hr| format!("pawnio_open: {}", format_hr(hr)))?;
         if let Err(hr) = api.load_blob(handle, blob) {
             api.close(handle);
             return Err(format!("pawnio_load: {}", format_hr(hr)));

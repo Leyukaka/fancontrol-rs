@@ -50,7 +50,10 @@ pub fn status_message() -> String {
     match ffi::api() {
         Ok(api) => match api.version() {
             Ok(v) => parts.push(format!("PawnIOLib version raw={v} (0x{v:08X})")),
-            Err(hr) => parts.push(format!("PawnIOLib loaded, version failed: {}", ffi::format_hr(hr))),
+            Err(hr) => parts.push(format!(
+                "PawnIOLib loaded, version failed: {}",
+                ffi::format_hr(hr)
+            )),
         },
         Err(e) => parts.push(format!("PawnIOLib: {e}")),
     }

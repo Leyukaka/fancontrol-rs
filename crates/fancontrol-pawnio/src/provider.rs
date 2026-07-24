@@ -3,9 +3,7 @@
 use crate::device::SuperIoDevice;
 use crate::nct668::HwmSample;
 use crate::superio::detect_chips;
-use fancontrol_core::{
-    ControlDescriptor, ControlId, SensorDescriptor, SensorId, SensorKind,
-};
+use fancontrol_core::{ControlDescriptor, ControlId, SensorDescriptor, SensorId, SensorKind};
 use fancontrol_plugins::{ControlProvider, PluginError, Result, SensorProvider};
 use std::sync::Mutex;
 

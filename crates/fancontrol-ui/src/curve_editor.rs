@@ -31,8 +31,10 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
     });
 
     let height = 200.0;
-    let (rect, resp) =
-        ui.allocate_exact_size(Vec2::new(ui.available_width().max(200.0), height), Sense::click_and_drag());
+    let (rect, resp) = ui.allocate_exact_size(
+        Vec2::new(ui.available_width().max(200.0), height),
+        Sense::click_and_drag(),
+    );
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 6.0, Color32::from_rgb(14, 16, 26));
     painter.rect_stroke(rect, 6.0, Stroke::new(1.0, Color32::from_rgb(50, 60, 90)));
@@ -107,7 +109,10 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
     let mut drag_idx: Option<usize> = None;
     // Find which point is under pointer / being dragged via id memory
     let id = ui.id().with("curve_drag");
-    let mut state = ui.ctx().data(|d| d.get_temp::<Option<usize>>(id)).unwrap_or(None);
+    let mut state = ui
+        .ctx()
+        .data(|d| d.get_temp::<Option<usize>>(id))
+        .unwrap_or(None);
 
     if resp.drag_started() {
         if let Some(pos) = pointer {
@@ -155,7 +160,11 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
                 Color32::from_rgb(100, 210, 255)
             },
         );
-        painter.circle_stroke(hp, if active { 7.0 } else { 5.0 }, Stroke::new(1.0, Color32::WHITE));
+        painter.circle_stroke(
+            hp,
+            if active { 7.0 } else { 5.0 },
+            Stroke::new(1.0, Color32::WHITE),
+        );
     }
 
     // Axis labels
@@ -191,14 +200,24 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
         ui.horizontal(|ui| {
             ui.label(format!("#{i}"));
             if ui
-                .add(egui::DragValue::new(&mut t).prefix("T ").suffix("°C").range(0.0..=120.0))
+                .add(
+                    egui::DragValue::new(&mut t)
+                        .prefix("T ")
+                        .suffix("°C")
+                        .range(0.0..=120.0),
+                )
                 .changed()
             {
                 curve.points[i].temperature = f64::from(t);
                 changed = true;
             }
             if ui
-                .add(egui::DragValue::new(&mut d).prefix("D ").suffix("%").range(0.0..=100.0))
+                .add(
+                    egui::DragValue::new(&mut d)
+                        .prefix("D ")
+                        .suffix("%")
+                        .range(0.0..=100.0),
+                )
                 .changed()
             {
                 curve.points[i].duty = d.round() as u8;

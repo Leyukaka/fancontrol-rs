@@ -86,10 +86,7 @@ impl ChannelMap {
     }
 
     pub fn sensor_name<'a>(&'a self, id: &str, fallback: &'a str) -> &'a str {
-        self.sensors
-            .get(id)
-            .map(String::as_str)
-            .unwrap_or(fallback)
+        self.sensors.get(id).map(String::as_str).unwrap_or(fallback)
     }
 
     pub fn control_name<'a>(&'a self, id: &str, fallback: &'a str) -> &'a str {

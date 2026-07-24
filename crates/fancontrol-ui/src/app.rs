@@ -157,7 +157,8 @@ fn load_or_create_default_profile() -> Profile {
         return p;
     }
     let mut p = Profile::new("default", "Default");
-    p.curves.push(FanCurve::linear("quiet", "Quiet", 30.0, 75.0, 25, 100));
+    p.curves
+        .push(FanCurve::linear("quiet", "Quiet", 30.0, 75.0, 25, 100));
     p.assignments
         .insert("pawnio.0.ctrl0".into(), "quiet".into());
     p.sensor_bindings
@@ -177,11 +178,7 @@ impl eframe::App for FanApp {
             self.write_error = Some(e);
         }
 
-        let snap = self
-            .snapshot
-            .lock()
-            .map(|g| g.clone())
-            .unwrap_or_default();
+        let snap = self.snapshot.lock().map(|g| g.clone()).unwrap_or_default();
 
         if let Some(t) = snap.cpu_temp {
             self.cpu_history.push_if_due(t as f32, Instant::now());
@@ -231,8 +228,9 @@ impl eframe::App for FanApp {
                             egui::Color32::from_rgb(220, 160, 160),
                         )
                     };
-                    let btn = egui::Button::new(egui::RichText::new(label).color(text_color).strong())
-                        .fill(fill);
+                    let btn =
+                        egui::Button::new(egui::RichText::new(label).color(text_color).strong())
+                            .fill(fill);
                     if ui
                         .add(btn)
                         .on_hover_text(
@@ -354,7 +352,10 @@ impl eframe::App for FanApp {
                         for (id, label, v) in &snap.temps {
                             ui.horizontal(|ui| {
                                 if ui
-                                    .add(egui::Label::new(label.as_str()).sense(egui::Sense::click()))
+                                    .add(
+                                        egui::Label::new(label.as_str())
+                                            .sense(egui::Sense::click()),
+                                    )
                                     .on_hover_text("Cliquer pour renommer")
                                     .clicked()
                                 {
@@ -388,7 +389,10 @@ impl eframe::App for FanApp {
                         for (id, label, v) in fans {
                             ui.horizontal(|ui| {
                                 if ui
-                                    .add(egui::Label::new(label.as_str()).sense(egui::Sense::click()))
+                                    .add(
+                                        egui::Label::new(label.as_str())
+                                            .sense(egui::Sense::click()),
+                                    )
                                     .on_hover_text("Cliquer pour renommer")
                                     .clicked()
                                 {
@@ -432,12 +436,11 @@ impl eframe::App for FanApp {
                                     self.begin_rename(&c.id, &c.label, true);
                                 }
                                 ui.small(&c.id);
-                                let slot = c
-                                    .id
-                                    .rsplit("ctrl")
-                                    .next()
-                                    .and_then(|s| s.parse::<u32>().ok())
-                                    .unwrap_or(0);
+                                let slot =
+                                    c.id.rsplit("ctrl")
+                                        .next()
+                                        .and_then(|s| s.parse::<u32>().ok())
+                                        .unwrap_or(0);
                                 if slot >= 9 {
                                     ui.small("EC/BIOS may reclaim (SmartFan)");
                                 }
@@ -481,9 +484,7 @@ impl eframe::App for FanApp {
                                                 .map(|x| x == &cid)
                                                 .unwrap_or(false);
                                             if ui.selectable_label(selected, &cid).clicked() {
-                                                self.profile
-                                                    .assignments
-                                                    .insert(c.id.clone(), cid);
+                                                self.profile.assignments.insert(c.id.clone(), cid);
                                                 self.profile.sensor_bindings.insert(
                                                     c.id.clone(),
                                                     "pawnio.0.temp.CPU".into(),
@@ -499,14 +500,11 @@ impl eframe::App for FanApp {
                                         self.slider_state.insert(c.id.clone(), f32::from(d));
                                     }
                                 }
-                                let mut value = *self
-                                    .slider_state
-                                    .get(&c.id)
-                                    .unwrap_or(&f32::from(hw_duty));
+                                let mut value =
+                                    *self.slider_state.get(&c.id).unwrap_or(&f32::from(hw_duty));
 
                                 let enabled = c.writable
-                                    && (self.options.allow_hw_write
-                                        || c.id.starts_with("mock."));
+                                    && (self.options.allow_hw_write || c.id.starts_with("mock."));
 
                                 if c.duty.is_none() {
                                     ui.weak("duty —");
@@ -636,7 +634,9 @@ impl FanApp {
                         self.pawnio_dialog = None;
                     }
                 });
-                ui.small("L'app reste utilisable (mock / config). Aucune installation automatique.");
+                ui.small(
+                    "L'app reste utilisable (mock / config). Aucune installation automatique.",
+                );
             });
         if !open {
             self.pawnio_dialog = None;
@@ -697,11 +697,7 @@ impl FanApp {
                 }
             }
             if ui.button("Apply now").clicked() {
-                let s = self
-                    .snapshot
-                    .lock()
-                    .map(|g| g.clone())
-                    .unwrap_or_default();
+                let s = self.snapshot.lock().map(|g| g.clone()).unwrap_or_default();
                 self.apply_curves_from_snapshot(&s);
                 self.profile_status = Some("Curves applied once".into());
             }

@@ -48,7 +48,8 @@ pub fn spawn_poller(
             loop {
                 let start = Instant::now();
                 let map_snap = map.lock().map(|g| g.clone()).unwrap_or_default();
-                let snap = take_snapshot(&reg, pawnio.as_ref(), &sensors, &controls, &map_snap, tick);
+                let snap =
+                    take_snapshot(&reg, pawnio.as_ref(), &sensors, &controls, &map_snap, tick);
                 if let Ok(mut g) = shared.lock() {
                     *g = snap;
                 }
@@ -164,10 +165,8 @@ fn take_snapshot(
         }
     }
 
-    let rpm_by_id: HashMap<String, f64> = fans
-        .iter()
-        .map(|(id, _, rpm)| (id.clone(), *rpm))
-        .collect();
+    let rpm_by_id: HashMap<String, f64> =
+        fans.iter().map(|(id, _, rpm)| (id.clone(), *rpm)).collect();
 
     for c in controls {
         let id = c.id.as_str();

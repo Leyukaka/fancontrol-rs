@@ -23,7 +23,11 @@ pub struct CurveEvalState {
 ///   a downward step (simple anti-oscillation).
 ///
 /// When `state` is `None`, hysteresis is ignored (pure interpolation).
-pub fn evaluate_curve(curve: &FanCurve, temperature: f64, state: Option<&mut CurveEvalState>) -> u8 {
+pub fn evaluate_curve(
+    curve: &FanCurve,
+    temperature: f64,
+    state: Option<&mut CurveEvalState>,
+) -> u8 {
     let raw = interpolate_duty(&curve.points, temperature);
 
     let Some(state) = state else {

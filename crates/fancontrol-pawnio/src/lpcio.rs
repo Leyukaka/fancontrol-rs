@@ -53,9 +53,7 @@ impl LpcIo {
     }
 
     pub fn read_port(&self, port: u16) -> Result<u8, String> {
-        let out = self
-            .session
-            .execute("ioctl_pio_inb", &[port as u64], 1)?;
+        let out = self.session.execute("ioctl_pio_inb", &[port as u64], 1)?;
         Ok(out.first().copied().unwrap_or(0) as u8)
     }
 

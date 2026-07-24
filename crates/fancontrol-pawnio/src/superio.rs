@@ -20,11 +20,22 @@ const BANK_SELECT: u8 = 0x4E;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SuperIoChip {
-    Unknown { id: u8, revision: u8 },
+    Unknown {
+        id: u8,
+        revision: u8,
+    },
     /// Generic banked Nuvoton NCT6779/NCT679x-class (not 668x).
-    NctBanked { id: u8, revision: u8 },
-    Nct668x { id: u8, revision: u8 },
-    It87 { chip_id: u16 },
+    NctBanked {
+        id: u8,
+        revision: u8,
+    },
+    Nct668x {
+        id: u8,
+        revision: u8,
+    },
+    It87 {
+        chip_id: u16,
+    },
 }
 
 impl SuperIoChip {
@@ -68,12 +79,14 @@ fn classify_winbond(id: u8, revision: u8) -> SuperIoChip {
         0xB4 | 0xC3 | 0xC4 | 0xC5 | 0xC8 | 0xC9 | 0xD1 | 0xD3 | 0xD4 | 0xD8
     ) || matches!(
         (id, revision & 0xF0),
-        (0xB4, 0x70)
-            | (0xC3, 0x30)
-            | (0xC5, 0x60)
-            | (0xC4, 0x50)
+        (0xB4, 0x70) | (0xC3, 0x30) | (0xC5, 0x60) | (0xC4, 0x50)
     );
-    if banked || matches!(id, 0xC8 | 0xC9 | 0xD1 | 0xD3 | 0xD4 | 0xD8 | 0xB4 | 0xC3 | 0xC5) {
+    if banked
+        || matches!(
+            id,
+            0xC8 | 0xC9 | 0xD1 | 0xD3 | 0xD4 | 0xD8 | 0xB4 | 0xC3 | 0xC5
+        )
+    {
         SuperIoChip::NctBanked { id, revision }
     } else {
         SuperIoChip::Unknown { id, revision }
@@ -193,7 +206,10 @@ impl NctBankedDevice {
             lpc.setup_nuvoton_hwm_bars(detected.slot, detected.register_port)?;
             // Smoke-test banked index/data ports
             lpc.read_port(hwm + ADDR_OFF).map_err(|e| {
-                format!("HWM port 0x{:04X} not readable after find_bars: {e}", hwm + ADDR_OFF)
+                format!(
+                    "HWM port 0x{:04X} not readable after find_bars: {e}",
+                    hwm + ADDR_OFF
+                )
             })?;
         }
 
@@ -243,7 +259,11 @@ impl NctBankedDevice {
     }
 
     /// Read a temperature °C from a primary register (optional half-bit).
-    pub fn read_temp_c(&self, reg: u16, half_reg: Option<(u16, u8)>) -> Result<Option<f64>, String> {
+    pub fn read_temp_c(
+        &self,
+        reg: u16,
+        half_reg: Option<(u16, u8)>,
+    ) -> Result<Option<f64>, String> {
         let _g = IsaBusGuard::acquire(Duration::from_millis(50));
         let raw = self.read_byte(reg)? as i8;
         let mut value = (raw as i16) << 1;
@@ -311,7 +331,12 @@ impl NctBankedDevice {
         if let Ok(mut d) = self.duties.lock() {
             d[index] = percent;
         }
-        let _ = (self.register_port, self.slot, WINBOND_NUVOTON_HWM_LDN, NUVOTON_IO_SPACE_LOCK);
+        let _ = (
+            self.register_port,
+            self.slot,
+            WINBOND_NUVOTON_HWM_LDN,
+            NUVOTON_IO_SPACE_LOCK,
+        );
         Ok(())
     }
 

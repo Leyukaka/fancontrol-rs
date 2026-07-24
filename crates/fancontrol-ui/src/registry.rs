@@ -1,10 +1,10 @@
 //! Build provider registry for the UI (mirrors CLI wiring).
 
 use fancontrol_core::{ControlDescriptor, ControlId, SensorDescriptor, SensorId};
+use fancontrol_pawnio::PawnioProvider;
 use fancontrol_plugins::{
     ControlProvider, HostSensorProvider, MockProvider, ProviderRegistry, Result, SensorProvider,
 };
-use fancontrol_pawnio::PawnioProvider;
 use std::sync::Arc;
 
 pub struct BuiltProviders {
