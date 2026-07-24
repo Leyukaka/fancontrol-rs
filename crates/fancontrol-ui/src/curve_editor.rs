@@ -1,6 +1,6 @@
 //! Interactive fan curve editor (temp °C → duty %).
 
-use eframe::egui::{self, Color32, Pos2, Sense, Stroke, Vec2};
+use eframe::egui::{self, Color32, Pos2, Sense, Stroke, StrokeKind, Vec2};
 use fancontrol_core::{CurvePoint, FanCurve};
 
 const TEMP_MIN: f32 = 20.0;
@@ -41,6 +41,7 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
         rect,
         6.0,
         Stroke::new(1.0_f32, Color32::from_rgb(50, 60, 90)),
+        StrokeKind::Inside,
     );
 
     // Grid

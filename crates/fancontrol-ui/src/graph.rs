@@ -1,6 +1,6 @@
 //! CPU temperature sparkline with glow fill and configurable time window.
 
-use eframe::egui::{self, Color32, Pos2, Sense, Stroke, Vec2};
+use eframe::egui::{self, Color32, Pos2, Sense, Stroke, StrokeKind, Vec2};
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
@@ -124,6 +124,7 @@ pub fn show_cpu_graph(ui: &mut egui::Ui, history: &TempHistory, title: &str, win
             rect,
             6.0,
             Stroke::new(1.0_f32, Color32::from_rgb(40, 48, 70)),
+            StrokeKind::Inside,
         );
 
         // Grid

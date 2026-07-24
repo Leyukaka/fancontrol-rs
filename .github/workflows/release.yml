@@ -27,7 +27,7 @@ jobs:
     # Only the configured environment reviewers (repo owner) can approve.
     environment: release
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -46,7 +46,7 @@ jobs:
           Get-Content dist/fancontrol-rs.exe.sha256
 
       - name: Upload artifact (workflow_dispatch / always)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fancontrol-rs-windows
           path: |
@@ -55,7 +55,7 @@ jobs:
 
       - name: GitHub Release (tags only)
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/fancontrol-rs.exe

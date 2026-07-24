@@ -34,7 +34,7 @@ These reduce risk; they do **not** prove the binary is free of bugs or malware.
 
 ### cargo-audit ignores
 
-`.cargo/audit.toml` may ignore specific RustSec IDs when they apply only to **non-Windows** dependency paths (e.g. Linux accessibility via `accesskit_unix` / `zbus_xml` → old `quick-xml`, pulled transitively by `egui-winit` but not used on the Windows ship path). Revisit ignores on every major `eframe`/`egui` upgrade.
+`.cargo/audit.toml` may list ignored RustSec IDs when needed. After the egui 0.35 upgrade, the previous Linux-only `quick-xml` advisories are **gone** from the lockfile; the ignore list is empty.
 
 ## Release integrity (SHA256)
 

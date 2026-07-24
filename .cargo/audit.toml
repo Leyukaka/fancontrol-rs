@@ -2,11 +2,5 @@
 # See docs/SECURITY.md.
 
 [advisories]
-# Transitive via egui-winit → accesskit_unix → atspi → zbus_xml → quick-xml 0.30.
-# That path is for Linux/Unix accessibility only; fancontrol-rs ships Windows.
-# Re-check when upgrading eframe/egui/accesskit — prefer removing ignores if the
-# lockfile no longer pulls quick-xml 0.30.
-ignore = [
-    "RUSTSEC-2026-0194",
-    "RUSTSEC-2026-0195",
-]
+# Currently no ignored IDs — keep empty unless a Windows-only false positive reappears.
+ignore = []

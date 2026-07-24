@@ -172,8 +172,12 @@ fn load_or_create_default_profile() -> Profile {
 }
 
 impl eframe::App for FanApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.request_repaint_after(Duration::from_millis(200));
+    }
+
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
         if let Some(e) = self.writes.take_error() {
             self.write_error = Some(e);
         }
@@ -193,7 +197,7 @@ impl eframe::App for FanApp {
             self.last_curve_apply = Instant::now();
         }
 
-        egui::TopBottomPanel::top("top").show(ctx, |ui| {
+        egui::Panel::top("top").show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.heading("fancontrol-rs");
                 ui.separator();
@@ -269,10 +273,10 @@ impl eframe::App for FanApp {
         });
 
         if self.show_settings {
-            egui::SidePanel::right("settings")
+            egui::Panel::right("settings")
                 .resizable(true)
-                .default_width(260.0)
-                .show(ctx, |ui| {
+                .default_size(260.0)
+                .show(ui, |ui| {
                     ui.heading("Options");
                     ui.separator();
                     let mut dirty = false;
@@ -319,15 +323,15 @@ impl eframe::App for FanApp {
         }
 
         if self.show_curves {
-            egui::TopBottomPanel::bottom("curves")
+            egui::Panel::bottom("curves")
                 .resizable(true)
-                .default_height(280.0)
-                .show(ctx, |ui| {
+                .default_size(280.0)
+                .show(ui, |ui| {
                     self.ui_curves_panel(ui, snap.cpu_temp);
                 });
         }
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             if self.settings.show_cpu_graph {
                 self.ui_graph_controls(ui);
                 show_cpu_graph(
@@ -544,8 +548,8 @@ impl eframe::App for FanApp {
             });
         });
 
-        self.show_rename_modal(ctx);
-        self.show_pawnio_dialog(ctx);
+        self.show_rename_modal(&ctx);
+        self.show_pawnio_dialog(&ctx);
     }
 }
 
