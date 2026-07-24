@@ -4,47 +4,31 @@
 
 Spiritual successor to [FanControl](https://github.com/Rem0o/FanControl.Releases) by Rem0o.
 
-## Goals
+> This project is developed using **Spec-Driven Design**.  
+> All important decisions and requirements live in the [`specs/`](./specs) folder.  
+> Read those documents before writing code.
 
-- Full-featured desktop application (fan curves, sensors, graphs, profiles, plugins...)
-- Secure hardware access via **PawnIO** (no more vulnerable WinRing0)
-- Clean, modular architecture with plugin support
-- Pure Rust where possible
-- Modern, responsive UI
+## Specs
+
+| Document | Description |
+|----------|-------------|
+| [00-overview](./specs/00-overview.md) | Vision & principles |
+| [01-product](./specs/01-product.md) | Product requirements |
+| [02-architecture](./specs/02-architecture.md) | Architecture & crates |
+| [03-hardware-backend](./specs/03-hardware-backend.md) | PawnIO & hardware access |
+| [04-ui](./specs/04-ui.md) | UI requirements |
+| [05-plugins](./specs/05-plugins.md) | Plugin system |
+| [06-roadmap](./specs/06-roadmap.md) | Development phases |
 
 ## Status
 
-🚧 **Very early stage** — scaffolding only.
-
-## Architecture (planned)
-
-```
-fancontrol-rs/
-├── crates/
-│   ├── fancontrol-core/     # Core logic, sensors, controls, curves
-│   ├── fancontrol-ui/       # Desktop UI (egui or iced)
-│   ├── fancontrol-plugins/  # Plugin system
-│   └── fancontrol-pawnio/   # PawnIO backend bindings
-├── src/                     # Main binary
-└── plugins/                 # Example / official plugins
-```
-
-### Hardware backend
-
-We intentionally avoid shipping a custom ring-0 driver.
-Primary backend will be [PawnIO](https://pawnio.eu/) (the modern replacement used by recent LibreHardwareMonitor / FanControl versions).
-
-Fallback / complementary sources:
-- Manufacturer APIs (Dell, HP, Lenovo...)
-- Existing plugins model inspired by FanControl
+🚧 **Early stage** — Specs written, implementation not started yet.
 
 ## Building
 
 ```bash
 cargo build --release
 ```
-
-> Requires a recent Rust toolchain (edition 2024 / 1.85+ recommended).
 
 ## License
 
