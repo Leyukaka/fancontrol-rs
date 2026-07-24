@@ -47,18 +47,20 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 
 ## Status (keep updated)
 
-- Phase 0 foundation: **done** (workspace, core, mock, CLI, CI, UI decision locked).
-- Phase 1 next: real PawnIO integration + control loop; UI Phase 2 after or in parallel against mock.
-- CLI: `list-sensors`, `list-controls`, `read`, `set-duty`, `demo`, `backend-status`, `init-profile`, `list-profiles`, `ui` (stub).
-- On owner machine: `backend-status` reported **PawnIO appears installed** (path probe only; bindings not implemented).
+- Phase 0 foundation: **done**.
+- Phase 1 partial: PawnIOLib FFI + LpcIO Super I/O detect + Nuvoton banked HWM + control loop + CLI.
+- **Blocker on owner machine (2026-07-24):** `pawnio_open` → `HRESULT 0x80070005 E_ACCESSDENIED` without elevation. DLL loads, version works, driver present; executor open needs **admin terminal**.
+- Vendored modules: `crates/fancontrol-pawnio/modules/` (PawnIO.Modules 0.2.9 LpcIO+Echo, LGPL).
+- CLI: `list-sensors`, `list-controls`, `read`, `set-duty`, `demo`, `detect`, `backend-status`, `run`, `init-profile`, `list-profiles`, `ui` (stub).
+- Flags: `--hw-only`, `--no-hw`. Default includes mock + tries hardware.
 
 ## Next priorities (order)
 
-1. Research/implement real PawnIO bindings (FFI/IPC) — ask before installing PawnIO modules or elevating.
-2. Wire PawnioProvider into CLI; keep mock for CI/dev without hardware.
-3. Continuous control loop: read temp → `evaluate_curve` → `set_duty`.
-4. UI MVP (egui): sensor/control lists, duty slider, basic curve editor, tray later.
-5. Polish / plugins dynamic loading / packaging — later.
+1. Re-test Super I/O detect/list-sensors from **elevated** PowerShell (user must elevate — agent must not UAC-elevate silently).
+2. Expand chip support (ITE / NCT668x) based on what detect finds.
+3. Safer write path (confirm + restore defaults).
+4. UI MVP (egui).
+5. Packaging later.
 
 ## Safety product rules
 

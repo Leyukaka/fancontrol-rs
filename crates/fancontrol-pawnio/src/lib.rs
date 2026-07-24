@@ -1,25 +1,39 @@
 //! PawnIO hardware backend for fancontrol-rs.
 //!
-//! **Status: stub.** Real bindings to the PawnIO driver/service will be added
-//! in Phase 1. For now this crate only exposes availability detection and a
-//! provider that reports "backend unavailable".
+//! Uses the system-installed `PawnIOLib.dll` + vendored signed modules
+//! (`modules/LpcIO.bin`). Super I/O detection and Nuvoton banked HWM reads
+//! are implemented; full chip coverage is incremental.
 
-use fancontrol_core::{ControlDescriptor, ControlId, SensorDescriptor, SensorId};
-use fancontrol_plugins::{ControlProvider, PluginError, Result, SensorProvider};
+mod ffi;
+mod lpcio;
+mod mutex_isa;
+mod provider;
+mod session;
+mod superio;
 
-/// Probe whether PawnIO appears to be installed/available on this system.
-///
-/// Current heuristic (Windows): check for a well-known install path or service.
-/// Always returns `false` on non-Windows until a real probe exists.
+pub use provider::PawnioProvider;
+pub use superio::{detect_chips, DetectedChip, SuperIoChip};
+
+/// Installation present (DLL/sys on disk). Does **not** guarantee open rights.
+pub fn is_installed() -> bool {
+    ffi::dll_candidates().iter().any(|p| p.exists())
+        || std::path::Path::new(r"C:\Program Files\PawnIO\PawnIO.sys").exists()
+}
+
+/// True only if we can open a PawnIO executor (typically requires elevation).
 pub fn is_available() -> bool {
     #[cfg(windows)]
     {
-        // Placeholder paths — refine once PawnIO install layout is confirmed.
-        let candidates = [
-            r"C:\Program Files\PawnIO",
-            r"C:\Program Files (x86)\PawnIO",
-        ];
-        candidates.iter().any(|p| std::path::Path::new(p).exists())
+        match session::PawnSession::open_embedded("Echo") {
+            Ok(s) => {
+                drop(s);
+                true
+            }
+            Err(e) => {
+                tracing::debug!(error = %e, "PawnIO open failed");
+                false
+            }
+        }
     }
     #[cfg(not(windows))]
     {
@@ -27,59 +41,57 @@ pub fn is_available() -> bool {
     }
 }
 
-/// Human-readable status for UI / CLI.
+/// Human-readable status for CLI / UI.
 pub fn status_message() -> String {
-    if is_available() {
-        "PawnIO appears installed (bindings not yet implemented)".into()
+    let mut parts = Vec::new();
+    match ffi::api() {
+        Ok(api) => match api.version() {
+            Ok(v) => parts.push(format!("PawnIOLib version raw={v} (0x{v:08X})")),
+            Err(hr) => parts.push(format!("PawnIOLib loaded, version failed: {}", ffi::format_hr(hr))),
+        },
+        Err(e) => parts.push(format!("PawnIOLib: {e}")),
+    }
+
+    let sys = std::path::Path::new(r"C:\Program Files\PawnIO\PawnIO.sys");
+    if sys.exists() {
+        parts.push("PawnIO.sys present".into());
     } else {
-        "PawnIO not detected. Install from https://pawnio.eu/ — hardware sensors will be unavailable until then.".into()
+        parts.push("PawnIO.sys not found under Program Files".into());
     }
+
+    parts.push(format!("installed={}", is_installed()));
+    parts.push(format!("executor_open={}", is_available()));
+
+    match detect_chips() {
+        Ok(chips) if chips.is_empty() => parts.push("Super I/O: none detected".into()),
+        Ok(chips) => {
+            for c in chips {
+                parts.push(format!(
+                    "Super I/O slot{} @0x{:02X}: {} hwm={:?}",
+                    c.slot,
+                    c.register_port,
+                    c.chip.name(),
+                    c.hwm_address.map(|a| format!("0x{a:04X}"))
+                ));
+            }
+        }
+        Err(e) => {
+            parts.push(format!("Super I/O detect error: {e}"));
+            if e.contains("ACCESSDENIED") || e.contains("0x80070005") {
+                parts.push(
+                    "Hint: open an elevated terminal (Run as administrator) and retry detect."
+                        .into(),
+                );
+            }
+        }
+    }
+
+    parts.join("\n")
 }
 
-/// Stub provider: discovers nothing, all reads/writes fail with BackendUnavailable.
-#[derive(Debug, Default, Clone)]
-pub struct PawnioProvider;
-
-impl PawnioProvider {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-impl SensorProvider for PawnioProvider {
-    fn name(&self) -> &str {
-        "pawnio"
-    }
-
-    fn sensors(&self) -> Vec<SensorDescriptor> {
-        // Real discovery will query loaded PawnIO modules.
-        Vec::new()
-    }
-
-    fn read(&self, id: &SensorId) -> Result<f64> {
-        let _ = id;
-        Err(PluginError::BackendUnavailable(status_message()))
-    }
-}
-
-impl ControlProvider for PawnioProvider {
-    fn name(&self) -> &str {
-        "pawnio"
-    }
-
-    fn controls(&self) -> Vec<ControlDescriptor> {
-        Vec::new()
-    }
-
-    fn set_duty(&self, id: &ControlId, _percent: u8) -> Result<()> {
-        let _ = id;
-        Err(PluginError::BackendUnavailable(status_message()))
-    }
-
-    fn get_duty(&self, id: &ControlId) -> Result<u8> {
-        let _ = id;
-        Err(PluginError::BackendUnavailable(status_message()))
-    }
+/// Probe and build a provider (may be empty if no supported chip).
+pub fn try_provider() -> PawnioProvider {
+    PawnioProvider::probe()
 }
 
 #[cfg(test)]
@@ -87,14 +99,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn status_is_non_empty() {
-        assert!(!status_message().is_empty());
+    fn status_non_empty() {
+        // Does not require hardware success — just that we produce text.
+        let msg = status_message();
+        assert!(!msg.is_empty());
     }
 
     #[test]
-    fn stub_has_no_sensors() {
-        let p = PawnioProvider::new();
-        assert!(p.sensors().is_empty());
-        assert!(p.controls().is_empty());
+    fn embedded_modules_present() {
+        let lpc = include_bytes!("../modules/LpcIO.bin");
+        let echo = include_bytes!("../modules/Echo.bin");
+        assert!(lpc.len() > 1000);
+        assert!(echo.len() > 100);
     }
 }

@@ -10,10 +10,13 @@
 - [x] CI (GitHub Actions)
 
 ## Phase 1 — Hardware & Core
-- [ ] `fancontrol-pawnio` crate (PawnIO bindings + basic sensor/control discovery)
-- [ ] Core curve evaluation engine
-- [ ] Profile serialization (JSON)
-- [ ] CLI or minimal test harness to verify readings
+- [x] `fancontrol-pawnio` FFI to PawnIOLib + embedded LpcIO/Echo modules
+- [x] Super I/O detect + Nuvoton banked HWM provider (temps/fans/PWM)
+- [x] Core curve evaluation engine + control loop helper
+- [x] Profile serialization (JSON)
+- [x] CLI harness (`detect`, `backend-status`, `list-sensors`, `run`, …)
+- [ ] Verify readings/writes on elevated process (pawnio_open needs admin)
+- [ ] Broader chip coverage (ITE IT87, NCT668x EC path)
 
 ## Phase 2 — UI MVP
 - [ ] Main window with sensor list + control list
