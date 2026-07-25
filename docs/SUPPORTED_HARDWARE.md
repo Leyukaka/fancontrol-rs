@@ -56,12 +56,12 @@ Validated configuration (2026-07-24):
 
 **Writes:** `test-duty pawnio.0.ctrl1` 54 % → 40 % → 54 % with RPM ~2150 → ~1826 → ~1954. EC write path OK for validated channels.
 
-Hardware remains **read-only by default**. PWM writes require explicit:
+PWM writes are **on by default** when launching the app. Use `--read-only` to stay read-only for diagnostics:
 
 ```bash
-cargo run -- --allow-hw-write …
+cargo run -- --read-only …
 # or
-cargo run -- --hw-only --allow-hw-write ui
+cargo run -- --hw-only --read-only ui
 ```
 
 Prefer `sample`, `list-sensors`, `list-controls`, and `test-duty` for validation before leaving curves auto-apply on.

@@ -1,6 +1,6 @@
 # Roadmap
 
-Last aligned with product reality: **v0.1.3** (2026-07).
+Last aligned with product reality: **v0.1.4** (2026-07).
 
 ## Phase 0 — Foundation
 
@@ -32,7 +32,7 @@ Last aligned with product reality: **v0.1.3** (2026-07).
 - [x] CPU graph (10/20/30/60 min + sample interval)
 - [x] PawnIO install/admin dialog
 - [ ] Profile UX polish (switch / default / startup)
-- [ ] System tray
+- [x] System tray
 
 ## Phase 3 — Polish, packaging, security
 
@@ -55,12 +55,11 @@ Last aligned with product reality: **v0.1.3** (2026-07).
 
 ## Next priorities (order)
 
-1. System tray  
-2. Broader chip validation (community logs + experimental paths)  
-3. Profile UX polish  
-4. Code signing when ready for wider audience  
-5. Auto-update (manual button first)  
-6. RGB remains **future / out of Super I/O fan HWM scope**
+1. Broader chip validation (community logs + experimental paths)  
+2. Profile UX polish  
+3. Code signing when ready for wider audience  
+4. Auto-update (manual button first)  
+5. RGB remains **future / out of Super I/O fan HWM scope**
 
 ## Out of scope for v1
 

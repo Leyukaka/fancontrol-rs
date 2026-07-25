@@ -40,7 +40,7 @@ Drive-by refactors that touch many crates without a linked issue are likely to b
 - Keep the tree **buildable**: `cargo test --workspace` and `cargo clippy --workspace --all-targets -- -D warnings` should pass on Windows.
 - Run `cargo fmt --all` before push.
 - Add or update tests for **core logic** (curves, profiles, channel map, pure helpers). Hardware paths may be hard to unit-test; document manual validation steps instead of inventing results.
-- Do **not** weaken the `--allow-hw-write` gate without explicit maintainer discussion.
+- Do **not** weaken the hardware-write gate (`--read-only` / `--allow-hw-write`) without explicit maintainer discussion.
 - Do **not** add WinRing0, LibreHardwareMonitor kernel drivers, or any known-vulnerable ring-0 stack. PawnIO only for privileged I/O.
 
 ### PR body template (required)

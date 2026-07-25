@@ -33,7 +33,7 @@
 | `fancontrol-ui` | Desktop UI (egui + eframe **0.35**): live view, sliders, curves, graph, options |
 | `fancontrol-rs` | Binary: CLI harness + `ui` subcommand |
 
-Workspace version: **0.1.3** (see root `Cargo.toml`).
+Workspace version: **0.1.4** (see root `Cargo.toml`).
 
 ## Key design decisions
 
@@ -52,7 +52,7 @@ Workspace version: **0.1.3** (see root `Cargo.toml`).
 ### 3. UI choice (locked for v1)
 
 - **egui + eframe 0.35** (see `specs/04-ui.md`).
-- Hardware writes off by default; UI reflects read-only vs write-enabled.
+- Hardware PWM writes **on by default** (product UI/CLI); UI reflects read-only vs write-enabled. Use `--read-only` to disable.
 
 ### 4. Concurrency
 

@@ -13,7 +13,7 @@ Practical guide for maintainers. Goal: ship **Windows binaries** users can downl
 Signing does **not** replace:
 
 - Keeping **PawnIO as a prerequisite** (not embedding foreign kernel stacks)
-- **Read-only by default** / `--allow-hw-write` gate
+- **Clear write-vs-read-only messaging** (PWM writes on by default; `--read-only` opts out)
 - Publishing **SHA256** checksums next to assets
 
 ---

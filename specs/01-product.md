@@ -24,7 +24,7 @@ Replace FanControl with a modern, secure, open-source alternative written in Rus
 | Multi-point temp → duty, linear interp | **Done** |
 | Assign curve to controls | **Done** (profile assignments) |
 | Hysteresis | **Done** (core + UI field) |
-| Auto-apply curves to hardware | **Done** (UI “Curve control” + `--allow-hw-write`) |
+| Auto-apply curves to hardware | **Done** (UI “Curve control”; writes on by default, `--read-only` disables) |
 
 ### Profiles
 
@@ -42,7 +42,7 @@ Replace FanControl with a modern, secure, open-source alternative written in Rus
 | Visual curve editor | **Done** (MVP; polish ongoing) |
 | Live temp graph | **Done** (CPU; windows 10/20/30/60 min + sample rate) |
 | Dark theme default | **Done** |
-| System tray | **Not started** |
+| System tray | **Done** |
 | Rename channels | **Done** (`channel-map.json`) |
 | Missing-PawnIO popup | **Done** |
 
@@ -52,7 +52,7 @@ Replace FanControl with a modern, secure, open-source alternative written in Rus
 |------------|--------|
 | Graceful degrade without PawnIO | **Done** (mock/config/host; UI dialog) |
 | Clear unsupported / admin messaging | **Done** / polish ongoing |
-| No silent PWM writes | **Done** (`--allow-hw-write` gate) |
+| No silent PWM writes | **Done** (writes on by default with clear UI banner + startup log warning; `--read-only` opts out) |
 
 ## Nice-to-have (v1.x / v2)
 

@@ -54,5 +54,5 @@ If PawnIO is missing or not openable:
 
 1. Never embed or ship WinRing0 or known-vulnerable ring-0 drivers.
 2. Never require disabling Secure Boot or loading arbitrary unsigned drivers for core fan HWM.
-3. Prefer **read-only** by default; PWM requires explicit `--allow-hw-write` (CLI/UI).
+3. PWM writes are **on by default** (CLI/UI); pass `--read-only` to disable for diagnostics. `--allow-hw-write` remains accepted for older scripts (no-op when already default-on).
 4. Do not auto-install PawnIO or change Defender settings without explicit user approval.

@@ -6,6 +6,7 @@ mod graph;
 mod poll;
 mod registry;
 mod settings;
+mod tray;
 mod write_queue;
 
 pub use app::UiOptions;

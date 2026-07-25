@@ -53,5 +53,5 @@ The original FanControl has a .NET plugin API. We do **not** aim for binary comp
 
 ## Safety
 
-- Dynamic plugins must not weaken `--allow-hw-write` or introduce WinRing0.
+- Dynamic plugins must not weaken the `--read-only` write gate or introduce WinRing0.
 - Contribution of a new chip/provider requires machine validation notes (see CONTRIBUTING + SUPPORTED_HARDWARE).

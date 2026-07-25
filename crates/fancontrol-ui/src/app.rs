@@ -5,6 +5,7 @@ use crate::graph::{show_cpu_graph, TempHistory};
 use crate::poll::{spawn_poller, SharedMap, SharedSnapshot};
 use crate::registry::{backend_status_line, build_registry};
 use crate::settings::UiSettings;
+use crate::tray::{AppTray, TrayCommand, TrayState};
 use crate::write_queue::WriteQueue;
 use crate::UiError;
 use eframe::egui;
@@ -105,6 +106,8 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         profile_status: None,
         new_profile_name: "default".into(),
         pawnio_dialog,
+        tray: None,
+        really_exit: false,
     };
 
     let icon = eframe::icon_data::from_png_bytes(include_bytes!("../../../assets/icon.png"))
@@ -121,8 +124,14 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
     eframe::run_native(
         "fancontrol-rs",
         native,
-        Box::new(|cc| {
+        Box::new(move |cc| {
             cc.egui_ctx.set_visuals(egui::Visuals::dark());
+            let mut app = app;
+            // Must build after the event loop has started (tray-icon requirement).
+            match AppTray::new() {
+                Ok(tray) => app.tray = Some(tray),
+                Err(e) => tracing::warn!("system tray unavailable: {e}"),
+            }
             Ok(Box::new(app))
         }),
     )
@@ -154,6 +163,10 @@ struct FanApp {
     profile_status: Option<String>,
     new_profile_name: String,
     pawnio_dialog: Option<PawnioDialogKind>,
+    tray: Option<AppTray>,
+    /// Set when the tray "Exit" item fires, so the close-request handler lets it through
+    /// instead of minimizing to tray.
+    really_exit: bool,
 }
 
 fn load_or_create_default_profile() -> Profile {
@@ -178,6 +191,16 @@ fn load_or_create_default_profile() -> Profile {
 impl eframe::App for FanApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.request_repaint_after(Duration::from_millis(200));
+        self.handle_tray(ctx);
+
+        if self.tray.is_some() && !self.really_exit && ctx.input(|i| i.viewport().close_requested())
+        {
+            // Minimize to tray instead of exiting, unless "Exit" was chosen from the tray menu.
+            // Without a tray icon there'd be no way to bring the window back, so skip this
+            // entirely when the tray failed to initialize (rare — e.g. shell explorer.exe issues).
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+        }
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -752,6 +775,46 @@ impl FanApp {
                 }
             });
         });
+    }
+
+    fn handle_tray(&mut self, ctx: &egui::Context) {
+        let Some(tray) = &self.tray else { return };
+        let commands = tray.poll_commands();
+
+        let state = if self.pawnio_dialog.is_some() {
+            TrayState::Error
+        } else {
+            let snap_err = self
+                .snapshot
+                .lock()
+                .map(|g| g.error.is_some())
+                .unwrap_or(false);
+            if snap_err || self.write_error.is_some() {
+                TrayState::Warning
+            } else {
+                TrayState::Normal
+            }
+        };
+        if let Some(tray) = &mut self.tray {
+            tray.set_state(state);
+        }
+
+        for cmd in commands {
+            match cmd {
+                TrayCommand::Open => {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                }
+                TrayCommand::ApplyDefaultProfile => {
+                    let snap = self.snapshot.lock().map(|g| g.clone()).unwrap_or_default();
+                    self.apply_curves_from_snapshot(&snap);
+                }
+                TrayCommand::Exit => {
+                    self.really_exit = true;
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+            }
+        }
     }
 
     fn apply_curves_from_snapshot(&mut self, snap: &crate::poll::Snapshot) {

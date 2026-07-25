@@ -115,7 +115,7 @@ If a vendor flags a release, open an issue with the VT link and the release tag;
 ## Product safety (hardware)
 
 - Prefer **PawnIO** only; never ship WinRing0 or known-vulnerable ring-0 drivers.
-- Hardware control is **read-only by default**; PWM writes need `--allow-hw-write`.
+- Hardware PWM writes are **on by default**; pass `--read-only` to stay read-only.
 - Running elevated is required for Super I/O access — treat the binary as privileged software.
 
 See [SUPPORTED_HARDWARE.md](./SUPPORTED_HARDWARE.md) and [CONTRIBUTING.md](../CONTRIBUTING.md).

@@ -16,3 +16,4 @@ eframe = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+tray-icon = { version = "0.24.1", default-features = false }
