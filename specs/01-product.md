@@ -31,8 +31,8 @@ Replace FanControl with a modern, secure, open-source alternative written in Rus
 | Capability | Status |
 |------------|--------|
 | Save / load JSON profiles | **Done** (core + UI list/save) |
-| Quick switch | **Partial** (UI profile list; polish ongoing) |
-| Auto-apply last profile on startup | **Partial** (default profile load; product polish later) |
+| Quick switch | **Done** (UI profile dropdown) |
+| Auto-apply last profile on startup | **Done** (last switched-to/saved profile persisted in `ui-settings.json`, auto-loaded next launch) |
 
 ### UI
 

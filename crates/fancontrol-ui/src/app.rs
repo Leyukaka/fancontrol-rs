@@ -58,7 +58,7 @@ fn detect_pawnio_dialog(include_hw: bool) -> Option<PawnioDialogKind> {
 }
 
 pub fn run_native(options: UiOptions) -> Result<(), UiError> {
-    let settings = UiSettings::load();
+    let mut settings = UiSettings::load();
     let built = build_registry(
         options.include_mock,
         options.include_hw,
@@ -75,7 +75,11 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         Duration::from_millis(750),
     );
     let writes = WriteQueue::start(Arc::clone(&reg));
-    let profile = load_or_create_default_profile();
+    let profile = load_or_create_default_profile(settings.last_profile_id.as_deref());
+    if settings.last_profile_id.as_deref() != Some(profile.id.as_str()) {
+        settings.last_profile_id = Some(profile.id.as_str().to_string());
+        settings.save();
+    }
     let pawnio_dialog = detect_pawnio_dialog(options.include_hw);
 
     let mut cpu_history = TempHistory::default();
@@ -169,7 +173,12 @@ struct FanApp {
     really_exit: bool,
 }
 
-fn load_or_create_default_profile() -> Profile {
+fn load_or_create_default_profile(preferred: Option<&str>) -> Profile {
+    if let Some(id) = preferred {
+        if let Ok(p) = load_profile(id) {
+            return p;
+        }
+    }
     if let Ok(p) = load_profile("default") {
         return p;
     }
@@ -696,6 +705,8 @@ impl FanApp {
                                 self.selected_curve = 0;
                                 self.curve_states.clear();
                                 self.profile_status = Some(format!("Loaded {id}"));
+                                self.settings.last_profile_id = Some(id.clone());
+                                self.settings.save();
                             }
                         }
                     }
@@ -708,6 +719,8 @@ impl FanApp {
                     Ok(path) => {
                         self.profile_status = Some(format!("Saved {}", path.display()));
                         self.profile_list = list_profiles().unwrap_or_default();
+                        self.settings.last_profile_id = Some(self.profile.id.as_str().to_string());
+                        self.settings.save();
                     }
                     Err(e) => self.profile_status = Some(format!("Save error: {e}")),
                 }
@@ -722,6 +735,8 @@ impl FanApp {
                         Ok(_) => {
                             self.profile_list = list_profiles().unwrap_or_default();
                             self.profile_status = Some(format!("Saved as {name}"));
+                            self.settings.last_profile_id = Some(name.to_string());
+                            self.settings.save();
                         }
                         Err(e) => self.profile_status = Some(format!("Save error: {e}")),
                     }

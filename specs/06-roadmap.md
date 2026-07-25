@@ -31,7 +31,7 @@ Last aligned with product reality: **v0.1.4** (2026-07).
 - [x] Curve editor MVP + curve auto-apply (“Curve control”)
 - [x] CPU graph (10/20/30/60 min + sample interval)
 - [x] PawnIO install/admin dialog
-- [ ] Profile UX polish (switch / default / startup)
+- [x] Profile UX polish (switch / default / startup)
 - [x] System tray
 
 ## Phase 3 — Polish, packaging, security
@@ -56,10 +56,9 @@ Last aligned with product reality: **v0.1.4** (2026-07).
 ## Next priorities (order)
 
 1. Broader chip validation (community logs + experimental paths)  
-2. Profile UX polish  
-3. Code signing when ready for wider audience  
-4. Auto-update (manual button first)  
-5. RGB remains **future / out of Super I/O fan HWM scope**
+2. Code signing when ready for wider audience  
+3. Auto-update (manual button first)  
+4. RGB remains **future / out of Super I/O fan HWM scope**
 
 ## Out of scope for v1
 
