@@ -69,16 +69,12 @@ A matching SHA256 from the official Release is a strong check against a corrupte
 Binaries are **not** Authenticode-signed today. Do not claim otherwise.  
 When signing is added (SignPath / Azure Trusted Signing / OV-EV cert), it will be documented here and in the release notes.
 
-## Auto-update (roadmap)
+## Auto-update
 
-**Not implemented yet.** Planned direction:
+- **Done**: manual **"Check for updates"** button in Options queries **only** the official GitHub Releases API for this repository, compares the latest tag against the running version, and shows a link — it does **not** download or install anything automatically.
+- **Not implemented yet**: downloading `fancontrol-rs.exe` + `.sha256` and refusing install on hash mismatch. Optional later: verify Authenticode if/when signing exists.
 
-- Manual **“Check for updates”** in the app (not silent auto-install in v1)
-- Query **only** the official GitHub Releases API for this repository
-- Download `fancontrol-rs.exe` + `.sha256` and **refuse** install if the hash mismatches
-- Optional later: verify Authenticode if/when signing exists
-
-Until then: update by downloading a new Release and verifying SHA256 yourself.
+Until the download/verify step exists: use the "Check for updates" link to reach the Release, then download and verify SHA256 yourself.
 
 ## VirusTotal / Defender behavioral false positives
 

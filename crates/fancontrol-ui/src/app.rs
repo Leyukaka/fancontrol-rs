@@ -6,6 +6,7 @@ use crate::poll::{spawn_poller, SharedMap, SharedSnapshot};
 use crate::registry::{backend_status_line, build_registry};
 use crate::settings::UiSettings;
 use crate::tray::{AppTray, TrayCommand, TrayState};
+use crate::update_check::{UpdateChecker, UpdateStatus};
 use crate::write_queue::WriteQueue;
 use crate::UiError;
 use eframe::egui;
@@ -112,6 +113,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         pawnio_dialog,
         tray: None,
         really_exit: false,
+        updates: UpdateChecker::new(),
     };
 
     let icon = eframe::icon_data::from_png_bytes(include_bytes!("../../../assets/icon.png"))
@@ -171,6 +173,7 @@ struct FanApp {
     /// Set when the tray "Exit" item fires, so the close-request handler lets it through
     /// instead of minimizing to tray.
     really_exit: bool,
+    updates: UpdateChecker,
 }
 
 fn load_or_create_default_profile(preferred: Option<&str>) -> Profile {
@@ -349,6 +352,33 @@ impl eframe::App for FanApp {
                     ui.separator();
                     ui.label("Noms");
                     ui.small("Clic sur un nom de fan/control pour renommer (sauvé dans channel-map.json).");
+                    ui.separator();
+                    ui.label("Mises à jour");
+                    if ui.button("Check for updates").clicked() {
+                        self.updates.check_now();
+                    }
+                    match self.updates.status() {
+                        Some(UpdateStatus::Checking) => {
+                            ui.small("Checking…");
+                        }
+                        Some(UpdateStatus::UpToDate) => {
+                            ui.small(format!(
+                                "Up to date (v{})",
+                                env!("CARGO_PKG_VERSION")
+                            ));
+                        }
+                        Some(UpdateStatus::Available { version, url }) => {
+                            ui.colored_label(
+                                egui::Color32::LIGHT_GREEN,
+                                format!("New version available: {version}"),
+                            );
+                            ui.hyperlink_to("Open release page", url);
+                        }
+                        Some(UpdateStatus::Error(e)) => {
+                            ui.colored_label(egui::Color32::YELLOW, format!("Check failed: {e}"));
+                        }
+                        None => {}
+                    }
                     if dirty {
                         self.settings.save();
                     }

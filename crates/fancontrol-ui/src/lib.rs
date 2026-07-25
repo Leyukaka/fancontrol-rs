@@ -7,6 +7,7 @@ mod poll;
 mod registry;
 mod settings;
 mod tray;
+mod update_check;
 mod write_queue;
 
 pub use app::UiOptions;
