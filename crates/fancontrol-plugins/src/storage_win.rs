@@ -98,19 +98,95 @@ fn query_temperature(handle: HANDLE) -> Option<f64> {
         )
     };
     let min = std::mem::size_of::<STORAGE_TEMPERATURE_DATA_DESCRIPTOR>() as u32;
-    if ok == 0 || returned < min {
+    if ok != 0 && returned >= min {
+        let desc = unsafe { &*(buf.as_ptr() as *const STORAGE_TEMPERATURE_DATA_DESCRIPTOR) };
+        if desc.InfoCount != 0 {
+            let t = desc.TemperatureInfo[0].Temperature;
+            // 0x8000 = not reported (STORAGE_TEMPERATURE_VALUE_NOT_REPORTED)
+            if (t as u16) != (STORAGE_TEMPERATURE_VALUE_NOT_REPORTED as u16) {
+                return Some(f64::from(t));
+            }
+        }
+    }
+    // Fallback: some SATA/older drives don't report StorageDeviceTemperatureProperty at
+    // all. Try the NVMe health-log page directly (no-op / None for non-NVMe devices).
+    query_temperature_nvme_fallback(handle)
+}
+
+/// NVMe-only fallback: query the health-info log page directly via the documented
+/// `STORAGE_PROTOCOL_SPECIFIC_DATA` / `NVME_HEALTH_INFO_LOG` IOCTL contract, for drives
+/// where the primary `StorageDeviceTemperatureProperty` query returns nothing.
+/// Composite temperature is reported in Kelvin per the NVMe spec.
+fn query_temperature_nvme_fallback(handle: HANDLE) -> Option<f64> {
+    use windows_sys::Win32::Storage::Nvme::NVME_HEALTH_INFO_LOG;
+    use windows_sys::Win32::System::Ioctl::{
+        NVMeDataTypeLogPage, ProtocolTypeNvme, StorageDeviceProtocolSpecificProperty,
+        STORAGE_PROTOCOL_DATA_DESCRIPTOR, STORAGE_PROTOCOL_SPECIFIC_DATA,
+    };
+
+    const NVME_LOG_PAGE_HEALTH_INFO: u32 = 0x02;
+
+    let header_len = std::mem::size_of::<STORAGE_PROPERTY_QUERY>();
+    let protocol_data_len = std::mem::size_of::<STORAGE_PROTOCOL_SPECIFIC_DATA>();
+    // STORAGE_PROPERTY_QUERY::AdditionalParameters is a 1-byte placeholder for the
+    // protocol-specific data that immediately follows the two u32 header fields.
+    let query_offset = header_len - 1;
+
+    let mut in_buf = vec![0u8; query_offset + protocol_data_len];
+    // SAFETY: `in_buf` is large enough for the header at offset 0.
+    unsafe {
+        let q = in_buf.as_mut_ptr() as *mut STORAGE_PROPERTY_QUERY;
+        (*q).PropertyId = StorageDeviceProtocolSpecificProperty;
+        (*q).QueryType = PropertyStandardQuery;
+    }
+    // SAFETY: `in_buf` is large enough for STORAGE_PROTOCOL_SPECIFIC_DATA starting at
+    // `query_offset`, immediately after the header's two u32 fields.
+    unsafe {
+        let p = in_buf.as_mut_ptr().add(query_offset) as *mut STORAGE_PROTOCOL_SPECIFIC_DATA;
+        (*p).ProtocolType = ProtocolTypeNvme;
+        (*p).DataType = NVMeDataTypeLogPage as u32;
+        (*p).ProtocolDataRequestValue = NVME_LOG_PAGE_HEALTH_INFO;
+        (*p).ProtocolDataRequestSubValue = 0;
+        (*p).ProtocolDataOffset = protocol_data_len as u32;
+        (*p).ProtocolDataLength = std::mem::size_of::<NVME_HEALTH_INFO_LOG>() as u32;
+    }
+
+    let mut out = vec![0u8; 512];
+    let mut returned = 0u32;
+    let ok = unsafe {
+        DeviceIoControl(
+            handle,
+            IOCTL_STORAGE_QUERY_PROPERTY,
+            in_buf.as_mut_ptr() as *mut _,
+            in_buf.len() as u32,
+            out.as_mut_ptr() as *mut _,
+            out.len() as u32,
+            &mut returned,
+            ptr::null_mut(),
+        )
+    };
+    let desc_header_len = std::mem::size_of::<STORAGE_PROTOCOL_DATA_DESCRIPTOR>() as u32;
+    if ok == 0 || returned < desc_header_len {
         return None;
     }
-    let desc = unsafe { &*(buf.as_ptr() as *const STORAGE_TEMPERATURE_DATA_DESCRIPTOR) };
-    if desc.InfoCount == 0 {
+    // SAFETY: `returned >= desc_header_len` was just checked above.
+    let desc = unsafe { &*(out.as_ptr() as *const STORAGE_PROTOCOL_DATA_DESCRIPTOR) };
+    // The driver reports where the actual log-page bytes start, relative to the start
+    // of `ProtocolSpecificData` (not necessarily `size_of::<STORAGE_PROTOCOL_SPECIFIC_DATA>()`)
+    // — read it back rather than assuming, per the documented IOCTL contract.
+    let protocol_data_start = desc_header_len - protocol_data_len as u32;
+    let log_offset = (protocol_data_start + desc.ProtocolSpecificData.ProtocolDataOffset) as usize;
+    let log_end = log_offset + std::mem::size_of::<NVME_HEALTH_INFO_LOG>();
+    if returned < log_end as u32 {
         return None;
     }
-    let t = desc.TemperatureInfo[0].Temperature;
-    // 0x8000 = not reported (STORAGE_TEMPERATURE_VALUE_NOT_REPORTED)
-    if (t as u16) == (STORAGE_TEMPERATURE_VALUE_NOT_REPORTED as u16) {
+    let log = unsafe { &*(out.as_ptr().add(log_offset) as *const NVME_HEALTH_INFO_LOG) };
+    // Composite temperature is a little-endian 16-bit value in Kelvin per the NVMe spec.
+    let kelvin = u16::from_le_bytes(log.Temperature);
+    if kelvin == 0 {
         return None;
     }
-    Some(f64::from(t))
+    Some(f64::from(kelvin) - 273.15)
 }
 
 fn query_product_name(handle: HANDLE) -> Option<String> {
