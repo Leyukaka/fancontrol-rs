@@ -1,6 +1,6 @@
 # Roadmap
 
-Last aligned with product reality: **v0.1.4** (2026-07).
+Last aligned with product reality: **v0.1.5** (2026-07).
 
 ## Phase 0 — Foundation
 
