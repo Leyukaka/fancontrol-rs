@@ -50,8 +50,10 @@ Last aligned with product reality: **v0.1.4** (2026-07).
 
 - [ ] Multi-sensor curves
 - [ ] Additional official plugins
-- [ ] In-app auto-update (manual check + SHA256; then optional opt-in)
+- [x] In-app auto-update: manual check (GitHub latest-release compare + link)
+- [ ] In-app auto-update: download + SHA256 verify + install
 - [ ] Internationalization
+- [ ] AMD/Intel GPU temperature sensors — research documented in `docs/GPU_VENDOR_APIS.md`; blocked on hardware to validate against (see doc for why this isn't a quick FFI add)
 
 ## Next priorities (order)
 
