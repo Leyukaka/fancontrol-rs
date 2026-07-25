@@ -3,6 +3,11 @@
 //! CLI harness: mock and/or real PawnIO Super I/O sensors.
 //! Full GUI arrives in Phase 2.
 
+// GUI subsystem: Windows never auto-allocates a console for this binary (no flash on
+// double-click/Explorer launch). CLI output is restored by re-attaching to a parent
+// console at startup when one exists — see `attach_parent_console_for_cli`.
+#![windows_subsystem = "windows"]
+
 use clap::{Parser, Subcommand};
 use fancontrol_core::{
     evaluate_curve, evaluate_profile_step, load_profile, save_profile, ChannelMap, ControlId,
@@ -205,6 +210,8 @@ impl fancontrol_plugins::ControlProvider for ArcControl {
 }
 
 fn main() -> anyhow::Result<()> {
+    attach_parent_console_for_cli();
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -503,6 +510,66 @@ fn main() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+/// Re-attach to the launching terminal's console, if one exists, since this binary
+/// is compiled as a GUI-subsystem app (so Windows never auto-allocates a console —
+/// no flash on double-click). Double-click / Explorer launches have no parent
+/// console, so `AttachConsole` simply fails and we proceed console-less into the UI.
+#[cfg(windows)]
+fn attach_parent_console_for_cli() {
+    use windows_sys::Win32::System::Console::{
+        AttachConsole, ATTACH_PARENT_PROCESS, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+    };
+
+    // SAFETY: documented Win32 API; failure (no parent console) is a normal, expected
+    // outcome for a double-click launch and simply means we proceed console-less.
+    let attached = unsafe { AttachConsole(ATTACH_PARENT_PROCESS) } != 0;
+    if !attached {
+        return;
+    }
+    reopen_std_handle(STD_OUTPUT_HANDLE, "CONOUT$");
+    reopen_std_handle(STD_ERROR_HANDLE, "CONOUT$");
+    reopen_std_handle(STD_INPUT_HANDLE, "CONIN$");
+}
+
+/// Point a standard handle at the just-attached console, but only if it isn't
+/// already valid — i.e. only when the shell didn't already redirect that stream to
+/// a file or pipe (`> out.txt`, `| something`), which must be left untouched.
+#[cfg(windows)]
+fn reopen_std_handle(which: u32, file_name: &str) {
+    use windows_sys::Win32::Foundation::{GENERIC_READ, GENERIC_WRITE, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::Storage::FileSystem::{
+        CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+    };
+    use windows_sys::Win32::System::Console::{GetStdHandle, SetStdHandle};
+
+    // SAFETY: `which` is one of the STD_*_HANDLE constants; this is a plain query.
+    let current = unsafe { GetStdHandle(which) };
+    if !current.is_null() && current != INVALID_HANDLE_VALUE {
+        return;
+    }
+    let name: Vec<u16> = file_name.encode_utf16().chain(std::iter::once(0)).collect();
+    // SAFETY: `name` is a valid null-terminated wide string naming the console stream
+    // we just attached to; other args are the standard "open an existing handle" set.
+    let handle = unsafe {
+        CreateFileW(
+            name.as_ptr(),
+            GENERIC_READ | GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            std::ptr::null(),
+            OPEN_EXISTING,
+            0,
+            std::ptr::null_mut(),
+        )
+    };
+    if handle != INVALID_HANDLE_VALUE {
+        // SAFETY: `handle` was just successfully opened above.
+        unsafe { SetStdHandle(which, handle) };
+    }
+}
+
+#[cfg(not(windows))]
+fn attach_parent_console_for_cli() {}
 
 fn chrono_like_now() -> String {
     // Avoid extra dep: local time via system clock formatting.
