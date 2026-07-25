@@ -32,6 +32,12 @@
 - 📊 Real-time UI — Built with egui (live sensors, curve editor MVP)
 - 🦀 Pure Rust — Core, UI, hardware backend and CLI
 
+## Screenshot
+
+<p align="center">
+  <img src="assets/screenshot.jpg" alt="fancontrol-rs UI" width="900">
+</p>
+
 ## Specs
 
 | Document | Description |
