@@ -1,8 +1,14 @@
 //! Desktop UI for fancontrol-rs (egui + eframe).
 
+#[macro_use]
+extern crate rust_i18n;
+
+i18n!("locales", fallback = "en");
+
 mod app;
 mod curve_editor;
 mod graph;
+mod i18n;
 mod poll;
 mod registry;
 mod settings;

@@ -101,7 +101,7 @@ pub fn show_cpu_graph(ui: &mut egui::Ui, history: &TempHistory, title: &str, win
             ui.painter().text(
                 rect.center(),
                 egui::Align2::CENTER_CENTER,
-                "…",
+                t!("graph.loading").to_string(),
                 egui::FontId::proportional(14.0),
                 Color32::GRAY,
             );
@@ -227,7 +227,7 @@ pub fn show_cpu_graph(ui: &mut egui::Ui, history: &TempHistory, title: &str, win
         painter.text(
             Pos2::new(rect.right() - 6.0, rect.bottom() - 2.0),
             egui::Align2::RIGHT_BOTTOM,
-            "now",
+            t!("graph.now").to_string(),
             egui::FontId::monospace(10.0),
             Color32::from_rgb(100, 110, 140),
         );
