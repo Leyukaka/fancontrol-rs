@@ -24,6 +24,7 @@ top_bar.write_error: "Schreiwen: %{error}"
 
 options.heading: "Optiounen"
 options.hide_zero_rpm: "Ventilateuren mat 0 RPM verstoppen"
+options.hide_zero_duty_controls: "Kontrollen mat 0% Vitess verstoppen"
 options.show_cpu_graph: "CPU-Temperaturgrafik"
 options.show_host_sensors: "GPU / SSD (Host, wa méiglech)"
 options.auto_apply_curves: "Kurven uwenden (automatesch, 1 Hz)"

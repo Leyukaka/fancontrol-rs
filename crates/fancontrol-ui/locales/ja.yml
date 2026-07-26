@@ -24,6 +24,7 @@ top_bar.write_error: "書き込み: %{error}"
 
 options.heading: "オプション"
 options.hide_zero_rpm: "0 RPM のファンを非表示"
+options.hide_zero_duty_controls: "デューティ比 0% のコントロールを非表示"
 options.show_cpu_graph: "CPU温度グラフ"
 options.show_host_sensors: "GPU / SSD（ホスト、利用可能な場合）"
 options.auto_apply_curves: "カーブを適用（自動、1 Hz）"

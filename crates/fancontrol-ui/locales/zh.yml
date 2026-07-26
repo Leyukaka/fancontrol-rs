@@ -24,6 +24,7 @@ top_bar.write_error: "写入：%{error}"
 
 options.heading: "选项"
 options.hide_zero_rpm: "隐藏 0 RPM 的风扇"
+options.hide_zero_duty_controls: "隐藏占空比为 0% 的控制器"
 options.show_cpu_graph: "CPU 温度图"
 options.show_host_sensors: "GPU / SSD（主机，若可用）"
 options.auto_apply_curves: "应用曲线（自动，1 Hz）"

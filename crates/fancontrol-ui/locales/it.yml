@@ -24,6 +24,7 @@ top_bar.write_error: "scrittura: %{error}"
 
 options.heading: "Opzioni"
 options.hide_zero_rpm: "Nascondi ventole a 0 RPM"
+options.hide_zero_duty_controls: "Nascondi i controlli allo 0% di velocità"
 options.show_cpu_graph: "Grafico temperatura CPU"
 options.show_host_sensors: "GPU / SSD (host, se disponibile)"
 options.auto_apply_curves: "Applica curve (automatico, 1 Hz)"
