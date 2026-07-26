@@ -94,7 +94,7 @@ pub fn show_cpu_graph(ui: &mut egui::Ui, history: &TempHistory, title: &str, win
             }
         });
 
-        let height = 140.0;
+        let height = ui.available_height().max(60.0);
         let (rect, _resp) =
             ui.allocate_exact_size(Vec2::new(ui.available_width(), height), Sense::hover());
         if history.is_empty() {
