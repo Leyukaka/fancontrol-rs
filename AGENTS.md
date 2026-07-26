@@ -44,7 +44,7 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 
 ## Status (keep updated)
 
-- Product line: `Cargo.toml` still pins **v0.1.5**, but `main` has moved past that — i18n shipped under tag `v0.1.6-i18n-beta.1`, and the fractal-fun panel has landed on top of it (unreleased/untagged so far). Specs under `specs/` aligned with this status.
+- Product line: **v0.2.0** (bumped from 0.1.5; the intermediate `v0.1.6-i18n-beta.1` prerelease is superseded). Bundles: full 8-language i18n, fractal/shader gallery, write-status/resize UI, hide-zero-duty controls, multi-sensor graph + sensor picker + curve binding, and the egui_plot rendering rewrite. Specs under `specs/` aligned with this status.
 - Phase 0 foundation: **done**.
 - Phase 1: PawnIOLib FFI + LpcIO + **NCT668x EC HWM** (validated class id `0xD5` rev `0x92` @ `0x0A20`) + banked NCT path (experimental) + control loop + CLI.
 - Elevation required for `pawnio_open` (Administrator). **PawnIO is a prerequisite** (not bundled) — UI shows a startup dialog if missing / not openable.
