@@ -43,10 +43,18 @@ fn map(p_in: vec3<f32>, time: f32) -> f32 {
     var p = p_in;
     for (var i: i32 = 0; i < 8; i = i + 1) {
         let t = time * 0.2;
-        p.xz = rotate(p.xz, t);
-        p.xy = rotate(p.xy, t * 1.89);
-        p.xz = abs(p.xz);
-        p.xz = p.xz - vec2<f32>(0.5, 0.5);
+        // WGSL doesn't allow assigning to a multi-component swizzle (`p.xz = ...`),
+        // unlike GLSL — assign each component individually instead.
+        let r1 = rotate(vec2<f32>(p.x, p.z), t);
+        p.x = r1.x;
+        p.z = r1.y;
+        let r2 = rotate(vec2<f32>(p.x, p.y), t * 1.89);
+        p.x = r2.x;
+        p.y = r2.y;
+        p.x = abs(p.x);
+        p.z = abs(p.z);
+        p.x = p.x - 0.5;
+        p.z = p.z - 0.5;
     }
     return dot(sign(p), p) / 5.0;
 }
@@ -76,7 +84,9 @@ fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     let uv = (frag_coord - uniforms.resolution * 0.5) / uniforms.resolution.x;
 
     var ro = vec3<f32>(0.0, 0.0, -50.0);
-    ro.xz = rotate(ro.xz, uniforms.time);
+    let ro_xz = rotate(vec2<f32>(ro.x, ro.z), uniforms.time);
+    ro.x = ro_xz.x;
+    ro.z = ro_xz.y;
 
     let cf = normalize(-ro);
     let cs = normalize(cross(cf, vec3<f32>(0.0, 1.0, 0.0)));
