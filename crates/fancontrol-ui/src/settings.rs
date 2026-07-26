@@ -1,5 +1,6 @@
 //! UI preferences persisted next to channel-map.
 
+use crate::shaders::GraphStyle;
 use fancontrol_core::config::{config_dir, ensure_config_dirs};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -9,19 +10,20 @@ const FILE: &str = "ui-settings.json";
 
 const WINDOW_ALLOWED: [u16; 4] = [10, 20, 30, 60];
 const SAMPLE_ALLOWED: [u16; 4] = [1, 2, 5, 10];
+pub const SHADER_FPS_ALLOWED: [u16; 4] = [30, 60, 90, 120];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UiSettings {
     #[serde(default = "default_true")]
     pub hide_zero_rpm: bool,
-    #[serde(default = "default_true")]
-    pub show_cpu_graph: bool,
+    #[serde(default = "default_true", alias = "show_cpu_graph")]
+    pub show_graph_panel: bool,
     #[serde(default = "default_true")]
     pub show_host_sensors: bool,
     /// When true and hardware writes allowed, apply profile curves each poll tick.
     #[serde(default = "default_true")]
     pub auto_apply_curves: bool,
-    /// Visible history window for the CPU graph (minutes).
+    /// Visible history window for the graph panel (minutes).
     #[serde(default = "default_graph_window_minutes")]
     pub graph_window_minutes: u16,
     /// Minimum interval between graph samples (seconds).
@@ -36,15 +38,29 @@ pub struct UiSettings {
     /// UI language code (e.g. "en", "fr"). `None` = not yet chosen → OS-locale detection.
     #[serde(default)]
     pub language: Option<String>,
-    /// Fun optional extra: raymarched fractal panel. Off by default.
+    /// Visual style for the graph panel: the classic line graph, or one of the
+    /// "fun" shader-based visualizations. Shader styles are opt-in (default Classic).
     #[serde(default)]
-    pub show_fractal: bool,
-    #[serde(default = "default_fractal_speed")]
-    pub fractal_speed: f32,
-    #[serde(default = "default_fractal_color_a")]
-    pub fractal_color_a: [f32; 3],
-    #[serde(default = "default_fractal_color_b")]
-    pub fractal_color_b: [f32; 3],
+    pub graph_style: GraphStyle,
+    #[serde(default = "default_shader_speed", alias = "fractal_speed")]
+    pub shader_speed: f32,
+    #[serde(default = "default_shader_color_a", alias = "fractal_color_a")]
+    pub shader_color_a: [f32; 3],
+    #[serde(default = "default_shader_color_b", alias = "fractal_color_b")]
+    pub shader_color_b: [f32; 3],
+    /// Shader animation frame rate. Higher values look smoother but use more
+    /// GPU/CPU while a shader style is active.
+    #[serde(default = "default_shader_fps")]
+    pub shader_fps: u16,
+    /// Deprecated: superseded by `graph_style`. Kept only so old
+    /// `ui-settings.json` files deserialize; read once by the one-shot
+    /// migration below, then ignored. `pub(crate)` (not fully private) only
+    /// so other modules' tests can still use `..UiSettings::default()`.
+    #[serde(default)]
+    pub(crate) show_fractal: bool,
+    /// One-shot migration marker: `show_fractal` -> `graph_style`.
+    #[serde(default)]
+    pub(crate) graph_style_migrated: bool,
 }
 
 fn default_true() -> bool {
@@ -59,23 +75,27 @@ fn default_graph_sample_secs() -> u16 {
     2
 }
 
-fn default_fractal_speed() -> f32 {
+fn default_shader_speed() -> f32 {
     1.0
 }
 
-fn default_fractal_color_a() -> [f32; 3] {
+fn default_shader_color_a() -> [f32; 3] {
     [0.2, 0.7, 0.9]
 }
 
-fn default_fractal_color_b() -> [f32; 3] {
+fn default_shader_color_b() -> [f32; 3] {
     [1.0, 0.0, 1.0]
+}
+
+fn default_shader_fps() -> u16 {
+    60
 }
 
 impl Default for UiSettings {
     fn default() -> Self {
         Self {
             hide_zero_rpm: true,
-            show_cpu_graph: true,
+            show_graph_panel: true,
             show_host_sensors: true,
             auto_apply_curves: true,
             graph_window_minutes: default_graph_window_minutes(),
@@ -83,10 +103,13 @@ impl Default for UiSettings {
             product_defaults_applied: true,
             last_profile_id: None,
             language: None,
+            graph_style: GraphStyle::default(),
+            shader_speed: default_shader_speed(),
+            shader_color_a: default_shader_color_a(),
+            shader_color_b: default_shader_color_b(),
+            shader_fps: default_shader_fps(),
             show_fractal: false,
-            fractal_speed: default_fractal_speed(),
-            fractal_color_a: default_fractal_color_a(),
-            fractal_color_b: default_fractal_color_b(),
+            graph_style_migrated: true,
         }
     }
 }
@@ -111,6 +134,15 @@ impl UiSettings {
             s.product_defaults_applied = true;
             s.save();
         }
+        // Upgrade older installs: carry the old `show_fractal` toggle over to
+        // the new graph-style picker, once.
+        if !s.graph_style_migrated {
+            if s.show_fractal {
+                s.graph_style = GraphStyle::FractalPyramid;
+            }
+            s.graph_style_migrated = true;
+            s.save();
+        }
         s
     }
 
@@ -124,13 +156,16 @@ impl UiSettings {
         }
     }
 
-    /// Clamp graph options to allowed discrete values (invalid → 10m / 2s).
+    /// Clamp graph/shader options to allowed discrete values.
     pub fn clamp_graph_options(&mut self) {
         if !WINDOW_ALLOWED.contains(&self.graph_window_minutes) {
             self.graph_window_minutes = default_graph_window_minutes();
         }
         if !SAMPLE_ALLOWED.contains(&self.graph_sample_secs) {
             self.graph_sample_secs = default_graph_sample_secs();
+        }
+        if !SHADER_FPS_ALLOWED.contains(&self.shader_fps) {
+            self.shader_fps = default_shader_fps();
         }
     }
 }

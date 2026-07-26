@@ -7,12 +7,12 @@ i18n!("locales", fallback = "en");
 
 mod app;
 mod curve_editor;
-mod fractal;
 mod graph;
 mod i18n;
 mod poll;
 mod registry;
 mod settings;
+mod shaders;
 mod tray;
 mod update_check;
 mod write_queue;
