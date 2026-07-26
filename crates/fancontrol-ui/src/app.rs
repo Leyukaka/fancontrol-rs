@@ -315,16 +315,35 @@ impl eframe::App for FanApp {
             ui.horizontal(|ui| {
                 ui.heading("fancontrol-rs");
                 ui.separator();
-                if self.options.allow_hw_write {
+                let write_capable =
+                    self.options.allow_hw_write && matches!(self.status, BackendStatus::Ok(_));
+                if write_capable {
                     ui.colored_label(
-                        egui::Color32::LIGHT_RED,
+                        egui::Color32::LIGHT_GREEN,
                         t!("top_bar.write_enabled").to_string(),
                     );
                 } else {
-                    ui.colored_label(
-                        egui::Color32::LIGHT_GREEN,
-                        t!("top_bar.read_only").to_string(),
-                    );
+                    let hint = if !self.options.allow_hw_write {
+                        Some(t!("top_bar.write_disabled_flag_hint").to_string())
+                    } else {
+                        match &self.status {
+                            BackendStatus::NeedsAdmin => {
+                                Some(t!("top_bar.write_disabled_admin_hint").to_string())
+                            }
+                            BackendStatus::NotInstalled => {
+                                Some(t!("top_bar.write_disabled_pawnio_hint").to_string())
+                            }
+                            BackendStatus::Disabled => {
+                                Some(t!("top_bar.write_disabled_probe_hint").to_string())
+                            }
+                            BackendStatus::Ok(_) => None,
+                        }
+                    };
+                    let resp = ui
+                        .colored_label(egui::Color32::YELLOW, t!("top_bar.read_only").to_string());
+                    if let Some(hint) = hint {
+                        resp.on_hover_text(hint);
+                    }
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui
@@ -602,38 +621,43 @@ impl eframe::App for FanApp {
                 });
         }
 
-        egui::CentralPanel::default().show(ui, |ui| {
-            if self.settings.show_graph_panel {
-                self.ui_graph_controls(ui);
-                let style = self.settings.graph_style;
-                if style == GraphStyle::Classic || !self.shader_backend_available {
-                    show_cpu_graph(
-                        ui,
-                        &self.cpu_history,
-                        &t!("graph.cpu_temperature_title"),
-                        self.settings.graph_window_minutes,
-                    );
-                    if style.is_shader() {
-                        // Selected style needs wgpu but it's unavailable this run — degrade
-                        // to Classic instead of leaving a blank panel with no explanation.
-                        ui.small(t!("graph.shader_fallback_note").to_string());
+        if self.settings.show_graph_panel {
+            egui::Panel::top("graph_area")
+                .resizable(true)
+                .default_size(240.0)
+                .show(ui, |ui| {
+                    self.ui_graph_controls(ui);
+                    let style = self.settings.graph_style;
+                    if style == GraphStyle::Classic || !self.shader_backend_available {
+                        show_cpu_graph(
+                            ui,
+                            &self.cpu_history,
+                            &t!("graph.cpu_temperature_title"),
+                            self.settings.graph_window_minutes,
+                        );
+                        if style.is_shader() {
+                            // Selected style needs wgpu but it's unavailable this run — degrade
+                            // to Classic instead of leaving a blank panel with no explanation.
+                            ui.small(t!("graph.shader_fallback_note").to_string());
+                        }
+                    } else {
+                        let t =
+                            self.shader_clock.elapsed().as_secs_f32() * self.settings.shader_speed;
+                        let signal =
+                            ThermalSignal::from_histories(&self.cpu_history, &self.gpu_history);
+                        show_shader_panel(
+                            ui,
+                            style,
+                            t,
+                            signal,
+                            self.settings.shader_color_a,
+                            self.settings.shader_color_b,
+                        );
                     }
-                } else {
-                    let t = self.shader_clock.elapsed().as_secs_f32() * self.settings.shader_speed;
-                    let signal =
-                        ThermalSignal::from_histories(&self.cpu_history, &self.gpu_history);
-                    show_shader_panel(
-                        ui,
-                        style,
-                        t,
-                        signal,
-                        self.settings.shader_color_a,
-                        self.settings.shader_color_b,
-                    );
-                }
-                ui.add_space(8.0);
-            }
+                });
+        }
 
+        egui::CentralPanel::default().show(ui, |ui| {
             ui.columns(3, |cols| {
                 // Temps
                 cols[0].heading(t!("dashboard.temperatures").to_string());

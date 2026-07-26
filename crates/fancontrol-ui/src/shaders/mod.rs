@@ -242,8 +242,9 @@ pub fn show_shader_panel(
                 );
             }
         });
+        let height = ui.available_height().max(60.0);
         let (rect, _resp) = ui.allocate_exact_size(
-            egui::vec2(ui.available_width(), 220.0),
+            egui::vec2(ui.available_width(), height),
             egui::Sense::hover(),
         );
         let resolution = rect.size() * ui.ctx().pixels_per_point();
