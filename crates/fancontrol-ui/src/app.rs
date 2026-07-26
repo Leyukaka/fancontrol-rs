@@ -271,9 +271,15 @@ impl eframe::App for FanApp {
                 ui.heading("fancontrol-rs");
                 ui.separator();
                 if self.options.allow_hw_write {
-                    ui.colored_label(egui::Color32::LIGHT_RED, t!("top_bar.write_enabled").to_string());
+                    ui.colored_label(
+                        egui::Color32::LIGHT_RED,
+                        t!("top_bar.write_enabled").to_string(),
+                    );
                 } else {
-                    ui.colored_label(egui::Color32::LIGHT_GREEN, t!("top_bar.read_only").to_string());
+                    ui.colored_label(
+                        egui::Color32::LIGHT_GREEN,
+                        t!("top_bar.read_only").to_string(),
+                    );
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui
@@ -404,7 +410,10 @@ impl eframe::App for FanApp {
                     ui.small(t!("options.names_note").to_string());
                     ui.separator();
                     ui.label(t!("options.updates_heading").to_string());
-                    if ui.button(t!("options.check_updates_button").to_string()).clicked() {
+                    if ui
+                        .button(t!("options.check_updates_button").to_string())
+                        .clicked()
+                    {
                         self.updates.check_now();
                     }
                     match self.updates.status() {
@@ -434,8 +443,11 @@ impl eframe::App for FanApp {
                     }
                     ui.separator();
                     ui.label(t!("options.language_heading").to_string());
-                    let current_lang =
-                        self.settings.language.clone().unwrap_or_else(|| "en".to_string());
+                    let current_lang = self
+                        .settings
+                        .language
+                        .clone()
+                        .unwrap_or_else(|| "en".to_string());
                     egui::ComboBox::from_id_salt("language_pick")
                         .selected_text(display_name_for(&current_lang))
                         .show_ui(ui, |ui| {
@@ -764,7 +776,10 @@ impl FanApp {
                     if ui.button(t!("pawnio.open_button").to_string()).clicked() {
                         ui.ctx().open_url(egui::OpenUrl::new_tab(PAWNIO_URL));
                     }
-                    if ui.button(t!("pawnio.continue_without_hw").to_string()).clicked() {
+                    if ui
+                        .button(t!("pawnio.continue_without_hw").to_string())
+                        .clicked()
+                    {
                         self.pawnio_dialog = None;
                     }
                     if ui.button(t!("common.close").to_string()).clicked() {
@@ -807,15 +822,21 @@ impl FanApp {
                         }
                     }
                 });
-            if ui.button(t!("curves_panel.reload_list").to_string()).clicked() {
+            if ui
+                .button(t!("curves_panel.reload_list").to_string())
+                .clicked()
+            {
                 self.profile_list = list_profiles().unwrap_or_default();
             }
             if ui.button(t!("curves_panel.save").to_string()).clicked() {
                 match save_profile(&self.profile) {
                     Ok(path) => {
                         self.profile_status = Some(
-                            t!("curves_panel.saved_status", path = path.display().to_string())
-                                .to_string(),
+                            t!(
+                                "curves_panel.saved_status",
+                                path = path.display().to_string()
+                            )
+                            .to_string(),
                         );
                         self.profile_list = list_profiles().unwrap_or_default();
                         self.settings.last_profile_id = Some(self.profile.id.as_str().to_string());
@@ -828,7 +849,10 @@ impl FanApp {
                 }
             }
             ui.text_edit_singleline(&mut self.new_profile_name);
-            if ui.button(t!("curves_panel.new_save_as").to_string()).clicked() {
+            if ui
+                .button(t!("curves_panel.new_save_as").to_string())
+                .clicked()
+            {
                 let name = self.new_profile_name.trim();
                 if !name.is_empty() {
                     self.profile.id = fancontrol_core::ProfileId::new(name);
@@ -848,7 +872,10 @@ impl FanApp {
                     }
                 }
             }
-            if ui.button(t!("curves_panel.apply_now").to_string()).clicked() {
+            if ui
+                .button(t!("curves_panel.apply_now").to_string())
+                .clicked()
+            {
                 let s = self.snapshot.lock().map(|g| g.clone()).unwrap_or_default();
                 self.apply_curves_from_snapshot(&s);
                 self.profile_status = Some(t!("curves_panel.curves_applied_once").to_string());
@@ -868,7 +895,10 @@ impl FanApp {
                         self.selected_curve = i;
                     }
                 }
-                if ui.button(t!("curves_panel.add_curve").to_string()).clicked() {
+                if ui
+                    .button(t!("curves_panel.add_curve").to_string())
+                    .clicked()
+                {
                     let id = format!("curve{}", self.profile.curves.len() + 1);
                     self.profile.curves.push(FanCurve::linear(
                         id,

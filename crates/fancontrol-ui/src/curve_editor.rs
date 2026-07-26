@@ -12,7 +12,10 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
     ui.horizontal(|ui| {
         ui.heading(&curve.name);
         ui.small(format!("id={}", curve.id.as_str()));
-        if ui.button(t!("curve_editor.add_point").to_string()).clicked() {
+        if ui
+            .button(t!("curve_editor.add_point").to_string())
+            .clicked()
+        {
             curve.points.push(CurvePoint::new(55.0, 50));
             curve.sort_points();
             changed = true;
