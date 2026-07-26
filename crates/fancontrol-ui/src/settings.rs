@@ -33,6 +33,9 @@ pub struct UiSettings {
     /// Last profile switched to / saved in the UI — auto-loaded on next startup.
     #[serde(default)]
     pub last_profile_id: Option<String>,
+    /// UI language code (e.g. "en", "fr"). `None` = not yet chosen → OS-locale detection.
+    #[serde(default)]
+    pub language: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -58,6 +61,7 @@ impl Default for UiSettings {
             graph_sample_secs: default_graph_sample_secs(),
             product_defaults_applied: true,
             last_profile_id: None,
+            language: None,
         }
     }
 }

@@ -12,14 +12,17 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
     ui.horizontal(|ui| {
         ui.heading(&curve.name);
         ui.small(format!("id={}", curve.id.as_str()));
-        if ui.button("+ point").clicked() {
+        if ui
+            .button(t!("curve_editor.add_point").to_string())
+            .clicked()
+        {
             curve.points.push(CurvePoint::new(55.0, 50));
             curve.sort_points();
             changed = true;
         }
     });
     ui.horizontal(|ui| {
-        ui.label("Hysteresis °C");
+        ui.label(t!("curve_editor.hysteresis_label", unit = "°C").to_string());
         let mut h = curve.hysteresis_c as f32;
         if ui
             .add(egui::DragValue::new(&mut h).range(0.0..=15.0).speed(0.1))
@@ -207,7 +210,7 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
             if ui
                 .add(
                     egui::DragValue::new(&mut t)
-                        .prefix("T ")
+                        .prefix(t!("curve_editor.temp_prefix").to_string())
                         .suffix("°C")
                         .range(0.0..=120.0),
                 )
@@ -219,7 +222,7 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
             if ui
                 .add(
                     egui::DragValue::new(&mut d)
-                        .prefix("D ")
+                        .prefix(t!("curve_editor.duty_prefix").to_string())
                         .suffix("%")
                         .range(0.0..=100.0),
                 )

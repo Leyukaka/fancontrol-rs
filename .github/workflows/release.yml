@@ -61,5 +61,9 @@ jobs:
             dist/fancontrol-rs.exe
             dist/fancontrol-rs.exe.sha256
           generate_release_notes: true
+          # Tags with a hyphen (v1.2.3-beta.1, -rc.1, ...) publish as a GitHub
+          # pre-release: excluded from "Latest release" and from the
+          # /releases/latest API that the in-app update checker queries.
+          prerelease: ${{ contains(github.ref_name, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

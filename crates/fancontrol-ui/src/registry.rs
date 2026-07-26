@@ -72,21 +72,29 @@ impl ControlProvider for ArcControl {
     }
 }
 
-pub fn backend_status_line(include_hw: bool) -> String {
+/// Backend hardware-probe status, translated fresh every frame by the caller
+/// (rather than pre-formatted once at startup) so a live language switch applies to it.
+pub enum BackendStatus {
+    Disabled,
+    Ok(String),
+    NeedsAdmin,
+    NotInstalled,
+}
+
+pub fn backend_status(include_hw: bool) -> BackendStatus {
     if !include_hw {
-        return "Hardware probe disabled (--no-hw)".into();
+        return BackendStatus::Disabled;
     }
     if fancontrol_pawnio::is_available() {
-        format!(
-            "PawnIO OK · {}",
-            fancontrol_pawnio::status_message()
-                .lines()
-                .find(|l| l.contains("Super I/O") || l.contains("NCT") || l.contains("slot"))
-                .unwrap_or("executor open")
-        )
+        let detail = fancontrol_pawnio::status_message()
+            .lines()
+            .find(|l| l.contains("Super I/O") || l.contains("NCT") || l.contains("slot"))
+            .unwrap_or("executor open")
+            .to_string();
+        BackendStatus::Ok(detail)
     } else if fancontrol_pawnio::is_installed() {
-        "PawnIO installed but executor closed (run as Administrator?)".into()
+        BackendStatus::NeedsAdmin
     } else {
-        "PawnIO not installed".into()
+        BackendStatus::NotInstalled
     }
 }

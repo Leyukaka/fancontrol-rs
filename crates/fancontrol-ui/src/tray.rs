@@ -20,6 +20,9 @@ pub enum TrayCommand {
 
 pub struct AppTray {
     tray: TrayIcon,
+    open_item: MenuItem,
+    apply_item: MenuItem,
+    exit_item: MenuItem,
     open_id: String,
     apply_id: String,
     exit_id: String,
@@ -33,9 +36,9 @@ impl AppTray {
     pub fn new() -> Result<Self, String> {
         let icons = build_state_icons()?;
 
-        let open = MenuItem::with_id("open", "Open fancontrol-rs", true, None);
-        let apply = MenuItem::with_id("apply-default", "Apply default profile now", true, None);
-        let exit = MenuItem::with_id("exit", "Exit", true, None);
+        let open = MenuItem::with_id("open", t!("tray.open"), true, None);
+        let apply = MenuItem::with_id("apply-default", t!("tray.apply_default"), true, None);
+        let exit = MenuItem::with_id("exit", t!("tray.exit"), true, None);
         let menu = Menu::new();
         menu.append_items(&[&open, &apply, &exit])
             .map_err(|e| format!("tray menu: {e}"))?;
@@ -52,9 +55,19 @@ impl AppTray {
             open_id: open.id().0.clone(),
             apply_id: apply.id().0.clone(),
             exit_id: exit.id().0.clone(),
+            open_item: open,
+            apply_item: apply,
+            exit_item: exit,
             icons,
             state: TrayState::Normal,
         })
+    }
+
+    /// Re-apply translated text to the tray menu/tooltip after a language change.
+    pub fn retranslate(&self) {
+        self.open_item.set_text(t!("tray.open"));
+        self.apply_item.set_text(t!("tray.apply_default"));
+        self.exit_item.set_text(t!("tray.exit"));
     }
 
     /// Swap the tray icon image when the state actually changes (avoid redundant OS calls).

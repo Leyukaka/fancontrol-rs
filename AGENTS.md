@@ -47,6 +47,7 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 - Validated path: **Nuvoton NCT6687D-class**; **ctrl0–3** reliable PWM; higher controls = DR/experimental. See `docs/SUPPORTED_HARDWARE.md`.
 - Host sensors: fixed-path `nvidia-smi` (NVIDIA-only; AMD/Intel research documented in `docs/GPU_VENDOR_APIS.md`, not implemented) + storage via `DeviceIoControl` with an NVMe health-log fallback (read-only, no PowerShell, no PATH walk for GPU).
 - Vendored modules: `crates/fancontrol-pawnio/modules/` (PawnIO.Modules).
+- i18n: 8 languages (en/fr/de/es/it/zh/ja/lb) via `rust-i18n`, picker in Options panel, OS-locale default on first run, live switch (no restart), Noto Sans CJK bundled for zh/ja glyph coverage. `crates/fancontrol-ui/locales/`.
 - UI: **egui/eframe 0.35** — live sensors, sliders, curve editor, curve auto-apply, CPU graph windows, rename map, options, system tray (minimize-to-tray, state icon, quick menu), profile switch/save persisted as last-used and auto-loaded on startup, manual "Check for updates" (GitHub latest-release compare + link, no auto-download).
 - Binary is GUI-subsystem (no console flash on launch); CLI usage from an existing terminal re-attaches to it automatically.
 - Packaging / sec: release workflow + owner `release` environment approval; CodeQL + cargo-audit + Dependabot; unsigned exe + SHA256. Signing later — `docs/SIGNING_AND_DISTRIBUTION.md`.

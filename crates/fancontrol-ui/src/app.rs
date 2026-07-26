@@ -2,8 +2,9 @@
 
 use crate::curve_editor::show_curve_editor;
 use crate::graph::{show_cpu_graph, TempHistory};
+use crate::i18n::{display_name_for, resolve_startup_locale, SUPPORTED};
 use crate::poll::{spawn_poller, SharedMap, SharedSnapshot};
-use crate::registry::{backend_status_line, build_registry};
+use crate::registry::{backend_status, build_registry, BackendStatus};
 use crate::settings::UiSettings;
 use crate::tray::{AppTray, TrayCommand, TrayState};
 use crate::update_check::{UpdateChecker, UpdateStatus};
@@ -60,6 +61,12 @@ fn detect_pawnio_dialog(include_hw: bool) -> Option<PawnioDialogKind> {
 
 pub fn run_native(options: UiOptions) -> Result<(), UiError> {
     let mut settings = UiSettings::load();
+    let locale = resolve_startup_locale(&settings);
+    rust_i18n::set_locale(&locale);
+    if settings.language.is_none() {
+        settings.language = Some(locale);
+        settings.save();
+    }
     let built = build_registry(
         options.include_mock,
         options.include_hw,
@@ -68,7 +75,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
     );
     let reg = Arc::new(built.reg);
     let map = Arc::new(Mutex::new(ChannelMap::load_or_seed().unwrap_or_default()));
-    let status = backend_status_line(options.include_hw);
+    let status = backend_status(options.include_hw);
     let snapshot = spawn_poller(
         Arc::clone(&reg),
         built.pawnio,
@@ -132,6 +139,29 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         native,
         Box::new(move |cc| {
             cc.egui_ctx.set_visuals(egui::Visuals::dark());
+
+            // CJK glyph fallback (egui's default fonts have no Chinese/Japanese coverage).
+            // Pushed after the default fonts so Latin-script languages keep using those,
+            // and loaded unconditionally since the language can be switched live at runtime.
+            let mut fonts = egui::FontDefinitions::default();
+            fonts.font_data.insert(
+                "noto_sans_cjk".to_owned(),
+                std::sync::Arc::new(egui::FontData::from_static(include_bytes!(
+                    "../assets/fonts/NotoSansCJK-Regular.ttc"
+                ))),
+            );
+            fonts
+                .families
+                .entry(egui::FontFamily::Proportional)
+                .or_default()
+                .push("noto_sans_cjk".to_owned());
+            fonts
+                .families
+                .entry(egui::FontFamily::Monospace)
+                .or_default()
+                .push("noto_sans_cjk".to_owned());
+            cc.egui_ctx.set_fonts(fonts);
+
             let mut app = app;
             // Must build after the event loop has started (tray-icon requirement).
             match AppTray::new() {
@@ -149,7 +179,7 @@ struct FanApp {
     map: SharedMap,
     snapshot: SharedSnapshot,
     writes: WriteQueue,
-    status: String,
+    status: BackendStatus,
     settings: UiSettings,
     slider_state: HashMap<String, f32>,
     user_lock_until: HashMap<String, Instant>,
@@ -241,17 +271,26 @@ impl eframe::App for FanApp {
                 ui.heading("fancontrol-rs");
                 ui.separator();
                 if self.options.allow_hw_write {
-                    ui.colored_label(egui::Color32::LIGHT_RED, "WRITE ENABLED");
+                    ui.colored_label(
+                        egui::Color32::LIGHT_RED,
+                        t!("top_bar.write_enabled").to_string(),
+                    );
                 } else {
-                    ui.colored_label(egui::Color32::LIGHT_GREEN, "READ-ONLY");
+                    ui.colored_label(
+                        egui::Color32::LIGHT_GREEN,
+                        t!("top_bar.read_only").to_string(),
+                    );
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("⚙ Options").clicked() {
+                    if ui
+                        .button(format!("⚙ {}", t!("top_bar.options_button")))
+                        .clicked()
+                    {
                         self.show_settings = !self.show_settings;
                     }
                     if ui
-                        .selectable_label(self.show_curves, "Curves")
-                        .on_hover_text("Afficher/masquer l'éditeur de courbes")
+                        .selectable_label(self.show_curves, t!("top_bar.curves_toggle").to_string())
+                        .on_hover_text(t!("top_bar.curves_toggle_tooltip").to_string())
                         .clicked()
                     {
                         self.show_curves = !self.show_curves;
@@ -260,13 +299,13 @@ impl eframe::App for FanApp {
                     let curve_on = self.settings.auto_apply_curves;
                     let (label, fill, text_color) = if curve_on {
                         (
-                            "Curve control: ON",
+                            t!("top_bar.curve_control_on").to_string(),
                             egui::Color32::from_rgb(30, 90, 50),
                             egui::Color32::from_rgb(140, 255, 170),
                         )
                     } else {
                         (
-                            "Curve control: OFF",
+                            t!("top_bar.curve_control_off").to_string(),
                             egui::Color32::from_rgb(70, 40, 40),
                             egui::Color32::from_rgb(220, 160, 160),
                         )
@@ -276,9 +315,7 @@ impl eframe::App for FanApp {
                             .fill(fill);
                     if ui
                         .add(btn)
-                        .on_hover_text(
-                            "Activer l'application automatique des courbes aux contrôles PWM",
-                        )
+                        .on_hover_text(t!("top_bar.curve_control_tooltip").to_string())
                         .clicked()
                     {
                         self.settings.auto_apply_curves = !self.settings.auto_apply_curves;
@@ -289,26 +326,41 @@ impl eframe::App for FanApp {
             if self.settings.auto_apply_curves && !self.options.allow_hw_write {
                 ui.colored_label(
                     egui::Color32::YELLOW,
-                    "Curve control ON but hardware is read-only — drop --read-only to write PWM",
+                    t!("top_bar.curve_readonly_warning").to_string(),
                 );
             }
-            ui.label(&self.status);
+            let status_text = match &self.status {
+                BackendStatus::Disabled => t!("registry.hw_probe_disabled").to_string(),
+                BackendStatus::Ok(detail) => t!("registry.pawnio_ok", detail = detail).to_string(),
+                BackendStatus::NeedsAdmin => t!("registry.needs_admin").to_string(),
+                BackendStatus::NotInstalled => t!("registry.not_installed").to_string(),
+            };
+            ui.label(status_text);
             if let Some(err) = &snap.error {
-                ui.colored_label(egui::Color32::YELLOW, format!("poll: {err}"));
+                ui.colored_label(
+                    egui::Color32::YELLOW,
+                    t!("top_bar.poll_error", error = err).to_string(),
+                );
             }
             if let Some(err) = &self.write_error {
-                ui.colored_label(egui::Color32::RED, format!("write: {err}"));
+                ui.colored_label(
+                    egui::Color32::RED,
+                    t!("top_bar.write_error", error = err).to_string(),
+                );
             }
             if !self.options.allow_hw_write {
-                ui.small("Hardware sliders locked · launched with --read-only");
+                ui.small(t!("top_bar.sliders_locked").to_string());
             }
-            ui.small(format!(
-                "temps {} · fans {} · controls {} · tick {}",
-                snap.temps.len(),
-                snap.fans.len(),
-                snap.controls.len(),
-                snap.tick
-            ));
+            ui.small(
+                t!(
+                    "top_bar.debug_counts",
+                    temps = snap.temps.len(),
+                    fans = snap.fans.len(),
+                    controls = snap.controls.len(),
+                    tick = snap.tick
+                )
+                .to_string(),
+            );
         });
 
         if self.show_settings {
@@ -316,73 +368,109 @@ impl eframe::App for FanApp {
                 .resizable(true)
                 .default_size(260.0)
                 .show(ui, |ui| {
-                    ui.heading("Options");
+                    ui.heading(t!("options.heading").to_string());
                     ui.separator();
                     let mut dirty = false;
                     dirty |= ui
-                        .checkbox(&mut self.settings.hide_zero_rpm, "Cacher ventilos à 0 RPM")
+                        .checkbox(
+                            &mut self.settings.hide_zero_rpm,
+                            t!("options.hide_zero_rpm").to_string(),
+                        )
                         .changed();
                     dirty |= ui
-                        .checkbox(&mut self.settings.show_cpu_graph, "Graphe température CPU")
+                        .checkbox(
+                            &mut self.settings.show_cpu_graph,
+                            t!("options.show_cpu_graph").to_string(),
+                        )
                         .changed();
                     dirty |= ui
                         .checkbox(
                             &mut self.settings.show_host_sensors,
-                            "GPU / SSD (host, si dispo)",
+                            t!("options.show_host_sensors").to_string(),
                         )
                         .changed();
                     dirty |= ui
                         .checkbox(
                             &mut self.settings.auto_apply_curves,
-                            "Appliquer les courbes (auto, 1 Hz)",
+                            t!("options.auto_apply_curves").to_string(),
                         )
                         .changed();
                     if self.settings.auto_apply_curves && !self.options.allow_hw_write {
                         ui.colored_label(
                             egui::Color32::YELLOW,
-                            "Auto-apply needs writes (drop --read-only)",
+                            t!("options.auto_apply_needs_write").to_string(),
                         );
                     }
-                    ui.small("GPU: nvidia-smi · SSD: DeviceIoControl (no PowerShell)");
+                    ui.small(t!("options.host_sensor_note").to_string());
                     ui.separator();
-                    ui.label("RGB");
-                    ui.small(
-                        "Contrôle RGB prévu dans une version ultérieure (hors scope v1 hardware).",
-                    );
+                    ui.label(t!("options.rgb_heading").to_string());
+                    ui.small(t!("options.rgb_note").to_string());
                     ui.separator();
-                    ui.label("Noms");
-                    ui.small("Clic sur un nom de fan/control pour renommer (sauvé dans channel-map.json).");
+                    ui.label(t!("options.names_heading").to_string());
+                    ui.small(t!("options.names_note").to_string());
                     ui.separator();
-                    ui.label("Mises à jour");
-                    if ui.button("Check for updates").clicked() {
+                    ui.label(t!("options.updates_heading").to_string());
+                    if ui
+                        .button(t!("options.check_updates_button").to_string())
+                        .clicked()
+                    {
                         self.updates.check_now();
                     }
                     match self.updates.status() {
                         Some(UpdateStatus::Checking) => {
-                            ui.small("Checking…");
+                            ui.small(t!("options.checking").to_string());
                         }
                         Some(UpdateStatus::UpToDate) => {
-                            ui.small(format!(
-                                "Up to date (v{})",
-                                env!("CARGO_PKG_VERSION")
-                            ));
+                            ui.small(
+                                t!("options.up_to_date", version = env!("CARGO_PKG_VERSION"))
+                                    .to_string(),
+                            );
                         }
                         Some(UpdateStatus::Available { version, url }) => {
                             ui.colored_label(
                                 egui::Color32::LIGHT_GREEN,
-                                format!("New version available: {version}"),
+                                t!("options.new_version_available", version = version).to_string(),
                             );
-                            ui.hyperlink_to("Open release page", url);
+                            ui.hyperlink_to(t!("options.open_release_page").to_string(), url);
                         }
                         Some(UpdateStatus::Error(e)) => {
-                            ui.colored_label(egui::Color32::YELLOW, format!("Check failed: {e}"));
+                            ui.colored_label(
+                                egui::Color32::YELLOW,
+                                t!("options.check_failed", error = e).to_string(),
+                            );
                         }
                         None => {}
                     }
+                    ui.separator();
+                    ui.label(t!("options.language_heading").to_string());
+                    let current_lang = self
+                        .settings
+                        .language
+                        .clone()
+                        .unwrap_or_else(|| "en".to_string());
+                    egui::ComboBox::from_id_salt("language_pick")
+                        .selected_text(display_name_for(&current_lang))
+                        .show_ui(ui, |ui| {
+                            for code in SUPPORTED {
+                                let selected = current_lang == code;
+                                if ui
+                                    .selectable_label(selected, display_name_for(code))
+                                    .clicked()
+                                    && !selected
+                                {
+                                    self.settings.language = Some(code.to_string());
+                                    rust_i18n::set_locale(code);
+                                    if let Some(tray) = &self.tray {
+                                        tray.retranslate();
+                                    }
+                                    self.settings.save();
+                                }
+                            }
+                        });
                     if dirty {
                         self.settings.save();
                     }
-                    if ui.button("Fermer").clicked() {
+                    if ui.button(t!("common.close").to_string()).clicked() {
                         self.show_settings = false;
                     }
                 });
@@ -403,7 +491,7 @@ impl eframe::App for FanApp {
                 show_cpu_graph(
                     ui,
                     &self.cpu_history,
-                    "CPU temperature",
+                    &t!("graph.cpu_temperature_title"),
                     self.settings.graph_window_minutes,
                 );
                 ui.add_space(8.0);
@@ -411,13 +499,13 @@ impl eframe::App for FanApp {
 
             ui.columns(3, |cols| {
                 // Temps
-                cols[0].heading("Temperatures");
+                cols[0].heading(t!("dashboard.temperatures").to_string());
                 cols[0].separator();
                 egui::ScrollArea::vertical()
                     .id_salt("temps")
                     .show(&mut cols[0], |ui| {
                         if snap.temps.is_empty() {
-                            ui.label("(none)");
+                            ui.label(t!("dashboard.none").to_string());
                         }
                         for (id, label, v) in &snap.temps {
                             ui.horizontal(|ui| {
@@ -426,7 +514,7 @@ impl eframe::App for FanApp {
                                         egui::Label::new(label.as_str())
                                             .sense(egui::Sense::click()),
                                     )
-                                    .on_hover_text("Cliquer pour renommer")
+                                    .on_hover_text(t!("dashboard.click_to_rename").to_string())
                                     .clicked()
                                 {
                                     self.begin_rename(id, label, false);
@@ -443,7 +531,7 @@ impl eframe::App for FanApp {
                     });
 
                 // Fans
-                cols[1].heading("Fans (RPM)");
+                cols[1].heading(t!("dashboard.fans").to_string());
                 cols[1].separator();
                 egui::ScrollArea::vertical()
                     .id_salt("fans")
@@ -454,7 +542,7 @@ impl eframe::App for FanApp {
                             .filter(|(_, _, v)| !self.settings.hide_zero_rpm || *v >= 1.0)
                             .collect();
                         if fans.is_empty() {
-                            ui.label("(none)");
+                            ui.label(t!("dashboard.none").to_string());
                         }
                         for (id, label, v) in fans {
                             ui.horizontal(|ui| {
@@ -463,7 +551,7 @@ impl eframe::App for FanApp {
                                         egui::Label::new(label.as_str())
                                             .sense(egui::Sense::click()),
                                     )
-                                    .on_hover_text("Cliquer pour renommer")
+                                    .on_hover_text(t!("dashboard.click_to_rename").to_string())
                                     .clicked()
                                 {
                                     self.begin_rename(id, label, false);
@@ -484,13 +572,13 @@ impl eframe::App for FanApp {
                     });
 
                 // Controls
-                cols[2].heading("Controls");
+                cols[2].heading(t!("dashboard.controls").to_string());
                 cols[2].separator();
                 egui::ScrollArea::vertical()
                     .id_salt("ctrls")
                     .show(&mut cols[2], |ui| {
                         if snap.controls.is_empty() {
-                            ui.label("(none)");
+                            ui.label(t!("dashboard.none").to_string());
                         }
                         for c in &snap.controls {
                             // Never hide controls when hide_zero_rpm (that option is for fan list only)
@@ -500,7 +588,7 @@ impl eframe::App for FanApp {
                                         egui::Label::new(c.label.as_str())
                                             .sense(egui::Sense::click()),
                                     )
-                                    .on_hover_text("Cliquer pour renommer")
+                                    .on_hover_text(t!("dashboard.click_to_rename").to_string())
                                     .clicked()
                                 {
                                     self.begin_rename(&c.id, &c.label, true);
@@ -512,7 +600,7 @@ impl eframe::App for FanApp {
                                         .and_then(|s| s.parse::<u32>().ok())
                                         .unwrap_or(0);
                                 if slot >= 9 {
-                                    ui.small("EC/BIOS may reclaim (SmartFan)");
+                                    ui.small(t!("dashboard.ec_bios_warning").to_string());
                                 }
                                 if let Some(rpm) = c.rpm {
                                     ui.monospace(format!("RPM {rpm:.0}"));
@@ -526,14 +614,14 @@ impl eframe::App for FanApp {
                                     .assignments
                                     .get(&c.id)
                                     .cloned()
-                                    .unwrap_or_else(|| "(none)".into());
+                                    .unwrap_or_else(|| t!("dashboard.none").to_string());
                                 egui::ComboBox::from_id_salt(format!("asg-{}", c.id))
                                     .selected_text(cur)
                                     .show_ui(ui, |ui| {
                                         if ui
                                             .selectable_label(
                                                 !self.profile.assignments.contains_key(&c.id),
-                                                "(none)",
+                                                t!("dashboard.none").to_string(),
                                             )
                                             .clicked()
                                         {
@@ -605,7 +693,7 @@ impl eframe::App for FanApp {
 
                                 self.slider_state.insert(c.id.clone(), value);
                                 if !enabled {
-                                    ui.small("locked");
+                                    ui.small(t!("dashboard.locked").to_string());
                                 }
                             });
                             ui.add_space(6.0);
@@ -623,7 +711,7 @@ impl FanApp {
     fn ui_graph_controls(&mut self, ui: &mut egui::Ui) {
         let mut dirty = false;
         ui.horizontal(|ui| {
-            ui.label("Fenêtre");
+            ui.label(t!("graph_controls.window_label").to_string());
             for m in GRAPH_WINDOWS {
                 let selected = self.settings.graph_window_minutes == m;
                 if ui.selectable_label(selected, format!("{m}m")).clicked() && !selected {
@@ -632,7 +720,7 @@ impl FanApp {
                 }
             }
             ui.separator();
-            ui.label("Échantillonnage");
+            ui.label(t!("graph_controls.sample_label").to_string());
             for s in GRAPH_SAMPLES {
                 let selected = self.settings.graph_sample_secs == s;
                 if ui.selectable_label(selected, format!("{s}s")).clicked() && !selected {
@@ -657,8 +745,8 @@ impl FanApp {
         };
         let mut open = true;
         let title = match kind {
-            PawnioDialogKind::NotInstalled => "PawnIO non installé",
-            PawnioDialogKind::NeedsAdmin => "PawnIO — droits administrateur",
+            PawnioDialogKind::NotInstalled => t!("pawnio.title_not_installed").to_string(),
+            PawnioDialogKind::NeedsAdmin => t!("pawnio.title_needs_admin").to_string(),
         };
         egui::Window::new(title)
             .collapsible(false)
@@ -667,46 +755,38 @@ impl FanApp {
             .open(&mut open)
             .show(ctx, |ui| {
                 ui.set_max_width(440.0);
-                ui.label(
-                    "PawnIO est un pilote kernel d'I/O pour Super I/O (capteurs / ventilateurs), \
-                     plus sûr que WinRing0.",
-                );
+                ui.label(t!("pawnio.intro").to_string());
                 ui.add_space(6.0);
                 match kind {
                     PawnioDialogKind::NotInstalled => {
-                        ui.label(
-                            "PawnIO n'est pas installé sur cette machine. Installez-le depuis \
-                             le site officiel, puis relancez l'application en Administrateur.",
-                        );
+                        ui.label(t!("pawnio.body_not_installed").to_string());
                     }
                     PawnioDialogKind::NeedsAdmin => {
-                        ui.label(
-                            "PawnIO est installé, mais l'exécuteur n'est pas accessible \
-                             (souvent : droits administrateur manquants, ou service fermé).",
-                        );
-                        ui.label("Relancez fancontrol-rs en tant qu'Administrateur.");
+                        ui.label(t!("pawnio.body_needs_admin_1").to_string());
+                        ui.label(t!("pawnio.body_needs_admin_2").to_string());
                     }
                 }
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
-                    ui.label("Site :");
+                    ui.label(t!("pawnio.site_label").to_string());
                     ui.hyperlink_to("pawnio.eu", PAWNIO_URL);
                 });
                 ui.add_space(10.0);
                 ui.horizontal(|ui| {
-                    if ui.button("Ouvrir pawnio.eu").clicked() {
+                    if ui.button(t!("pawnio.open_button").to_string()).clicked() {
                         ui.ctx().open_url(egui::OpenUrl::new_tab(PAWNIO_URL));
                     }
-                    if ui.button("Continuer sans hardware").clicked() {
+                    if ui
+                        .button(t!("pawnio.continue_without_hw").to_string())
+                        .clicked()
+                    {
                         self.pawnio_dialog = None;
                     }
-                    if ui.button("Fermer").clicked() {
+                    if ui.button(t!("common.close").to_string()).clicked() {
                         self.pawnio_dialog = None;
                     }
                 });
-                ui.small(
-                    "L'app reste utilisable (mock / config). Aucune installation automatique.",
-                );
+                ui.small(t!("pawnio.footer_note").to_string());
             });
         if !open {
             self.pawnio_dialog = None;
@@ -715,13 +795,13 @@ impl FanApp {
 
     fn ui_curves_panel(&mut self, ui: &mut egui::Ui, live_temp: Option<f64>) {
         ui.horizontal(|ui| {
-            ui.heading("Profiles & curves");
+            ui.heading(t!("curves_panel.heading").to_string());
             if let Some(s) = &self.profile_status {
                 ui.small(s);
             }
         });
         ui.horizontal(|ui| {
-            ui.label("Profile");
+            ui.label(t!("curves_panel.profile_label").to_string());
             egui::ComboBox::from_id_salt("profile_pick")
                 .selected_text(self.profile.id.as_str())
                 .show_ui(ui, |ui| {
@@ -734,29 +814,45 @@ impl FanApp {
                                 self.profile = p;
                                 self.selected_curve = 0;
                                 self.curve_states.clear();
-                                self.profile_status = Some(format!("Loaded {id}"));
+                                self.profile_status =
+                                    Some(t!("curves_panel.loaded_status", id = id).to_string());
                                 self.settings.last_profile_id = Some(id.clone());
                                 self.settings.save();
                             }
                         }
                     }
                 });
-            if ui.button("Reload list").clicked() {
+            if ui
+                .button(t!("curves_panel.reload_list").to_string())
+                .clicked()
+            {
                 self.profile_list = list_profiles().unwrap_or_default();
             }
-            if ui.button("Save").clicked() {
+            if ui.button(t!("curves_panel.save").to_string()).clicked() {
                 match save_profile(&self.profile) {
                     Ok(path) => {
-                        self.profile_status = Some(format!("Saved {}", path.display()));
+                        self.profile_status = Some(
+                            t!(
+                                "curves_panel.saved_status",
+                                path = path.display().to_string()
+                            )
+                            .to_string(),
+                        );
                         self.profile_list = list_profiles().unwrap_or_default();
                         self.settings.last_profile_id = Some(self.profile.id.as_str().to_string());
                         self.settings.save();
                     }
-                    Err(e) => self.profile_status = Some(format!("Save error: {e}")),
+                    Err(e) => {
+                        self.profile_status =
+                            Some(t!("curves_panel.save_error", error = e).to_string())
+                    }
                 }
             }
             ui.text_edit_singleline(&mut self.new_profile_name);
-            if ui.button("New / Save as").clicked() {
+            if ui
+                .button(t!("curves_panel.new_save_as").to_string())
+                .clicked()
+            {
                 let name = self.new_profile_name.trim();
                 if !name.is_empty() {
                     self.profile.id = fancontrol_core::ProfileId::new(name);
@@ -764,24 +860,31 @@ impl FanApp {
                     match save_profile(&self.profile) {
                         Ok(_) => {
                             self.profile_list = list_profiles().unwrap_or_default();
-                            self.profile_status = Some(format!("Saved as {name}"));
+                            self.profile_status =
+                                Some(t!("curves_panel.saved_as_status", name = name).to_string());
                             self.settings.last_profile_id = Some(name.to_string());
                             self.settings.save();
                         }
-                        Err(e) => self.profile_status = Some(format!("Save error: {e}")),
+                        Err(e) => {
+                            self.profile_status =
+                                Some(t!("curves_panel.save_error", error = e).to_string())
+                        }
                     }
                 }
             }
-            if ui.button("Apply now").clicked() {
+            if ui
+                .button(t!("curves_panel.apply_now").to_string())
+                .clicked()
+            {
                 let s = self.snapshot.lock().map(|g| g.clone()).unwrap_or_default();
                 self.apply_curves_from_snapshot(&s);
-                self.profile_status = Some("Curves applied once".into());
+                self.profile_status = Some(t!("curves_panel.curves_applied_once").to_string());
             }
         });
 
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
-                ui.label("Curves");
+                ui.label(t!("curves_panel.curves_label").to_string());
                 let n = self.profile.curves.len();
                 for i in 0..n {
                     let name = self.profile.curves[i].name.clone();
@@ -792,11 +895,14 @@ impl FanApp {
                         self.selected_curve = i;
                     }
                 }
-                if ui.button("+ curve").clicked() {
+                if ui
+                    .button(t!("curves_panel.add_curve").to_string())
+                    .clicked()
+                {
                     let id = format!("curve{}", self.profile.curves.len() + 1);
                     self.profile.curves.push(FanCurve::linear(
                         id,
-                        "New curve",
+                        t!("curves_panel.new_curve_name").to_string(),
                         30.0,
                         80.0,
                         20,
@@ -813,10 +919,11 @@ impl FanApp {
                         curve.name = name;
                     }
                     if show_curve_editor(ui, curve, live_temp) {
-                        self.profile_status = Some("Curve edited (Save to persist)".into());
+                        self.profile_status =
+                            Some(t!("curves_panel.curve_edited_status").to_string());
                     }
                 } else {
-                    ui.label("No curve selected");
+                    ui.label(t!("curves_panel.no_curve_selected").to_string());
                 }
             });
         });
@@ -899,7 +1006,7 @@ impl FanApp {
             return;
         };
         let mut open = true;
-        egui::Window::new("Renommer")
+        egui::Window::new(t!("rename.title").to_string())
             .collapsible(false)
             .resizable(false)
             .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
@@ -908,7 +1015,7 @@ impl FanApp {
                 ui.label(&id);
                 ui.text_edit_singleline(&mut self.rename_buf);
                 ui.horizontal(|ui| {
-                    if ui.button("Enregistrer").clicked() {
+                    if ui.button(t!("common.save").to_string()).clicked() {
                         let name = self.rename_buf.trim().to_string();
                         if !name.is_empty() {
                             if let Ok(mut map) = self.map.lock() {
@@ -922,7 +1029,7 @@ impl FanApp {
                         }
                         self.rename_id = None;
                     }
-                    if ui.button("Annuler").clicked() {
+                    if ui.button(t!("common.cancel").to_string()).clicked() {
                         self.rename_id = None;
                     }
                 });
