@@ -123,6 +123,8 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         really_exit: false,
         updates: UpdateChecker::new(),
         fractal_start: Instant::now(),
+        fractal_available: false,
+        window_visible: true,
     };
 
     let icon = eframe::icon_data::from_png_bytes(include_bytes!("../../../assets/icon.png"))
@@ -167,7 +169,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
             // One-time setup for the optional "fun" fractal panel's wgpu pipeline
             // (see crates/fancontrol-ui/src/fractal.rs). Skipped gracefully if the
             // wgpu backend isn't active — the panel is opt-in and off by default.
-            if let Some(render_state) = &cc.wgpu_render_state {
+            let fractal_available = if let Some(render_state) = &cc.wgpu_render_state {
                 let resources =
                     FractalResources::new(&render_state.device, render_state.target_format);
                 render_state
@@ -175,11 +177,14 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
                     .write()
                     .callback_resources
                     .insert(resources);
+                true
             } else {
                 tracing::warn!("wgpu render state unavailable: fractal panel disabled");
-            }
+                false
+            };
 
             let mut app = app;
+            app.fractal_available = fractal_available;
             // Must build after the event loop has started (tray-icon requirement).
             match AppTray::new() {
                 Ok(tray) => app.tray = Some(tray),
@@ -222,6 +227,10 @@ struct FanApp {
     really_exit: bool,
     updates: UpdateChecker,
     fractal_start: Instant,
+    /// Whether the wgpu backend (and thus the fractal panel's pipeline) is available.
+    fractal_available: bool,
+    /// Tracks minimize-to-tray so the fractal panel's fast repaint doesn't run while hidden.
+    window_visible: bool,
 }
 
 fn load_or_create_default_profile(preferred: Option<&str>) -> Profile {
@@ -251,8 +260,9 @@ fn load_or_create_default_profile(preferred: Option<&str>) -> Profile {
 impl eframe::App for FanApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Smooth fractal animation needs a much faster repaint cadence than the
-        // rest of the UI — only pay for it while the panel is actually visible.
-        let repaint_interval = if self.settings.show_fractal {
+        // rest of the UI — only pay for it while the panel is actually visible
+        // (both enabled in settings and not currently minimized to tray).
+        let repaint_interval = if self.settings.show_fractal && self.window_visible {
             Duration::from_millis(16)
         } else {
             Duration::from_millis(200)
@@ -267,6 +277,7 @@ impl eframe::App for FanApp {
             // entirely when the tray failed to initialize (rare — e.g. shell explorer.exe issues).
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+            self.window_visible = false;
         }
     }
 
@@ -494,13 +505,16 @@ impl eframe::App for FanApp {
                         });
                     ui.separator();
                     ui.label(t!("options.fractal_heading").to_string());
-                    dirty |= ui
-                        .checkbox(
-                            &mut self.settings.show_fractal,
-                            t!("options.fractal_toggle").to_string(),
-                        )
-                        .changed();
-                    if self.settings.show_fractal {
+                    ui.add_enabled_ui(self.fractal_available, |ui| {
+                        dirty |= ui
+                            .checkbox(
+                                &mut self.settings.show_fractal,
+                                t!("options.fractal_toggle").to_string(),
+                            )
+                            .on_disabled_hover_text(t!("options.fractal_unavailable").to_string())
+                            .changed();
+                    });
+                    if self.settings.show_fractal && self.fractal_available {
                         dirty |= ui
                             .add(
                                 egui::Slider::new(&mut self.settings.fractal_speed, 0.0..=3.0)
@@ -548,7 +562,7 @@ impl eframe::App for FanApp {
                 ui.add_space(8.0);
             }
 
-            if self.settings.show_fractal {
+            if self.settings.show_fractal && self.fractal_available {
                 let t = self.fractal_start.elapsed().as_secs_f32() * self.settings.fractal_speed;
                 show_fractal_panel(
                     ui,
@@ -1018,6 +1032,7 @@ impl FanApp {
                 TrayCommand::Open => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
                     ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                    self.window_visible = true;
                 }
                 TrayCommand::ApplyDefaultProfile => {
                     let snap = self.snapshot.lock().map(|g| g.clone()).unwrap_or_default();
