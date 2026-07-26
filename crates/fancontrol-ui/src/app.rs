@@ -1,6 +1,7 @@
 //! egui application: live sensors, sliders, graph, rename, options.
 
 use crate::curve_editor::show_curve_editor;
+use crate::fractal::{show_fractal_panel, FractalResources};
 use crate::graph::{show_cpu_graph, TempHistory};
 use crate::i18n::{display_name_for, resolve_startup_locale, SUPPORTED};
 use crate::poll::{spawn_poller, SharedMap, SharedSnapshot};
@@ -121,6 +122,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         tray: None,
         really_exit: false,
         updates: UpdateChecker::new(),
+        fractal_start: Instant::now(),
     };
 
     let icon = eframe::icon_data::from_png_bytes(include_bytes!("../../../assets/icon.png"))
@@ -161,6 +163,21 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
                 .or_default()
                 .push("noto_sans_cjk".to_owned());
             cc.egui_ctx.set_fonts(fonts);
+
+            // One-time setup for the optional "fun" fractal panel's wgpu pipeline
+            // (see crates/fancontrol-ui/src/fractal.rs). Skipped gracefully if the
+            // wgpu backend isn't active — the panel is opt-in and off by default.
+            if let Some(render_state) = &cc.wgpu_render_state {
+                let resources =
+                    FractalResources::new(&render_state.device, render_state.target_format);
+                render_state
+                    .renderer
+                    .write()
+                    .callback_resources
+                    .insert(resources);
+            } else {
+                tracing::warn!("wgpu render state unavailable: fractal panel disabled");
+            }
 
             let mut app = app;
             // Must build after the event loop has started (tray-icon requirement).
@@ -204,6 +221,7 @@ struct FanApp {
     /// instead of minimizing to tray.
     really_exit: bool,
     updates: UpdateChecker,
+    fractal_start: Instant,
 }
 
 fn load_or_create_default_profile(preferred: Option<&str>) -> Profile {
@@ -232,7 +250,14 @@ fn load_or_create_default_profile(preferred: Option<&str>) -> Profile {
 
 impl eframe::App for FanApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        ctx.request_repaint_after(Duration::from_millis(200));
+        // Smooth fractal animation needs a much faster repaint cadence than the
+        // rest of the UI — only pay for it while the panel is actually visible.
+        let repaint_interval = if self.settings.show_fractal {
+            Duration::from_millis(16)
+        } else {
+            Duration::from_millis(200)
+        };
+        ctx.request_repaint_after(repaint_interval);
         self.handle_tray(ctx);
 
         if self.tray.is_some() && !self.really_exit && ctx.input(|i| i.viewport().close_requested())
@@ -467,6 +492,32 @@ impl eframe::App for FanApp {
                                 }
                             }
                         });
+                    ui.separator();
+                    ui.label(t!("options.fractal_heading").to_string());
+                    dirty |= ui
+                        .checkbox(
+                            &mut self.settings.show_fractal,
+                            t!("options.fractal_toggle").to_string(),
+                        )
+                        .changed();
+                    if self.settings.show_fractal {
+                        dirty |= ui
+                            .add(
+                                egui::Slider::new(&mut self.settings.fractal_speed, 0.0..=3.0)
+                                    .text(t!("options.fractal_speed").to_string()),
+                            )
+                            .changed();
+                        ui.horizontal(|ui| {
+                            ui.label(t!("options.fractal_color_a").to_string());
+                            dirty |= ui
+                                .color_edit_button_rgb(&mut self.settings.fractal_color_a)
+                                .changed();
+                            ui.label(t!("options.fractal_color_b").to_string());
+                            dirty |= ui
+                                .color_edit_button_rgb(&mut self.settings.fractal_color_b)
+                                .changed();
+                        });
+                    }
                     if dirty {
                         self.settings.save();
                     }
@@ -493,6 +544,17 @@ impl eframe::App for FanApp {
                     &self.cpu_history,
                     &t!("graph.cpu_temperature_title"),
                     self.settings.graph_window_minutes,
+                );
+                ui.add_space(8.0);
+            }
+
+            if self.settings.show_fractal {
+                let t = self.fractal_start.elapsed().as_secs_f32() * self.settings.fractal_speed;
+                show_fractal_panel(
+                    ui,
+                    t,
+                    self.settings.fractal_color_a,
+                    self.settings.fractal_color_b,
                 );
                 ui.add_space(8.0);
             }
