@@ -53,7 +53,8 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 - Vendored modules: `crates/fancontrol-pawnio/modules/` (PawnIO.Modules).
 - i18n: 8 languages (en/fr/de/es/it/zh/ja/lb) via `rust-i18n`, picker in Options panel, OS-locale default on first run, live switch (no restart), Noto Sans CJK bundled for zh/ja glyph coverage. `crates/fancontrol-ui/locales/`.
 - Fun extra: optional fractal pyramid panel (raymarched, GLSL→WGSL port) rendered via a custom wgpu pipeline through `egui_wgpu::CallbackTrait` — first custom wgpu callback in this codebase (`crates/fancontrol-ui/src/fractal.rs` + `fractal_shader.wgsl`). Toggle + speed + 2 colors in Options panel; off by default.
-- UI: **egui/eframe 0.35** — live sensors, sliders, curve editor, curve auto-apply, CPU graph windows, rename map, options, system tray (minimize-to-tray, state icon, quick menu), profile switch/save persisted as last-used and auto-loaded on startup, manual "Check for updates" (GitHub latest-release compare + link, no auto-download).
+- UI: **egui/eframe 0.35** — live sensors, sliders, curve editor, curve auto-apply, graph windows, rename map, options, system tray (minimize-to-tray, state icon, quick menu), profile switch/save persisted as last-used and auto-loaded on startup, manual "Check for updates" (GitHub latest-release compare + link, no auto-download).
+- Graph: multi-sensor (pick any combination of live sensors in Options, ordered `graph_sensor_ids`, categorical color legend once >1 is plotted), per-control curve sensor binding next to the curve-assignment combo (defaults unchanged, so untouched controls behave exactly as before), "hide controls at 0% duty" option. Rendered via **`egui_plot`** (0.36, the release that pairs with `egui` 0.35, not 0.35.0 which pairs with `egui` 0.34) instead of a hand-rolled painter — the old custom fill polygon (`egui::Shape::convex_polygon`) fanned triangles from the oldest sample, which is only correct for a convex area and produced spike artifacts on any real (concave) trace. `crates/fancontrol-ui/src/graph.rs`.
 - Binary is GUI-subsystem (no console flash on launch); CLI usage from an existing terminal re-attaches to it automatically.
 - Packaging / sec: release workflow + owner `release` environment approval; CodeQL + cargo-audit + Dependabot; unsigned exe + SHA256. Signing later — `docs/SIGNING_AND_DISTRIBUTION.md`.
 
@@ -64,6 +65,8 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 3. Auto-update: download + SHA256 verify + install (manual check already done) — see `docs/SECURITY.md`.
 4. AMD/Intel GPU temp — blocked on hardware to validate against, see `docs/GPU_VENDOR_APIS.md`.
 5. RGB (future — not Super I/O).
+6. Verify SSD/NVMe temperature detection (`crates/fancontrol-plugins/src/storage_win.rs`, `DeviceIoControl` + NVMe health-log fallback) against real hardware — implemented and reviewed, but not yet confirmed to report correctly on an actual machine.
+7. Decide whether `MockProvider` should stay included by default: `include_mock = !cli.hw_only` in `src/main.rs` means mock sensors/fans/controls are mixed into every normal run (including plain `ui`) unless `--hw-only` is passed explicitly. Worth revisiting whether that's still the right default for a shipped build, or whether mocks should become opt-in instead.
 
 ## Safety product rules
 
