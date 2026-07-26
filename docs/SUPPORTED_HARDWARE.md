@@ -100,7 +100,7 @@ cargo run -- sample
 3. If you attempt writes (only if you accept risk):
 
 ```bash
-cargo run -- --allow-hw-write test-duty <control-id> --percent 40
+cargo run -- --hw-only test-duty --control <control-id> --percent 40
 # restore previous duty afterward
 ```
 
