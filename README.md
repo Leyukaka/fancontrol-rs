@@ -30,6 +30,8 @@
 - 🎛️ Full control — Curves, profiles, live sliders, temperature graphs
 - 🧩 Plugin architecture — Extensible sensors & controls
 - 📊 Real-time UI — Built with egui (live sensors, curve editor MVP)
+- 🌍 8 languages — English, French, German, Spanish, Italian, Chinese, Japanese, Luxembourgish
+- 🌀 Fun extra — optional raymarched fractal panel (wgpu shader), toggle it in Options
 - 🦀 Pure Rust — Core, UI, hardware backend and CLI
 
 ## Screenshot
