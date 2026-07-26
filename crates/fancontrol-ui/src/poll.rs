@@ -14,9 +14,12 @@ pub struct Snapshot {
     pub fans: Vec<(String, String, f64)>,
     pub controls: Vec<ControlSnap>,
     pub cpu_temp: Option<f64>,
-    /// First host GPU sensor found (`host.gpu{index}`). `None` on machines without a
-    /// supported discrete GPU (no `nvidia-smi`, AMD/Intel not probed).
-    pub gpu_temp: Option<f64>,
+    /// Sensor id behind `cpu_temp`, so the UI can seed a sensor picker with it.
+    pub cpu_temp_id: Option<String>,
+    /// Sensor id of the first host GPU sensor found (`host.gpu{index}`), so the UI
+    /// can seed a sensor picker with it. `None` on machines without a supported
+    /// discrete GPU (no `nvidia-smi`, AMD/Intel not probed).
+    pub gpu_temp_id: Option<String>,
     pub error: Option<String>,
     pub tick: u64,
 }
@@ -80,7 +83,8 @@ fn take_snapshot(
     let mut ctrl_snaps = Vec::new();
     let mut error = None;
     let mut cpu_temp = None;
-    let mut gpu_temp = None;
+    let mut cpu_temp_id = None;
+    let mut gpu_temp_id = None;
 
     // Fast path: one HWM bus transaction for all pawnio channels
     let mut pawnio_temp: HashMap<String, f64> = HashMap::new();
@@ -122,6 +126,7 @@ fn take_snapshot(
                                 && (name == "CPU" || label.eq_ignore_ascii_case("CPU"))
                             {
                                 cpu_temp = Some(t);
+                                cpu_temp_id = Some(id.to_string());
                             }
                             temps.push((id.to_string(), label, t));
                             continue;
@@ -147,8 +152,8 @@ fn take_snapshot(
             Ok(v) => match s.kind {
                 SensorKind::Temperature if v != 0.0 => {
                     let label = map.sensor_name(id, &s.name).to_string();
-                    if gpu_temp.is_none() && id.starts_with("host.gpu") {
-                        gpu_temp = Some(v);
+                    if gpu_temp_id.is_none() && id.starts_with("host.gpu") {
+                        gpu_temp_id = Some(id.to_string());
                     }
                     temps.push((id.to_string(), label, v));
                 }
@@ -213,7 +218,8 @@ fn take_snapshot(
         fans,
         controls: ctrl_snaps,
         cpu_temp,
-        gpu_temp,
+        cpu_temp_id,
+        gpu_temp_id,
         error,
         tick,
     }
