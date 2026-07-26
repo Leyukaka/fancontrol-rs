@@ -1,6 +1,7 @@
 //! CPU temperature sparkline with glow fill and configurable time window.
 
-use eframe::egui::{self, Color32, Pos2, Sense, Stroke, StrokeKind, Vec2};
+use eframe::egui::{self, Color32};
+use egui_plot::{Line, Plot};
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
@@ -77,6 +78,19 @@ impl TempHistory {
 
     pub fn is_empty(&self) -> bool {
         self.samples.is_empty()
+    }
+
+    /// `[minutes-ago, celsius]` pairs for `egui_plot`, oldest first, so "now"
+    /// sits at x = 0 and older samples sit at negative x (same convention the
+    /// `-Nm … now` axis labels use).
+    pub fn plot_points(&self, now: Instant) -> Vec<[f64; 2]> {
+        self.samples
+            .iter()
+            .map(|(ts, temp)| {
+                let age_mins = now.saturating_duration_since(*ts).as_secs_f64() / 60.0;
+                [-age_mins, *temp as f64]
+            })
+            .collect()
     }
 }
 
@@ -170,17 +184,13 @@ pub fn show_temp_graph(
         }
 
         let height = ui.available_height().max(60.0);
-        let (rect, _resp) =
-            ui.allocate_exact_size(Vec2::new(ui.available_width(), height), Sense::hover());
 
         if series.iter().all(|s| s.history.is_empty()) {
-            ui.painter().text(
-                rect.center(),
-                egui::Align2::CENTER_CENTER,
-                t!("graph.loading").to_string(),
-                egui::FontId::proportional(14.0),
-                Color32::GRAY,
-            );
+            ui.allocate_ui(egui::vec2(ui.available_width(), height), |ui| {
+                ui.centered_and_justified(|ui| {
+                    ui.colored_label(Color32::GRAY, t!("graph.loading").to_string());
+                });
+            });
             return;
         }
 
@@ -200,142 +210,52 @@ pub fn show_temp_graph(
         );
         *axis_max = Some(max_t);
 
-        let painter = ui.painter_at(rect);
-        // Background
-        painter.rect_filled(rect, 6.0, Color32::from_rgb(12, 14, 22));
-        painter.rect_stroke(
-            rect,
-            6.0,
-            Stroke::new(1.0_f32, Color32::from_rgb(40, 48, 70)),
-            StrokeKind::Inside,
-        );
+        let now = Instant::now();
+        let window_mins = f64::from(window_minutes.max(1));
 
-        // Grid
-        for i in 0..4 {
-            let y = rect.top() + rect.height() * (i as f32) / 3.0;
-            painter.line_segment(
-                [Pos2::new(rect.left(), y), Pos2::new(rect.right(), y)],
-                Stroke::new(1.0_f32, Color32::from_rgba_unmultiplied(60, 70, 100, 40)),
-            );
-        }
-
-        let window = Duration::from_secs(u64::from(window_minutes.max(1)) * 60);
-        let newest = series
-            .iter()
-            .filter_map(|s| s.history.samples.back().map(|(t, _)| *t))
-            .max()
-            .unwrap_or_else(Instant::now);
-
-        let map_y = |t: f32| {
-            let u = ((t - min_t) / (max_t - min_t)).clamp(0.0, 1.0);
-            rect.bottom() - u * rect.height()
-        };
-        let map_x = |ts: Instant| {
-            let age = newest.saturating_duration_since(ts).as_secs_f32();
-            let span = window.as_secs_f32().max(1.0);
-            // leftmost = oldest (full window age), rightmost = newest (age 0)
-            let u = (1.0 - age / span).clamp(0.0, 1.0);
-            rect.left() + u * rect.width()
-        };
-
-        for s in series {
-            if s.history.is_empty() {
-                continue;
-            }
-            let points: Vec<Pos2> = s
-                .history
-                .samples
-                .iter()
-                .map(|(ts, t)| Pos2::new(map_x(*ts), map_y(*t)))
-                .collect();
-
-            // Single-series keeps today's temp-status coloring; multi-series
-            // colors by identity instead (reusing temp_color per-series would
-            // make every hot sensor render identically red, defeating the
-            // point of picking several).
-            let color = if series.len() <= 1 {
-                temp_color(s.history.last().unwrap_or(40.0))
-            } else {
-                series_color(s.palette_index)
-            };
-
-            if s.palette_index == 0 {
-                // Fill under curve
-                if points.len() >= 2 {
-                    let mut fill = points.clone();
-                    fill.push(Pos2::new(points.last().unwrap().x, rect.bottom()));
-                    fill.push(Pos2::new(points[0].x, rect.bottom()));
-                    painter.add(egui::Shape::convex_polygon(
-                        fill,
-                        Color32::from_rgba_unmultiplied(0, 200, 255, 28),
-                        Stroke::new(0.0_f32, Color32::TRANSPARENT),
-                    ));
+        Plot::new("temp_graph")
+            .height(height)
+            .allow_drag(false)
+            .allow_zoom(false)
+            .allow_scroll(false)
+            .allow_boxed_zoom(false)
+            .include_x(-window_mins)
+            .include_x(0.0)
+            .include_y(f64::from(min_t))
+            .include_y(f64::from(max_t))
+            .x_axis_formatter(|mark, _range| format!("{:.0}m", mark.value))
+            .y_axis_formatter(|mark, _range| format!("{:.0}°C", mark.value))
+            .label_formatter(|hover| match hover {
+                egui_plot::HoverPosition::NearDataPoint {
+                    plot_name,
+                    position,
+                    ..
+                } => Some(format!("{plot_name}\n{:.1}°C", position.y)),
+                egui_plot::HoverPosition::Elsewhere { .. } => None,
+            })
+            .show(ui, |plot_ui| {
+                for s in series {
+                    if s.history.is_empty() {
+                        continue;
+                    }
+                    // Single-series keeps today's temp-status coloring; multi-series
+                    // colors by identity instead (reusing temp_color per-series would
+                    // make every hot sensor render identically red, defeating the
+                    // point of picking several).
+                    let color = if series.len() <= 1 {
+                        temp_color(s.history.last().unwrap_or(40.0))
+                    } else {
+                        series_color(s.palette_index)
+                    };
+                    let mut line = Line::new(s.label, s.history.plot_points(now))
+                        .color(color)
+                        .width(2.0_f32);
+                    if s.palette_index == 0 {
+                        line = line.fill(min_t);
+                    }
+                    plot_ui.line(line);
                 }
-                // Glow layers
-                for (w, a) in [(10.0_f32, 20_u8), (6.0, 40), (3.0, 90)] {
-                    let stroke = Stroke::new(
-                        w,
-                        Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), a),
-                    );
-                    painter.add(egui::Shape::line(points.clone(), stroke));
-                }
-                // Core line
-                painter.add(egui::Shape::line(
-                    points.clone(),
-                    Stroke::new(2.0_f32, Color32::from_rgb(220, 245, 255)),
-                ));
-                // Head pulse
-                if let Some(p) = points.last() {
-                    // Wrap in f64 before casting to f32 (avoids losing phase precision
-                    // after long uptimes) and use a smooth sine wave instead of
-                    // `.sin().abs()` (which folds the wave and creates a
-                    // direction-reversal cusp at every zero-crossing).
-                    let time = ui.input(|i| i.time);
-                    let phase = (time * 4.0).rem_euclid(std::f64::consts::TAU) as f32;
-                    let r = 4.0 + (phase.sin() * 0.5 + 0.5) * 2.0;
-                    painter.circle_filled(
-                        *p,
-                        r + 4.0,
-                        Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 50),
-                    );
-                    painter.circle_filled(*p, r, color);
-                }
-            } else {
-                painter.add(egui::Shape::line(points, Stroke::new(2.0_f32, color)));
-            }
-        }
-
-        // Min/max temp labels
-        painter.text(
-            Pos2::new(rect.left() + 6.0, rect.top() + 4.0),
-            egui::Align2::LEFT_TOP,
-            format!("{max_t:.0}°"),
-            egui::FontId::monospace(10.0),
-            Color32::GRAY,
-        );
-        painter.text(
-            Pos2::new(rect.left() + 6.0, rect.bottom() - 28.0),
-            egui::Align2::LEFT_TOP,
-            format!("{min_t:.0}°"),
-            egui::FontId::monospace(10.0),
-            Color32::GRAY,
-        );
-
-        // Time axis labels: -Nm … now
-        painter.text(
-            Pos2::new(rect.left() + 6.0, rect.bottom() - 2.0),
-            egui::Align2::LEFT_BOTTOM,
-            format!("-{window_minutes}m"),
-            egui::FontId::monospace(10.0),
-            Color32::from_rgb(100, 110, 140),
-        );
-        painter.text(
-            Pos2::new(rect.right() - 6.0, rect.bottom() - 2.0),
-            egui::Align2::RIGHT_BOTTOM,
-            t!("graph.now").to_string(),
-            egui::FontId::monospace(10.0),
-            Color32::from_rgb(100, 110, 140),
-        );
+            });
     });
 }
 
@@ -420,12 +340,13 @@ mod tests {
     }
 
     #[test]
-    fn phase_wrap_never_negative_or_nan_for_large_time() {
-        for t in [0.0_f64, 1.0, 1000.0, 1_000_000.0, 86_400.0 * 30.0] {
-            let phase = (t * 4.0).rem_euclid(std::f64::consts::TAU);
-            assert!(phase.is_finite());
-            assert!((0.0..std::f64::consts::TAU).contains(&phase));
-        }
+    fn plot_points_places_a_single_sample_at_x_zero() {
+        let now = Instant::now();
+        let mut h = TempHistory::default();
+        h.push_if_due(55.0, now);
+        let pts = h.plot_points(now);
+        assert_eq!(pts.len(), 1);
+        assert_eq!(pts[0], [0.0, 55.0]);
     }
 
     #[test]

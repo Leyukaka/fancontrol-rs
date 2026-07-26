@@ -13,6 +13,7 @@ fancontrol-plugins = { workspace = true }
 fancontrol-pawnio = { workspace = true }
 egui = { workspace = true }
 eframe = { workspace = true }
+egui_plot = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
