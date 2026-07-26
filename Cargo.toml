@@ -72,6 +72,16 @@ windows-sys = { version = "0.61", features = [
 [build-dependencies]
 winresource = "0.1"
 
+# Read automatically by winresource (default "toml" feature) to fill in PE version-resource
+# fields that WindowsResource::new() otherwise leaves blank. Incomplete publisher metadata on
+# an unsigned PE is itself a mild heuristic signal for some AV engines — this is pure build-time
+# metadata, no functional/runtime change.
+[package.metadata.winresource]
+CompanyName = "Leyukaka"
+LegalCopyright = "Copyright (c) 2026 Leyukaka"
+OriginalFilename = "fancontrol-rs.exe"
+FileDescription = "A modern, full-featured fan control application for Windows"
+
 [profile.release]
 lto = true
 codegen-units = 1

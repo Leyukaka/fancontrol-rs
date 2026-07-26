@@ -17,7 +17,7 @@ Open a **GitHub Issue** with:
 1. **What you expected** vs **what happened**
 2. OS / build (`cargo run -- --version` or tag), and whether you used admin elevation
 3. Board / Super I/O if known (e.g. NCT6687D), or output of `detect` / `backend-status` / `sample`
-4. Whether `--allow-hw-write` was used (do **not** paste secrets or full dumps of unrelated personal files)
+4. Whether `--read-only` was used (writes are on by default; do **not** paste secrets or full dumps of unrelated personal files)
 
 For hardware misreads/miswrites, attach relevant CLI logs (redact serials if any). Prefer reproducible steps over screenshots alone.
 
@@ -91,7 +91,7 @@ Maintainers may **reject or rewrite** any contribution whose intent, quality, or
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` |
 | Tests | `cargo test --workspace` |
 | Specs | Non-trivial product/arch changes should update `specs/` and/or `AGENTS.md` Status when reality changes |
-| Hardware | Prefer `sample` / `list-sensors` / `list-controls`; writes only with `--allow-hw-write` and a stated plan |
+| Hardware | Prefer `sample` / `list-sensors` / `list-controls`; writes are on by default — use `--read-only` unless you have a stated plan |
 
 ## Local development (Windows host)
 

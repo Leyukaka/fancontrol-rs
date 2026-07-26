@@ -1,6 +1,6 @@
 # Roadmap
 
-Last aligned with product reality: **v0.1.5** (2026-07).
+Last aligned with product reality: **v0.1.5** (2026-07) — note `main` has since moved past this: i18n shipped under tag `v0.1.6-i18n-beta.1`, and the fractal-fun panel has landed on top of it (unreleased/untagged so far).
 
 ## Phase 0 — Foundation
 

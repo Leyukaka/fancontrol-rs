@@ -45,6 +45,8 @@ Replace FanControl with a modern, secure, open-source alternative written in Rus
 | System tray | **Done** |
 | Rename channels | **Done** (`channel-map.json`) |
 | Missing-PawnIO popup | **Done** |
+| Localization (8 languages: en/fr/de/es/it/zh/ja/lb) | **Done** (`rust-i18n`, picker in Options panel, OS-locale default) |
+| Manual update check (GitHub latest-release compare + link) | **Done** |
 
 ### Reliability
 
@@ -59,7 +61,7 @@ Replace FanControl with a modern, secure, open-source alternative written in Rus
 - Multi-sensor curves (e.g. max of CPU + GPU)
 - External sensor sources (HWInfo shared memory, more plugins)
 - Scheduling / time-based profiles
-- **In-app auto-update** (manual check + SHA256 verify — planned; not implemented)
+- **In-app auto-update**: download + SHA256 verify + install (manual "check for updates" already shipped — see UI table above)
 - Remote monitoring (optional)
 - Linux support
 - Authenticode **code signing** (docs ready; not wired)

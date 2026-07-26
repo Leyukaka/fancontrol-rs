@@ -30,6 +30,8 @@
 - 🎛️ Full control — Curves, profiles, live sliders, temperature graphs
 - 🧩 Plugin architecture — Extensible sensors & controls
 - 📊 Real-time UI — Built with egui (live sensors, curve editor MVP)
+- 🌍 8 languages — English, French, German, Spanish, Italian, Chinese, Japanese, Luxembourgish
+- 🌀 Fun extra — optional raymarched fractal panel (wgpu shader), toggle it in Options
 - 🦀 Pure Rust — Core, UI, hardware backend and CLI
 
 ## Screenshot
@@ -105,7 +107,7 @@ Release binary: `target/release/fancontrol-rs.exe`.
 This app talks to **PawnIO** (kernel I/O), may spawn **nvidia-smi** for optional GPU temps, and reads SSD temps via native Windows storage APIs (no PowerShell). Like FanControl / LibreHardwareMonitor, scanners may still flag the **unsigned** binary (heuristic / behavioral rules, not a proof of malware).
 
 - Prefer official Releases + verify **SHA256** — see [docs/SECURITY.md](./docs/SECURITY.md).
-- Especially with `--allow-hw-write` (real PWM control), Defender can be noisier.
+- PWM writes are on by default; running without `--read-only` (real PWM control) can make Defender noisier.
 
 **Do not disable Defender entirely.** Prefer a folder exclusion for local development:
 
