@@ -1,7 +1,7 @@
 //! egui application: live sensors, sliders, graph, rename, options.
 
 use crate::curve_editor::show_curve_editor;
-use crate::graph::{show_cpu_graph, TempHistory, ThermalSignal};
+use crate::graph::{show_temp_graph, GraphSeries, TempHistory, ThermalSignal};
 use crate::i18n::{display_name_for, resolve_startup_locale, SUPPORTED};
 use crate::poll::{spawn_poller, SharedMap, SharedSnapshot};
 use crate::registry::{backend_status, build_registry, BackendStatus};
@@ -91,11 +91,6 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
     }
     let pawnio_dialog = detect_pawnio_dialog(options.include_hw);
 
-    let mut cpu_history = TempHistory::default();
-    cpu_history.configure(settings.graph_window_minutes, settings.graph_sample_secs);
-    let mut gpu_history = TempHistory::default();
-    gpu_history.configure(settings.graph_window_minutes, settings.graph_sample_secs);
-
     let app = FanApp {
         options,
         map,
@@ -109,8 +104,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         rename_id: None,
         rename_buf: String::new(),
         rename_is_control: false,
-        cpu_history,
-        gpu_history,
+        histories: HashMap::new(),
         graph_axis_max: None,
         show_settings: false,
         show_curves: true,
@@ -212,12 +206,13 @@ struct FanApp {
     rename_id: Option<String>,
     rename_buf: String,
     rename_is_control: bool,
-    cpu_history: TempHistory,
-    gpu_history: TempHistory,
-    /// Shared Y-axis smoothing state for the classic graph (eases toward a new
-    /// max instead of jumping in one frame when the rolling window prunes a
-    /// hot sample). Lives on `FanApp`, not `TempHistory`, since the axis is
-    /// shared across whatever's plotted.
+    /// One history per selected sensor id (`settings.graph_sensor_ids`), lazily
+    /// created/dropped as the selection changes.
+    histories: HashMap<String, TempHistory>,
+    /// Shared Y-axis smoothing state for the graph (eases toward a new max
+    /// instead of jumping in one frame when the rolling window prunes a hot
+    /// sample). Lives on `FanApp`, not `TempHistory`, since the axis is
+    /// shared across every plotted series.
     graph_axis_max: Option<f32>,
     show_settings: bool,
     show_curves: bool,
@@ -301,12 +296,44 @@ impl eframe::App for FanApp {
 
         let snap = self.snapshot.lock().map(|g| g.clone()).unwrap_or_default();
 
-        if let Some(t) = snap.cpu_temp {
-            self.cpu_history.push_if_due(t as f32, Instant::now());
+        // One-shot seed: carry the old cpu/gpu auto-guess over as the initial graph
+        // selection so upgrading users don't lose their CPU line.
+        if !self.settings.graph_sensor_ids_seeded && (snap.tick > 0 || !snap.temps.is_empty()) {
+            let mut seed = Vec::new();
+            if let Some(id) = &snap.cpu_temp_id {
+                seed.push(id.clone());
+            }
+            if let Some(id) = &snap.gpu_temp_id {
+                seed.push(id.clone());
+            }
+            self.settings.graph_sensor_ids = seed;
+            self.settings.graph_sensor_ids_seeded = true;
+            self.settings.save();
         }
-        if let Some(t) = snap.gpu_temp {
-            self.gpu_history.push_if_due(t as f32, Instant::now());
+
+        let live_temps: HashMap<&str, f64> = snap
+            .temps
+            .iter()
+            .map(|(id, _, v)| (id.as_str(), *v))
+            .collect();
+        let (win, samp) = (
+            self.settings.graph_window_minutes,
+            self.settings.graph_sample_secs,
+        );
+        for id in &self.settings.graph_sensor_ids {
+            if let Some(&v) = live_temps.get(id.as_str()) {
+                self.histories
+                    .entry(id.clone())
+                    .or_insert_with(|| {
+                        let mut h = TempHistory::default();
+                        h.configure(win, samp);
+                        h
+                    })
+                    .push_if_due(v as f32, Instant::now());
+            }
         }
+        self.histories
+            .retain(|id, _| self.settings.graph_sensor_ids.contains(id));
 
         // Auto-apply curves ~1 Hz when enabled + write allowed
         if self.settings.auto_apply_curves
@@ -614,6 +641,28 @@ impl eframe::App for FanApp {
                                 .changed();
                         });
                     }
+                    ui.separator();
+                    ui.label(t!("options.graph_sensors_heading").to_string());
+                    ui.small(t!("options.graph_sensors_note").to_string());
+                    if snap.temps.is_empty() {
+                        ui.small(t!("dashboard.none").to_string());
+                    } else {
+                        for (id, label, _) in &snap.temps {
+                            let mut checked =
+                                self.settings.graph_sensor_ids.iter().any(|s| s == id);
+                            if ui.checkbox(&mut checked, label.as_str()).changed() {
+                                if checked {
+                                    self.settings.graph_sensor_ids.push(id.clone());
+                                } else {
+                                    self.settings.graph_sensor_ids.retain(|s| s != id);
+                                }
+                                self.settings.save();
+                            }
+                        }
+                    }
+                    if self.settings.graph_sensor_ids.len() > 6 {
+                        ui.small(t!("options.graph_sensors_many_note").to_string());
+                    }
                     if dirty {
                         self.settings.clamp_graph_options();
                         self.settings.save();
@@ -634,6 +683,12 @@ impl eframe::App for FanApp {
         }
 
         if self.settings.show_graph_panel {
+            let labels: HashMap<&str, &str> = snap
+                .temps
+                .iter()
+                .map(|(id, label, _)| (id.as_str(), label.as_str()))
+                .collect();
+
             egui::Panel::top("graph_area")
                 .resizable(true)
                 .default_size(240.0)
@@ -644,12 +699,25 @@ impl eframe::App for FanApp {
                 .max_size(600.0)
                 .show(ui, |ui| {
                     self.ui_graph_controls(ui);
+                    let histories = &self.histories;
+                    let series: Vec<GraphSeries> = self
+                        .settings
+                        .graph_sensor_ids
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(i, id)| {
+                            histories.get(id).map(|h| GraphSeries {
+                                label: labels.get(id.as_str()).copied().unwrap_or(id.as_str()),
+                                palette_index: i,
+                                history: h,
+                            })
+                        })
+                        .collect();
                     let style = self.settings.graph_style;
                     if style == GraphStyle::Classic || !self.shader_backend_available {
-                        show_cpu_graph(
+                        show_temp_graph(
                             ui,
-                            &self.cpu_history,
-                            &t!("graph.cpu_temperature_title"),
+                            &series,
                             self.settings.graph_window_minutes,
                             &mut self.graph_axis_max,
                         );
@@ -661,8 +729,11 @@ impl eframe::App for FanApp {
                     } else {
                         let t =
                             self.shader_clock.elapsed().as_secs_f32() * self.settings.shader_speed;
-                        let signal =
-                            ThermalSignal::from_histories(&self.cpu_history, &self.gpu_history);
+                        let readings: Vec<(String, f32)> = series
+                            .iter()
+                            .filter_map(|s| s.history.last().map(|v| (s.label.to_string(), v)))
+                            .collect();
+                        let signal = ThermalSignal::from_readings(readings);
                         show_shader_panel(
                             ui,
                             style,
@@ -841,6 +912,41 @@ impl eframe::App for FanApp {
                                         }
                                     });
 
+                                if self.profile.assignments.contains_key(&c.id) {
+                                    let bound_id = self
+                                        .profile
+                                        .sensor_bindings
+                                        .get(&c.id)
+                                        .cloned()
+                                        .unwrap_or_else(|| "pawnio.0.temp.CPU".to_string());
+                                    let bound_label = snap
+                                        .temps
+                                        .iter()
+                                        .find(|(id, _, _)| id == &bound_id)
+                                        .map(|(_, label, _)| label.clone())
+                                        .unwrap_or_else(|| bound_id.clone());
+                                    let bind_resp =
+                                        egui::ComboBox::from_id_salt(format!("bind-{}", c.id))
+                                            .selected_text(bound_label)
+                                            .show_ui(ui, |ui| {
+                                                for (id, label, _) in &snap.temps {
+                                                    let selected = id == &bound_id;
+                                                    if ui
+                                                        .selectable_label(selected, label.as_str())
+                                                        .clicked()
+                                                        && !selected
+                                                    {
+                                                        self.profile
+                                                            .sensor_bindings
+                                                            .insert(c.id.clone(), id.clone());
+                                                    }
+                                                }
+                                            });
+                                    bind_resp.response.on_hover_text(
+                                        t!("dashboard.curve_sensor_hover").to_string(),
+                                    );
+                                }
+
                                 let locked = self.is_user_locked(&c.id);
                                 let hw_duty = c.duty.unwrap_or(0);
                                 if !locked {
@@ -922,14 +1028,12 @@ impl FanApp {
         if dirty {
             self.settings.clamp_graph_options();
             self.settings.save();
-            self.cpu_history.configure(
-                self.settings.graph_window_minutes,
-                self.settings.graph_sample_secs,
-            );
-            self.gpu_history.configure(
-                self.settings.graph_window_minutes,
-                self.settings.graph_sample_secs,
-            );
+            for h in self.histories.values_mut() {
+                h.configure(
+                    self.settings.graph_window_minutes,
+                    self.settings.graph_sample_secs,
+                );
+            }
         }
     }
 

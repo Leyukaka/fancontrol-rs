@@ -91,33 +91,89 @@ pub fn ease_toward(current: f32, target: f32, dt_secs: f32, half_life_secs: f32)
 /// window prunes away a hot sample, instead of snapping instantly.
 const AXIS_MAX_HALF_LIFE_SECS: f32 = 1.5;
 
-/// Draw a glowing temperature graph in `ui`.
+/// One plotted line on the temperature graph.
+pub struct GraphSeries<'a> {
+    pub label: &'a str,
+    /// Position in the user's ordered sensor selection — used both as the
+    /// stable (restart-proof) color-palette index and to mark the "primary"
+    /// series (index 0) that gets the full glow/fill/head-pulse treatment.
+    pub palette_index: usize,
+    pub history: &'a TempHistory,
+}
+
+/// Categorical palette for identifying series by color once ≥2 sensors are
+/// plotted (validated for pairwise contrast on this dark UI and colorblind
+/// safety up to 8 concurrent series; cycles and relies on the legend text
+/// beyond that — a deliberate tradeoff, not an oversight, since a 9th
+/// generated/hashed hue would be less distinguishable, not more).
+const SERIES_PALETTE: [Color32; 8] = [
+    Color32::from_rgb(0x39, 0x87, 0xe5), // blue
+    Color32::from_rgb(0xd9, 0x59, 0x26), // orange
+    Color32::from_rgb(0x19, 0x9e, 0x70), // teal
+    Color32::from_rgb(0xc9, 0x85, 0x00), // gold
+    Color32::from_rgb(0xd5, 0x51, 0x81), // magenta
+    Color32::from_rgb(0x00, 0x83, 0x00), // green
+    Color32::from_rgb(0x90, 0x85, 0xe9), // violet
+    Color32::from_rgb(0xe6, 0x67, 0x67), // red
+];
+
+pub fn series_color(palette_index: usize) -> Color32 {
+    SERIES_PALETTE[palette_index % SERIES_PALETTE.len()]
+}
+
+/// Draw the temperature graph for 0..N selected sensors in `ui`.
 ///
 /// `window_minutes` is used for the X-axis labels (`-Nm` … `now`). `axis_max`
-/// is smoothing state owned by the caller (shared across frames, and across
-/// series once the graph becomes multi-series) so the Y axis eases toward a
-/// new max instead of jumping in a single frame.
-pub fn show_cpu_graph(
+/// is Y-axis smoothing state owned by the caller (shared across all plotted
+/// series, since they share one axis) so it eases toward a new max instead of
+/// jumping in a single frame. With exactly one series this renders identically
+/// to the original single-CPU-line graph (temp-colored line, full glow, no
+/// legend); with ≥2 series, color instead encodes *which* sensor (a legend
+/// row appears, and only the first/primary series keeps the full glow
+/// treatment so overlapping lines stay legible).
+pub fn show_temp_graph(
     ui: &mut egui::Ui,
-    history: &TempHistory,
-    title: &str,
+    series: &[GraphSeries<'_>],
     window_minutes: u16,
     axis_max: &mut Option<f32>,
 ) {
     ui.group(|ui| {
-        ui.horizontal(|ui| {
-            ui.heading(title);
-            ui.weak(format!("({window_minutes}m)"));
-            if let Some(t) = history.last() {
-                let color = temp_color(t);
-                ui.colored_label(color, format!("{t:.1} °C"));
+        if series.len() <= 1 {
+            ui.horizontal(|ui| {
+                ui.heading(series.first().map(|s| s.label).unwrap_or(""));
+                ui.weak(format!("({window_minutes}m)"));
+                if let Some(t) = series.first().and_then(|s| s.history.last()) {
+                    ui.colored_label(temp_color(t), format!("{t:.1} °C"));
+                }
+            });
+        } else {
+            ui.horizontal(|ui| {
+                ui.heading(t!("graph.multi_sensor_title").to_string());
+                ui.weak(format!("({window_minutes}m)"));
+            });
+            ui.horizontal_wrapped(|ui| {
+                for s in series {
+                    let color = series_color(s.palette_index);
+                    let val = s
+                        .history
+                        .last()
+                        .map(|t| format!("{t:.1}°"))
+                        .unwrap_or_else(|| "—".to_string());
+                    ui.label(egui::RichText::new("●").color(color));
+                    ui.label(egui::RichText::new(format!("{} {val}", s.label)).weak());
+                    ui.add_space(10.0);
+                }
+            });
+            if series.len() > 6 {
+                ui.small(t!("graph.many_sensors_note").to_string());
             }
-        });
+        }
 
         let height = ui.available_height().max(60.0);
         let (rect, _resp) =
             ui.allocate_exact_size(Vec2::new(ui.available_width(), height), Sense::hover());
-        if history.is_empty() {
+
+        if series.iter().all(|s| s.history.is_empty()) {
             ui.painter().text(
                 rect.center(),
                 egui::Align2::CENTER_CENTER,
@@ -129,10 +185,9 @@ pub fn show_cpu_graph(
         }
 
         let min_t = 20.0_f32;
-        let target_max = history
-            .samples
+        let target_max = series
             .iter()
-            .map(|(_, t)| *t)
+            .flat_map(|s| s.history.samples.iter().map(|(_, t)| *t))
             .fold(80.0_f32, f32::max)
             .max(50.0)
             + 5.0;
@@ -165,10 +220,10 @@ pub fn show_cpu_graph(
         }
 
         let window = Duration::from_secs(u64::from(window_minutes.max(1)) * 60);
-        let newest = history
-            .samples
-            .back()
-            .map(|(t, _)| *t)
+        let newest = series
+            .iter()
+            .filter_map(|s| s.history.samples.back().map(|(t, _)| *t))
+            .max()
             .unwrap_or_else(Instant::now);
 
         let map_y = |t: f32| {
@@ -183,55 +238,71 @@ pub fn show_cpu_graph(
             rect.left() + u * rect.width()
         };
 
-        let points: Vec<Pos2> = history
-            .samples
-            .iter()
-            .map(|(ts, t)| Pos2::new(map_x(*ts), map_y(*t)))
-            .collect();
+        for s in series {
+            if s.history.is_empty() {
+                continue;
+            }
+            let points: Vec<Pos2> = s
+                .history
+                .samples
+                .iter()
+                .map(|(ts, t)| Pos2::new(map_x(*ts), map_y(*t)))
+                .collect();
 
-        // Fill under curve
-        if points.len() >= 2 {
-            let mut fill = points.clone();
-            fill.push(Pos2::new(points.last().unwrap().x, rect.bottom()));
-            fill.push(Pos2::new(points[0].x, rect.bottom()));
-            painter.add(egui::Shape::convex_polygon(
-                fill,
-                Color32::from_rgba_unmultiplied(0, 200, 255, 28),
-                Stroke::new(0.0_f32, Color32::TRANSPARENT),
-            ));
-        }
+            // Single-series keeps today's temp-status coloring; multi-series
+            // colors by identity instead (reusing temp_color per-series would
+            // make every hot sensor render identically red, defeating the
+            // point of picking several).
+            let color = if series.len() <= 1 {
+                temp_color(s.history.last().unwrap_or(40.0))
+            } else {
+                series_color(s.palette_index)
+            };
 
-        // Glow layers
-        let last_t = history.last().unwrap_or(40.0);
-        let base = temp_color(last_t);
-        for (w, a) in [(10.0_f32, 20_u8), (6.0, 40), (3.0, 90)] {
-            let stroke = Stroke::new(
-                w,
-                Color32::from_rgba_unmultiplied(base.r(), base.g(), base.b(), a),
-            );
-            painter.add(egui::Shape::line(points.clone(), stroke));
-        }
-        // Core line
-        painter.add(egui::Shape::line(
-            points.clone(),
-            Stroke::new(2.0_f32, Color32::from_rgb(220, 245, 255)),
-        ));
-
-        // Head pulse
-        if let Some(p) = points.last() {
-            // Wrap in f64 before casting to f32 (avoids losing phase precision after
-            // long uptimes) and use a smooth sine wave instead of `.sin().abs()`
-            // (which folds the wave and creates a direction-reversal cusp at every
-            // zero-crossing).
-            let time = ui.input(|i| i.time);
-            let phase = (time * 4.0).rem_euclid(std::f64::consts::TAU) as f32;
-            let r = 4.0 + (phase.sin() * 0.5 + 0.5) * 2.0;
-            painter.circle_filled(
-                *p,
-                r + 4.0,
-                Color32::from_rgba_unmultiplied(base.r(), base.g(), base.b(), 50),
-            );
-            painter.circle_filled(*p, r, base);
+            if s.palette_index == 0 {
+                // Fill under curve
+                if points.len() >= 2 {
+                    let mut fill = points.clone();
+                    fill.push(Pos2::new(points.last().unwrap().x, rect.bottom()));
+                    fill.push(Pos2::new(points[0].x, rect.bottom()));
+                    painter.add(egui::Shape::convex_polygon(
+                        fill,
+                        Color32::from_rgba_unmultiplied(0, 200, 255, 28),
+                        Stroke::new(0.0_f32, Color32::TRANSPARENT),
+                    ));
+                }
+                // Glow layers
+                for (w, a) in [(10.0_f32, 20_u8), (6.0, 40), (3.0, 90)] {
+                    let stroke = Stroke::new(
+                        w,
+                        Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), a),
+                    );
+                    painter.add(egui::Shape::line(points.clone(), stroke));
+                }
+                // Core line
+                painter.add(egui::Shape::line(
+                    points.clone(),
+                    Stroke::new(2.0_f32, Color32::from_rgb(220, 245, 255)),
+                ));
+                // Head pulse
+                if let Some(p) = points.last() {
+                    // Wrap in f64 before casting to f32 (avoids losing phase precision
+                    // after long uptimes) and use a smooth sine wave instead of
+                    // `.sin().abs()` (which folds the wave and creates a
+                    // direction-reversal cusp at every zero-crossing).
+                    let time = ui.input(|i| i.time);
+                    let phase = (time * 4.0).rem_euclid(std::f64::consts::TAU) as f32;
+                    let r = 4.0 + (phase.sin() * 0.5 + 0.5) * 2.0;
+                    painter.circle_filled(
+                        *p,
+                        r + 4.0,
+                        Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 50),
+                    );
+                    painter.circle_filled(*p, r, color);
+                }
+            } else {
+                painter.add(egui::Shape::line(points, Stroke::new(2.0_f32, color)));
+            }
         }
 
         // Min/max temp labels
@@ -286,38 +357,38 @@ pub fn temp_heat01(t: f32) -> f32 {
     ((t - 30.0) / (85.0 - 30.0)).clamp(0.0, 1.0)
 }
 
-/// Neutral GPU baseline used when no GPU temperature has ever been sampled
-/// (no nvidia-smi, AMD/Intel not probed) so shader styles blending CPU/GPU
-/// heat never look broken on machines without GPU temp support.
-const GPU_FALLBACK_C: f32 = 40.0;
+/// Neutral baseline used when no sensor is selected/live, so a shader style
+/// never looks broken (uninitialized-looking) with nothing to read from.
+const NEUTRAL_FALLBACK_C: f32 = 40.0;
 
-/// Per-frame "how hot is it" signal shared by the classic graph's coloring
-/// and any active shader style's uniforms.
-#[derive(Debug, Clone, Copy)]
+/// Per-frame "how hot is it" signal shared by any active shader style's
+/// uniforms and its on-panel temperature readout, built from whichever
+/// sensors are currently selected and live (not hardcoded to CPU/GPU).
+#[derive(Debug, Clone)]
 pub struct ThermalSignal {
-    pub cpu_c: f32,
-    pub gpu_c: f32,
-    pub gpu_present: bool,
-    pub cpu01: f32,
-    pub gpu01: f32,
-    /// max(cpu01, gpu01) — "how worried should this look".
-    pub heat01: f32,
+    /// (label, celsius, heat01) per currently-selected, currently-live sensor.
+    pub readings: Vec<(String, f32, f32)>,
+    /// max(heat01) across readings — the single scalar that can drive a shader.
+    pub heat01_max: f32,
 }
 
 impl ThermalSignal {
-    pub fn from_histories(cpu: &TempHistory, gpu: &TempHistory) -> Self {
-        let cpu_c = cpu.last().unwrap_or(40.0);
-        let gpu_present = !gpu.is_empty();
-        let gpu_c = gpu.last().unwrap_or(GPU_FALLBACK_C);
-        let cpu01 = temp_heat01(cpu_c);
-        let gpu01 = if gpu_present { temp_heat01(gpu_c) } else { 0.0 };
+    pub fn from_readings(readings: Vec<(String, f32)>) -> Self {
+        if readings.is_empty() {
+            let heat01 = temp_heat01(NEUTRAL_FALLBACK_C);
+            return Self {
+                readings: vec![("—".to_string(), NEUTRAL_FALLBACK_C, heat01)],
+                heat01_max: heat01,
+            };
+        }
+        let readings: Vec<(String, f32, f32)> = readings
+            .into_iter()
+            .map(|(label, c)| (label, c, temp_heat01(c)))
+            .collect();
+        let heat01_max = readings.iter().map(|(_, _, h)| *h).fold(0.0_f32, f32::max);
         Self {
-            cpu_c,
-            gpu_c,
-            gpu_present,
-            cpu01,
-            gpu01,
-            heat01: cpu01.max(gpu01),
+            readings,
+            heat01_max,
         }
     }
 }
@@ -355,5 +426,35 @@ mod tests {
             assert!(phase.is_finite());
             assert!((0.0..std::f64::consts::TAU).contains(&phase));
         }
+    }
+
+    #[test]
+    fn series_color_distinct_within_palette_and_wraps() {
+        let colors: Vec<Color32> = (0..8).map(series_color).collect();
+        for i in 0..colors.len() {
+            for j in (i + 1)..colors.len() {
+                assert_ne!(colors[i], colors[j], "colors {i} and {j} should differ");
+            }
+        }
+        assert_eq!(series_color(8), series_color(0));
+        assert_eq!(series_color(9), series_color(1));
+    }
+
+    #[test]
+    fn thermal_signal_empty_readings_falls_back_to_neutral() {
+        let signal = ThermalSignal::from_readings(Vec::new());
+        assert_eq!(signal.readings.len(), 1);
+        assert!(signal.heat01_max.is_finite());
+    }
+
+    #[test]
+    fn thermal_signal_heat01_max_is_the_max_across_readings() {
+        let signal = ThermalSignal::from_readings(vec![
+            ("A".to_string(), 40.0),
+            ("B".to_string(), 90.0),
+            ("C".to_string(), 60.0),
+        ]);
+        assert_eq!(signal.readings.len(), 3);
+        assert!((signal.heat01_max - temp_heat01(90.0)).abs() < f32::EPSILON);
     }
 }

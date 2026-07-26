@@ -230,15 +230,11 @@ pub fn show_shader_panel(
     color_b: [f32; 3],
 ) {
     egui::Frame::canvas(ui.style()).show(ui, |ui| {
-        ui.horizontal(|ui| {
-            ui.colored_label(
-                crate::graph::temp_color(signal.cpu_c),
-                format!("CPU {:.1} °C", signal.cpu_c),
-            );
-            if signal.gpu_present {
+        ui.horizontal_wrapped(|ui| {
+            for (label, celsius, _) in &signal.readings {
                 ui.colored_label(
-                    crate::graph::temp_color(signal.gpu_c),
-                    format!("GPU {:.1} °C", signal.gpu_c),
+                    crate::graph::temp_color(*celsius),
+                    format!("{label} {celsius:.1} °C"),
                 );
             }
         });
@@ -251,9 +247,9 @@ pub fn show_shader_panel(
         let uniforms = ShaderUniforms {
             resolution: [resolution.x, resolution.y],
             time,
-            cpu01: signal.cpu01,
-            gpu01: signal.gpu01,
-            heat01: signal.heat01,
+            cpu01: signal.heat01_max,
+            gpu01: signal.heat01_max,
+            heat01: signal.heat01_max,
             _pad0: [0.0, 0.0],
             color_a: [color_a[0], color_a[1], color_a[2], 0.0],
             color_b: [color_b[0], color_b[1], color_b[2], 0.0],

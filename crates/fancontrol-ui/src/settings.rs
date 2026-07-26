@@ -66,6 +66,15 @@ pub struct UiSettings {
     /// One-shot migration marker: `show_fractal` -> `graph_style`.
     #[serde(default)]
     pub(crate) graph_style_migrated: bool,
+    /// Sensor ids selected for the multi-series graph, in display/legend/color order.
+    #[serde(default)]
+    pub graph_sensor_ids: Vec<String>,
+    /// One-shot marker: seed `graph_sensor_ids` from the old cpu/gpu auto-guess on
+    /// first run after upgrade, so existing users keep their CPU line. Seeded lazily
+    /// from the first live snapshot (not in `load()`), since sensor ids aren't known
+    /// until the poller runs.
+    #[serde(default)]
+    pub graph_sensor_ids_seeded: bool,
 }
 
 fn default_true() -> bool {
@@ -116,6 +125,8 @@ impl Default for UiSettings {
             shader_fps: default_shader_fps(),
             show_fractal: false,
             graph_style_migrated: true,
+            graph_sensor_ids: Vec::new(),
+            graph_sensor_ids_seeded: true,
         }
     }
 }
