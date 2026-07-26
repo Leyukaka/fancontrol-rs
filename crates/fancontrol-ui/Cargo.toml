@@ -20,3 +20,4 @@ tray-icon = { version = "0.24.1", default-features = false }
 ureq = "3.3.0"
 rust-i18n = "4"
 sys-locale = "0.3"
+bytemuck = { version = "1", features = ["derive"] }

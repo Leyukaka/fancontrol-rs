@@ -37,6 +37,11 @@ options.new_version_available: "新しいバージョンが利用可能です: %
 options.open_release_page: "リリースページを開く"
 options.check_failed: "確認に失敗しました: %{error}"
 options.language_heading: "言語"
+options.fractal_heading: "フラクタル（お楽しみ）"
+options.fractal_toggle: "フラクタルピラミッドを表示"
+options.fractal_speed: "速度"
+options.fractal_color_a: "カラー A"
+options.fractal_color_b: "カラー B"
 
 dashboard.temperatures: "温度"
 dashboard.fans: "ファン (RPM)"

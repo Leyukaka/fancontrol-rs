@@ -36,6 +36,15 @@ pub struct UiSettings {
     /// UI language code (e.g. "en", "fr"). `None` = not yet chosen → OS-locale detection.
     #[serde(default)]
     pub language: Option<String>,
+    /// Fun optional extra: raymarched fractal panel. Off by default.
+    #[serde(default)]
+    pub show_fractal: bool,
+    #[serde(default = "default_fractal_speed")]
+    pub fractal_speed: f32,
+    #[serde(default = "default_fractal_color_a")]
+    pub fractal_color_a: [f32; 3],
+    #[serde(default = "default_fractal_color_b")]
+    pub fractal_color_b: [f32; 3],
 }
 
 fn default_true() -> bool {
@@ -50,6 +59,18 @@ fn default_graph_sample_secs() -> u16 {
     2
 }
 
+fn default_fractal_speed() -> f32 {
+    1.0
+}
+
+fn default_fractal_color_a() -> [f32; 3] {
+    [0.2, 0.7, 0.9]
+}
+
+fn default_fractal_color_b() -> [f32; 3] {
+    [1.0, 0.0, 1.0]
+}
+
 impl Default for UiSettings {
     fn default() -> Self {
         Self {
@@ -62,6 +83,10 @@ impl Default for UiSettings {
             product_defaults_applied: true,
             last_profile_id: None,
             language: None,
+            show_fractal: false,
+            fractal_speed: default_fractal_speed(),
+            fractal_color_a: default_fractal_color_a(),
+            fractal_color_b: default_fractal_color_b(),
         }
     }
 }
