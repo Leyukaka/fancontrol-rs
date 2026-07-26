@@ -40,15 +40,19 @@ mod tests {
 
     #[test]
     fn persisted_language_wins() {
-        let mut settings = UiSettings::default();
-        settings.language = Some("de".to_string());
+        let settings = UiSettings {
+            language: Some("de".to_string()),
+            ..UiSettings::default()
+        };
         assert_eq!(resolve_startup_locale(&settings), "de");
     }
 
     #[test]
     fn unsupported_persisted_language_falls_back() {
-        let mut settings = UiSettings::default();
-        settings.language = Some("pt".to_string());
+        let settings = UiSettings {
+            language: Some("pt".to_string()),
+            ..UiSettings::default()
+        };
         // Falls through to OS-locale detection (or "en" if that's unsupported too),
         // but must never return the unsupported persisted code itself.
         assert_ne!(resolve_startup_locale(&settings), "pt");
