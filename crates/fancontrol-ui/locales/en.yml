@@ -24,6 +24,7 @@ top_bar.write_error: "write: %{error}"
 
 options.heading: "Options"
 options.hide_zero_rpm: "Hide fans at 0 RPM"
+options.hide_zero_duty_controls: "Hide controls at 0% duty"
 options.show_cpu_graph: "CPU temperature graph"
 options.show_host_sensors: "GPU / SSD (host, if available)"
 options.auto_apply_curves: "Apply curves (auto, 1 Hz)"

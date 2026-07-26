@@ -443,6 +443,12 @@ impl eframe::App for FanApp {
                         .changed();
                     dirty |= ui
                         .checkbox(
+                            &mut self.settings.hide_zero_duty_controls,
+                            t!("options.hide_zero_duty_controls").to_string(),
+                        )
+                        .changed();
+                    dirty |= ui
+                        .checkbox(
                             &mut self.settings.show_graph_panel,
                             t!("options.show_cpu_graph").to_string(),
                         )
@@ -738,11 +744,22 @@ impl eframe::App for FanApp {
                 egui::ScrollArea::vertical()
                     .id_salt("ctrls")
                     .show(&mut cols[2], |ui| {
-                        if snap.controls.is_empty() {
+                        // hide_zero_rpm only affects the Fans list above; this is a
+                        // separate, opt-in filter based on duty (not rpm, since many
+                        // controls legitimately have no rpm sensor at all). `duty: None`
+                        // (unknown/unsupported readback) is treated as visible: hiding an
+                        // interactive control on missing data is worse than showing a stale one.
+                        let controls: Vec<_> = snap
+                            .controls
+                            .iter()
+                            .filter(|c| {
+                                !self.settings.hide_zero_duty_controls || c.duty.unwrap_or(1) >= 1
+                            })
+                            .collect();
+                        if controls.is_empty() {
                             ui.label(t!("dashboard.none").to_string());
                         }
-                        for c in &snap.controls {
-                            // Never hide controls when hide_zero_rpm (that option is for fan list only)
+                        for c in controls {
                             ui.group(|ui| {
                                 if ui
                                     .add(

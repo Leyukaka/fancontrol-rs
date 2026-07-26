@@ -16,6 +16,11 @@ pub const SHADER_FPS_ALLOWED: [u16; 4] = [30, 60, 90, 120];
 pub struct UiSettings {
     #[serde(default = "default_true")]
     pub hide_zero_rpm: bool,
+    /// Hide controls currently reporting 0% duty. Opt-in (default off): unlike
+    /// hide_zero_rpm's passive fan readouts, controls are interactive/actionable,
+    /// so hiding them by default risks hiding something the user meant to act on.
+    #[serde(default)]
+    pub hide_zero_duty_controls: bool,
     #[serde(default = "default_true", alias = "show_cpu_graph")]
     pub show_graph_panel: bool,
     #[serde(default = "default_true")]
@@ -95,6 +100,7 @@ impl Default for UiSettings {
     fn default() -> Self {
         Self {
             hide_zero_rpm: true,
+            hide_zero_duty_controls: false,
             show_graph_panel: true,
             show_host_sensors: true,
             auto_apply_curves: true,
