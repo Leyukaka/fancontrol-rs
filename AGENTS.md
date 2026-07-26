@@ -15,6 +15,10 @@ Spec-Driven Design: product and architecture decisions live in `specs/`.
 - Leave the tree **buildable** and documented after significant work.
 - After meaningful status changes, update this file’s **Status** section and/or `specs/06-roadmap.md`.
 
+## Workflow (current phase: solo project)
+
+No PR process for now: commit and push straight to `main` (a local feature branch is still fine for a large/risky change, but merge it yourself, no `gh pr create`). Still run `cargo test`/`clippy`/`fmt` before pushing, CI runs on `main` pushes too. `CONTRIBUTING.md`'s PR template, AI-disclosure section, and review rules are written for when this project opens up to outside contributors; they don't apply to day-to-day solo work right now.
+
 ## Environment (critical)
 
 Hardware sensors and PawnIO need a **real Windows host** (not a disposable Linux container as the only target).
