@@ -80,10 +80,30 @@ impl TempHistory {
     }
 }
 
+/// Frame-rate-independent exponential ease toward `target`, using a half-life
+/// in seconds so the speed of approach doesn't depend on frame rate.
+pub fn ease_toward(current: f32, target: f32, dt_secs: f32, half_life_secs: f32) -> f32 {
+    let alpha = 1.0 - 0.5_f32.powf((dt_secs / half_life_secs.max(0.001)).max(0.0));
+    current + (target - current) * alpha
+}
+
+/// How long the Y axis takes to settle onto a new max after the rolling
+/// window prunes away a hot sample, instead of snapping instantly.
+const AXIS_MAX_HALF_LIFE_SECS: f32 = 1.5;
+
 /// Draw a glowing temperature graph in `ui`.
 ///
-/// `window_minutes` is used for the X-axis labels (`-Nm` … `now`).
-pub fn show_cpu_graph(ui: &mut egui::Ui, history: &TempHistory, title: &str, window_minutes: u16) {
+/// `window_minutes` is used for the X-axis labels (`-Nm` … `now`). `axis_max`
+/// is smoothing state owned by the caller (shared across frames, and across
+/// series once the graph becomes multi-series) so the Y axis eases toward a
+/// new max instead of jumping in a single frame.
+pub fn show_cpu_graph(
+    ui: &mut egui::Ui,
+    history: &TempHistory,
+    title: &str,
+    window_minutes: u16,
+    axis_max: &mut Option<f32>,
+) {
     ui.group(|ui| {
         ui.horizontal(|ui| {
             ui.heading(title);
@@ -109,13 +129,21 @@ pub fn show_cpu_graph(ui: &mut egui::Ui, history: &TempHistory, title: &str, win
         }
 
         let min_t = 20.0_f32;
-        let max_t = history
+        let target_max = history
             .samples
             .iter()
             .map(|(_, t)| *t)
             .fold(80.0_f32, f32::max)
             .max(50.0)
             + 5.0;
+        let dt = ui.input(|i| i.stable_dt).clamp(0.0, 0.5);
+        let max_t = ease_toward(
+            *axis_max.get_or_insert(target_max),
+            target_max,
+            dt,
+            AXIS_MAX_HALF_LIFE_SECS,
+        );
+        *axis_max = Some(max_t);
 
         let painter = ui.painter_at(rect);
         // Background
@@ -191,7 +219,13 @@ pub fn show_cpu_graph(ui: &mut egui::Ui, history: &TempHistory, title: &str, win
 
         // Head pulse
         if let Some(p) = points.last() {
-            let r = 4.0 + (ui.input(|i| i.time) as f32 * 4.0).sin().abs() * 2.0;
+            // Wrap in f64 before casting to f32 (avoids losing phase precision after
+            // long uptimes) and use a smooth sine wave instead of `.sin().abs()`
+            // (which folds the wave and creates a direction-reversal cusp at every
+            // zero-crossing).
+            let time = ui.input(|i| i.time);
+            let phase = (time * 4.0).rem_euclid(std::f64::consts::TAU) as f32;
+            let r = 4.0 + (phase.sin() * 0.5 + 0.5) * 2.0;
             painter.circle_filled(
                 *p,
                 r + 4.0,
@@ -209,7 +243,7 @@ pub fn show_cpu_graph(ui: &mut egui::Ui, history: &TempHistory, title: &str, win
             Color32::GRAY,
         );
         painter.text(
-            Pos2::new(rect.left() + 6.0, rect.bottom() - 14.0),
+            Pos2::new(rect.left() + 6.0, rect.bottom() - 28.0),
             egui::Align2::LEFT_TOP,
             format!("{min_t:.0}°"),
             egui::FontId::monospace(10.0),
@@ -284,6 +318,42 @@ impl ThermalSignal {
             cpu01,
             gpu01,
             heat01: cpu01.max(gpu01),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ease_toward_zero_dt_is_a_no_op() {
+        assert_eq!(ease_toward(50.0, 90.0, 0.0, 1.5), 50.0);
+    }
+
+    #[test]
+    fn ease_toward_converges_to_target() {
+        let mut v = 50.0_f32;
+        for _ in 0..2000 {
+            v = ease_toward(v, 90.0, 0.05, 1.5);
+        }
+        assert!((v - 90.0).abs() < 0.01, "expected convergence, got {v}");
+    }
+
+    #[test]
+    fn ease_toward_is_monotonic_toward_target_from_above_and_below() {
+        let up = ease_toward(50.0, 90.0, 0.1, 1.5);
+        assert!(up > 50.0 && up < 90.0);
+        let down = ease_toward(90.0, 50.0, 0.1, 1.5);
+        assert!(down < 90.0 && down > 50.0);
+    }
+
+    #[test]
+    fn phase_wrap_never_negative_or_nan_for_large_time() {
+        for t in [0.0_f64, 1.0, 1000.0, 1_000_000.0, 86_400.0 * 30.0] {
+            let phase = (t * 4.0).rem_euclid(std::f64::consts::TAU);
+            assert!(phase.is_finite());
+            assert!((0.0..std::f64::consts::TAU).contains(&phase));
         }
     }
 }

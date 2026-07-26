@@ -111,6 +111,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         rename_is_control: false,
         cpu_history,
         gpu_history,
+        graph_axis_max: None,
         show_settings: false,
         show_curves: true,
         profile,
@@ -213,6 +214,11 @@ struct FanApp {
     rename_is_control: bool,
     cpu_history: TempHistory,
     gpu_history: TempHistory,
+    /// Shared Y-axis smoothing state for the classic graph (eases toward a new
+    /// max instead of jumping in one frame when the rolling window prunes a
+    /// hot sample). Lives on `FanApp`, not `TempHistory`, since the axis is
+    /// shared across whatever's plotted.
+    graph_axis_max: Option<f32>,
     show_settings: bool,
     show_curves: bool,
     profile: Profile,
@@ -625,6 +631,11 @@ impl eframe::App for FanApp {
             egui::Panel::top("graph_area")
                 .resizable(true)
                 .default_size(240.0)
+                // Floor high enough that the heading + graph-controls row + a usable
+                // graph always fit, so dragging the panel short can't force the
+                // canvas to overflow/clip against the panel boundary.
+                .min_size(200.0)
+                .max_size(600.0)
                 .show(ui, |ui| {
                     self.ui_graph_controls(ui);
                     let style = self.settings.graph_style;
@@ -634,6 +645,7 @@ impl eframe::App for FanApp {
                             &self.cpu_history,
                             &t!("graph.cpu_temperature_title"),
                             self.settings.graph_window_minutes,
+                            &mut self.graph_axis_max,
                         );
                         if style.is_shader() {
                             // Selected style needs wgpu but it's unavailable this run — degrade
