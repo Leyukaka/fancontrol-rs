@@ -14,6 +14,9 @@ pub struct Snapshot {
     pub fans: Vec<(String, String, f64)>,
     pub controls: Vec<ControlSnap>,
     pub cpu_temp: Option<f64>,
+    /// First host GPU sensor found (`host.gpu{index}`). `None` on machines without a
+    /// supported discrete GPU (no `nvidia-smi`, AMD/Intel not probed).
+    pub gpu_temp: Option<f64>,
     pub error: Option<String>,
     pub tick: u64,
 }
@@ -77,6 +80,7 @@ fn take_snapshot(
     let mut ctrl_snaps = Vec::new();
     let mut error = None;
     let mut cpu_temp = None;
+    let mut gpu_temp = None;
 
     // Fast path: one HWM bus transaction for all pawnio channels
     let mut pawnio_temp: HashMap<String, f64> = HashMap::new();
@@ -143,6 +147,9 @@ fn take_snapshot(
             Ok(v) => match s.kind {
                 SensorKind::Temperature if v != 0.0 => {
                     let label = map.sensor_name(id, &s.name).to_string();
+                    if gpu_temp.is_none() && id.starts_with("host.gpu") {
+                        gpu_temp = Some(v);
+                    }
                     temps.push((id.to_string(), label, v));
                 }
                 SensorKind::FanRpm if v >= 0.0 && !v.is_nan() => {
@@ -206,6 +213,7 @@ fn take_snapshot(
         fans,
         controls: ctrl_snaps,
         cpu_temp,
+        gpu_temp,
         error,
         tick,
     }

@@ -1,12 +1,12 @@
 //! egui application: live sensors, sliders, graph, rename, options.
 
 use crate::curve_editor::show_curve_editor;
-use crate::fractal::{show_fractal_panel, FractalResources};
-use crate::graph::{show_cpu_graph, TempHistory};
+use crate::graph::{show_cpu_graph, TempHistory, ThermalSignal};
 use crate::i18n::{display_name_for, resolve_startup_locale, SUPPORTED};
 use crate::poll::{spawn_poller, SharedMap, SharedSnapshot};
 use crate::registry::{backend_status, build_registry, BackendStatus};
-use crate::settings::UiSettings;
+use crate::settings::{UiSettings, SHADER_FPS_ALLOWED};
+use crate::shaders::{show_shader_panel, GraphStyle, ShaderGallery};
 use crate::tray::{AppTray, TrayCommand, TrayState};
 use crate::update_check::{UpdateChecker, UpdateStatus};
 use crate::write_queue::WriteQueue;
@@ -93,6 +93,8 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
 
     let mut cpu_history = TempHistory::default();
     cpu_history.configure(settings.graph_window_minutes, settings.graph_sample_secs);
+    let mut gpu_history = TempHistory::default();
+    gpu_history.configure(settings.graph_window_minutes, settings.graph_sample_secs);
 
     let app = FanApp {
         options,
@@ -108,6 +110,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         rename_buf: String::new(),
         rename_is_control: false,
         cpu_history,
+        gpu_history,
         show_settings: false,
         show_curves: true,
         profile,
@@ -122,8 +125,8 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         tray: None,
         really_exit: false,
         updates: UpdateChecker::new(),
-        fractal_start: Instant::now(),
-        fractal_available: false,
+        shader_clock: Instant::now(),
+        shader_backend_available: false,
         window_visible: true,
     };
 
@@ -166,25 +169,24 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
                 .push("noto_sans_cjk".to_owned());
             cc.egui_ctx.set_fonts(fonts);
 
-            // One-time setup for the optional "fun" fractal panel's wgpu pipeline
-            // (see crates/fancontrol-ui/src/fractal.rs). Skipped gracefully if the
-            // wgpu backend isn't active — the panel is opt-in and off by default.
-            let fractal_available = if let Some(render_state) = &cc.wgpu_render_state {
-                let resources =
-                    FractalResources::new(&render_state.device, render_state.target_format);
+            // One-time setup for the shader graph gallery's wgpu pipelines
+            // (see crates/fancontrol-ui/src/shaders/mod.rs). Skipped gracefully
+            // if the wgpu backend isn't active — Classic graph still works.
+            let shader_backend_available = if let Some(render_state) = &cc.wgpu_render_state {
+                let gallery = ShaderGallery::new(&render_state.device, render_state.target_format);
                 render_state
                     .renderer
                     .write()
                     .callback_resources
-                    .insert(resources);
+                    .insert(gallery);
                 true
             } else {
-                tracing::warn!("wgpu render state unavailable: fractal panel disabled");
+                tracing::warn!("wgpu render state unavailable: shader graph styles disabled");
                 false
             };
 
             let mut app = app;
-            app.fractal_available = fractal_available;
+            app.shader_backend_available = shader_backend_available;
             // Must build after the event loop has started (tray-icon requirement).
             match AppTray::new() {
                 Ok(tray) => app.tray = Some(tray),
@@ -210,6 +212,7 @@ struct FanApp {
     rename_buf: String,
     rename_is_control: bool,
     cpu_history: TempHistory,
+    gpu_history: TempHistory,
     show_settings: bool,
     show_curves: bool,
     profile: Profile,
@@ -226,10 +229,10 @@ struct FanApp {
     /// instead of minimizing to tray.
     really_exit: bool,
     updates: UpdateChecker,
-    fractal_start: Instant,
-    /// Whether the wgpu backend (and thus the fractal panel's pipeline) is available.
-    fractal_available: bool,
-    /// Tracks minimize-to-tray so the fractal panel's fast repaint doesn't run while hidden.
+    shader_clock: Instant,
+    /// Whether the wgpu backend (and thus any shader graph style) is available.
+    shader_backend_available: bool,
+    /// Tracks minimize-to-tray so a shader style's fast repaint doesn't run while hidden.
     window_visible: bool,
 }
 
@@ -259,11 +262,14 @@ fn load_or_create_default_profile(preferred: Option<&str>) -> Profile {
 
 impl eframe::App for FanApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Smooth fractal animation needs a much faster repaint cadence than the
-        // rest of the UI — only pay for it while the panel is actually visible
-        // (both enabled in settings and not currently minimized to tray).
-        let repaint_interval = if self.settings.show_fractal && self.window_visible {
-            Duration::from_millis(16)
+        // Smooth shader animation needs a much faster repaint cadence than the
+        // rest of the UI — only pay for it while a shader style is actually
+        // active, the backend supports it, and the window isn't minimized to tray.
+        let repaint_interval = if self.settings.graph_style.is_shader()
+            && self.shader_backend_available
+            && self.window_visible
+        {
+            Duration::from_secs_f32(1.0 / f32::from(self.settings.shader_fps))
         } else {
             Duration::from_millis(200)
         };
@@ -291,6 +297,9 @@ impl eframe::App for FanApp {
 
         if let Some(t) = snap.cpu_temp {
             self.cpu_history.push_if_due(t as f32, Instant::now());
+        }
+        if let Some(t) = snap.gpu_temp {
+            self.gpu_history.push_if_due(t as f32, Instant::now());
         }
 
         // Auto-apply curves ~1 Hz when enabled + write allowed
@@ -415,7 +424,7 @@ impl eframe::App for FanApp {
                         .changed();
                     dirty |= ui
                         .checkbox(
-                            &mut self.settings.show_cpu_graph,
+                            &mut self.settings.show_graph_panel,
                             t!("options.show_cpu_graph").to_string(),
                         )
                         .changed();
@@ -504,35 +513,78 @@ impl eframe::App for FanApp {
                             }
                         });
                     ui.separator();
-                    ui.label(t!("options.fractal_heading").to_string());
-                    ui.add_enabled_ui(self.fractal_available, |ui| {
-                        dirty |= ui
-                            .checkbox(
-                                &mut self.settings.show_fractal,
-                                t!("options.fractal_toggle").to_string(),
-                            )
-                            .on_disabled_hover_text(t!("options.fractal_unavailable").to_string())
-                            .changed();
-                    });
-                    if self.settings.show_fractal && self.fractal_available {
+                    ui.label(t!("options.graph_style_heading").to_string());
+                    let current_style = self.settings.graph_style;
+                    egui::ComboBox::from_id_salt("graph_style_pick")
+                        .selected_text(t!(current_style.display_key()).to_string())
+                        .show_ui(ui, |ui| {
+                            for style in GraphStyle::ALL {
+                                let enabled =
+                                    style == GraphStyle::Classic || self.shader_backend_available;
+                                let selected = current_style == style;
+                                ui.add_enabled_ui(enabled, |ui| {
+                                    if ui
+                                        .selectable_label(
+                                            selected,
+                                            t!(style.display_key()).to_string(),
+                                        )
+                                        .on_disabled_hover_text(
+                                            t!("options.shader_unavailable").to_string(),
+                                        )
+                                        .clicked()
+                                        && !selected
+                                    {
+                                        self.settings.graph_style = style;
+                                        self.settings.save();
+                                    }
+                                });
+                            }
+                        });
+                    if self.settings.graph_style.is_shader() {
+                        ui.colored_label(
+                            egui::Color32::YELLOW,
+                            t!("options.shader_gpu_warning").to_string(),
+                        );
                         dirty |= ui
                             .add(
-                                egui::Slider::new(&mut self.settings.fractal_speed, 0.0..=3.0)
-                                    .text(t!("options.fractal_speed").to_string()),
+                                egui::Slider::new(&mut self.settings.shader_speed, 0.0..=3.0)
+                                    .text(t!("options.shader_speed").to_string()),
                             )
                             .changed();
                         ui.horizontal(|ui| {
+                            ui.label(t!("options.fps_label").to_string());
+                            for fps in SHADER_FPS_ALLOWED {
+                                let selected = self.settings.shader_fps == fps;
+                                let label = if fps >= 90 {
+                                    format!("{fps} ⚠")
+                                } else {
+                                    format!("{fps}")
+                                };
+                                let resp = ui.selectable_label(selected, label);
+                                let resp = if fps >= 90 {
+                                    resp.on_hover_text(t!("options.fps_high_usage").to_string())
+                                } else {
+                                    resp
+                                };
+                                if resp.clicked() && !selected {
+                                    self.settings.shader_fps = fps;
+                                    dirty = true;
+                                }
+                            }
+                        });
+                        ui.horizontal(|ui| {
                             ui.label(t!("options.fractal_color_a").to_string());
                             dirty |= ui
-                                .color_edit_button_rgb(&mut self.settings.fractal_color_a)
+                                .color_edit_button_rgb(&mut self.settings.shader_color_a)
                                 .changed();
                             ui.label(t!("options.fractal_color_b").to_string());
                             dirty |= ui
-                                .color_edit_button_rgb(&mut self.settings.fractal_color_b)
+                                .color_edit_button_rgb(&mut self.settings.shader_color_b)
                                 .changed();
                         });
                     }
                     if dirty {
+                        self.settings.clamp_graph_options();
                         self.settings.save();
                     }
                     if ui.button(t!("common.close").to_string()).clicked() {
@@ -551,25 +603,34 @@ impl eframe::App for FanApp {
         }
 
         egui::CentralPanel::default().show(ui, |ui| {
-            if self.settings.show_cpu_graph {
+            if self.settings.show_graph_panel {
                 self.ui_graph_controls(ui);
-                show_cpu_graph(
-                    ui,
-                    &self.cpu_history,
-                    &t!("graph.cpu_temperature_title"),
-                    self.settings.graph_window_minutes,
-                );
-                ui.add_space(8.0);
-            }
-
-            if self.settings.show_fractal && self.fractal_available {
-                let t = self.fractal_start.elapsed().as_secs_f32() * self.settings.fractal_speed;
-                show_fractal_panel(
-                    ui,
-                    t,
-                    self.settings.fractal_color_a,
-                    self.settings.fractal_color_b,
-                );
+                let style = self.settings.graph_style;
+                if style == GraphStyle::Classic || !self.shader_backend_available {
+                    show_cpu_graph(
+                        ui,
+                        &self.cpu_history,
+                        &t!("graph.cpu_temperature_title"),
+                        self.settings.graph_window_minutes,
+                    );
+                    if style.is_shader() {
+                        // Selected style needs wgpu but it's unavailable this run — degrade
+                        // to Classic instead of leaving a blank panel with no explanation.
+                        ui.small(t!("graph.shader_fallback_note").to_string());
+                    }
+                } else {
+                    let t = self.shader_clock.elapsed().as_secs_f32() * self.settings.shader_speed;
+                    let signal =
+                        ThermalSignal::from_histories(&self.cpu_history, &self.gpu_history);
+                    show_shader_panel(
+                        ui,
+                        style,
+                        t,
+                        signal,
+                        self.settings.shader_color_a,
+                        self.settings.shader_color_b,
+                    );
+                }
                 ui.add_space(8.0);
             }
 
@@ -809,6 +870,10 @@ impl FanApp {
             self.settings.clamp_graph_options();
             self.settings.save();
             self.cpu_history.configure(
+                self.settings.graph_window_minutes,
+                self.settings.graph_sample_secs,
+            );
+            self.gpu_history.configure(
                 self.settings.graph_window_minutes,
                 self.settings.graph_sample_secs,
             );

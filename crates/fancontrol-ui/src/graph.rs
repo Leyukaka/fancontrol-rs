@@ -234,7 +234,7 @@ pub fn show_cpu_graph(ui: &mut egui::Ui, history: &TempHistory, title: &str, win
     });
 }
 
-fn temp_color(t: f32) -> Color32 {
+pub fn temp_color(t: f32) -> Color32 {
     if t < 50.0 {
         Color32::from_rgb(80, 220, 255)
     } else if t < 70.0 {
@@ -243,5 +243,47 @@ fn temp_color(t: f32) -> Color32 {
         Color32::from_rgb(255, 200, 60)
     } else {
         Color32::from_rgb(255, 80, 80)
+    }
+}
+
+/// Normalize a temperature to a 0..1 "how hot" scale, using the same bands as
+/// `temp_color` (cool below 50C, hot at/above 85C).
+pub fn temp_heat01(t: f32) -> f32 {
+    ((t - 30.0) / (85.0 - 30.0)).clamp(0.0, 1.0)
+}
+
+/// Neutral GPU baseline used when no GPU temperature has ever been sampled
+/// (no nvidia-smi, AMD/Intel not probed) so shader styles blending CPU/GPU
+/// heat never look broken on machines without GPU temp support.
+const GPU_FALLBACK_C: f32 = 40.0;
+
+/// Per-frame "how hot is it" signal shared by the classic graph's coloring
+/// and any active shader style's uniforms.
+#[derive(Debug, Clone, Copy)]
+pub struct ThermalSignal {
+    pub cpu_c: f32,
+    pub gpu_c: f32,
+    pub gpu_present: bool,
+    pub cpu01: f32,
+    pub gpu01: f32,
+    /// max(cpu01, gpu01) — "how worried should this look".
+    pub heat01: f32,
+}
+
+impl ThermalSignal {
+    pub fn from_histories(cpu: &TempHistory, gpu: &TempHistory) -> Self {
+        let cpu_c = cpu.last().unwrap_or(40.0);
+        let gpu_present = !gpu.is_empty();
+        let gpu_c = gpu.last().unwrap_or(GPU_FALLBACK_C);
+        let cpu01 = temp_heat01(cpu_c);
+        let gpu01 = if gpu_present { temp_heat01(gpu_c) } else { 0.0 };
+        Self {
+            cpu_c,
+            gpu_c,
+            gpu_present,
+            cpu01,
+            gpu01,
+            heat01: cpu01.max(gpu01),
+        }
     }
 }
