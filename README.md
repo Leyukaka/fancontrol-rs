@@ -26,13 +26,13 @@
 
 ## ✨ Features
 
-- 🔒 **Security first** — Uses [PawnIO](https://pawnio.eu/) only. Never ships WinRing0 or custom ring-0 drivers
-- 🎛️ Full control — Curves, profiles, live sliders, temperature graphs
-- 🧩 Plugin architecture — Extensible sensors & controls
-- 📊 Real-time UI — Built with egui (live sensors, curve editor MVP)
-- 🌍 8 languages — English, French, German, Spanish, Italian, Chinese, Japanese, Luxembourgish
-- 🌀 Fun extra — optional raymarched fractal panel (wgpu shader), toggle it in Options
-- 🦀 Pure Rust — Core, UI, hardware backend and CLI
+- 🔒 **Security first**: uses [PawnIO](https://pawnio.eu/) only. Never ships WinRing0 or custom ring-0 drivers
+- 🎛️ Full control: curves, profiles, live sliders, temperature graphs
+- 🧩 Plugin architecture: extensible sensors and controls
+- 📊 Real-time UI: built with egui (live sensors, curve editor MVP)
+- 🌍 8 languages: English, French, German, Spanish, Italian, Chinese, Japanese, Luxembourgish
+- 🌀 Fun extra: optional raymarched fractal panel (wgpu shader), toggle it in Options
+- 🦀 Pure Rust: core, UI, hardware backend and CLI
 
 ## Screenshot
 
@@ -63,7 +63,7 @@
 
 ## Status
 
-🚧 **Early stage** — Phase 1 hardware (PawnIO / NCT668x) + Phase 2 UI (live sensors, sliders, curve editor MVP, temp graph).  
+🚧 **Early stage**. Phase 1 hardware (PawnIO / NCT668x) + Phase 2 UI (live sensors, sliders, curve editor MVP, temp graph).  
 Public source of truth: this repo (issues, PRs, and [Releases](https://github.com/Leyukaka/fancontrol-rs/releases)).
 
 | Crate | Status |
@@ -74,23 +74,23 @@ Public source of truth: this repo (issues, PRs, and [Releases](https://github.co
 | `fancontrol-ui` | egui live + sliders + curve editor + graph |
 | `fancontrol-rs` (CLI) | sample, watch, test-duty, ui, map-init, … |
 
-Validated hardware summary: **Nuvoton NCT6687D-class** EC (id `0xD5` rev `0x92` @ `0x0A20`) — reads and PWM writes via PawnIO.  
+Validated hardware summary: **Nuvoton NCT6687D-class** EC (id `0xD5` rev `0x92` @ `0x0A20`). Reads and PWM writes via PawnIO.  
 Details: [docs/SUPPORTED_HARDWARE.md](./docs/SUPPORTED_HARDWARE.md).
 
 ## Download
 
-- **GitHub Releases** — when a version tag `v*.*.*` is pushed, [`.github/workflows/release.yml`](./.github/workflows/release.yml) builds `fancontrol-rs.exe` (and a SHA256 file) on `windows-latest`. See the [Releases](https://github.com/Leyukaka/fancontrol-rs/releases) page once tags exist.
-- **Build from source** (always available) — see below.
+- **GitHub Releases**: when a version tag `v*.*.*` is pushed, [`.github/workflows/release.yml`](./.github/workflows/release.yml) builds `fancontrol-rs.exe` (and a SHA256 file) on `windows-latest`. See the [Releases](https://github.com/Leyukaka/fancontrol-rs/releases) page once tags exist.
+- **Build from source** (always available): see below.
 
 > **Binaries are not code-signed yet.** Expect SmartScreen “unknown publisher” and possible Defender false positives. We do **not** claim signed releases. Roadmap for signing: [docs/SIGNING_AND_DISTRIBUTION.md](./docs/SIGNING_AND_DISTRIBUTION.md).
 
-Release workflows are plain **YAML** under `.github/workflows/` (required by GitHub Actions). They are kept **minimal** on purpose — not a cargo-dist-style generator.
+Release workflows are plain **YAML** under `.github/workflows/` (required by GitHub Actions). They are kept **minimal** on purpose, not a cargo-dist-style generator.
 
 ## Prerequisites (hardware)
 
-1. **[PawnIO](https://pawnio.eu/)** — **required** for Super I/O / EC access. It is a **prerequisite**, **not bundled** with fancontrol-rs. Install the official package first. If PawnIO is missing, the app still starts (mock / config / host sensors); the UI shows a clear message / popup when the hardware backend is unavailable.
-2. **Administrator** — `pawnio_open` needs an elevated process for live hardware.
-3. Compatible board path — today, **NCT668x EC** is the validated path; see [docs/SUPPORTED_HARDWARE.md](./docs/SUPPORTED_HARDWARE.md).
+1. **[PawnIO](https://pawnio.eu/)** is **required** for Super I/O / EC access. It is a **prerequisite**, **not bundled** with fancontrol-rs. Install the official package first. If PawnIO is missing, the app still starts (mock / config / host sensors); the UI shows a clear message / popup when the hardware backend is unavailable.
+2. **Administrator**: `pawnio_open` needs an elevated process for live hardware.
+3. Compatible board path: today, **NCT668x EC** is the validated path; see [docs/SUPPORTED_HARDWARE.md](./docs/SUPPORTED_HARDWARE.md).
 
 ## Building
 
@@ -106,7 +106,7 @@ Release binary: `target/release/fancontrol-rs.exe`.
 
 This app talks to **PawnIO** (kernel I/O), may spawn **nvidia-smi** for optional GPU temps, and reads SSD temps via native Windows storage APIs (no PowerShell). Like FanControl / LibreHardwareMonitor, scanners may still flag the **unsigned** binary (heuristic / behavioral rules, not a proof of malware).
 
-- Prefer official Releases + verify **SHA256** — see [docs/SECURITY.md](./docs/SECURITY.md).
+- Prefer official Releases + verify **SHA256**: see [docs/SECURITY.md](./docs/SECURITY.md).
 - PWM writes are on by default; running without `--read-only` (real PWM control) can make Defender noisier.
 
 **Do not disable Defender entirely.** Prefer a folder exclusion for local development:
@@ -120,7 +120,7 @@ This app talks to **PawnIO** (kernel I/O), may spawn **nvidia-smi** for optional
 
 Also run an **elevated** (Admin) terminal when using hardware, or PawnIO open fails with access denied.
 
-Signing + installer (later) should reduce SmartScreen friction for end users — not configured yet.
+Signing + installer (later) should reduce SmartScreen friction for end users. Not configured yet.
 
 ## Safety
 
@@ -145,7 +145,7 @@ cargo run -- init-profile --hw
 Default: bare exe / no subcommand launches the **UI** with **PWM writes on** and **curve control on** (first-run modal to confirm fan control). Mock sensors are **off** unless `--mock`.
 
 ```bash
-# Double-click fancontrol-rs.exe  — or:
+# Double-click fancontrol-rs.exe, or:
 cargo run --release
 # same as: cargo run --release -- ui
 
@@ -164,7 +164,7 @@ Rename fans/sensors: edit `channel-map.json` under the app config dir (`map-init
 ## Contributing
 
 Bug reports and pull requests are welcome on this repository.  
-Please read **[CONTRIBUTING.md](./CONTRIBUTING.md)** — issue-first for non-trivial work, quality gates (fmt/clippy/tests), hardware safety, and a **strict AI disclosure** policy.
+Please read **[CONTRIBUTING.md](./CONTRIBUTING.md)** (issue-first for non-trivial work, quality gates, hardware safety, and a strict AI disclosure policy).
 
 ## License
 
