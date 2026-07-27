@@ -1,11 +1,12 @@
 //! Best-effort host sensors (GPU / storage) without privileged drivers.
 //!
-//! - NVIDIA GPU: `nvidia-smi` if present on PATH (no PowerShell)
+//! - NVIDIA GPU: fixed-path `nvidia-smi` (no PATH walk on Windows)
 //! - Storage (Windows): `DeviceIoControl` temperature property — **no PowerShell**
 
 use crate::traits::{PluginError, Result, SensorProvider};
 use fancontrol_core::{SensorDescriptor, SensorId, SensorKind};
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -23,10 +24,10 @@ struct Cached {
 }
 
 pub struct HostSensorProvider {
+    /// When false, `sensors()`/`read()` are empty and the background loop idles.
+    enabled: Arc<AtomicBool>,
     cache: Arc<Mutex<Option<Cached>>>,
-    gpu_ttl: Duration,
     storage_ttl: Duration,
-    /// Last time we attempted a storage probe (independent of GPU).
     last_storage: Mutex<Instant>,
     storage_cache: Mutex<Vec<(String, String, f64)>>,
     started: Mutex<bool>,
@@ -39,10 +40,16 @@ impl Default for HostSensorProvider {
 }
 
 impl HostSensorProvider {
+    /// Host sensors enabled (CLI default).
     pub fn new() -> Self {
+        Self::with_enabled(Arc::new(AtomicBool::new(true)))
+    }
+
+    /// Share an enable flag with the UI (live Options toggle).
+    pub fn with_enabled(enabled: Arc<AtomicBool>) -> Self {
         let p = Self {
+            enabled,
             cache: Arc::new(Mutex::new(None)),
-            gpu_ttl: Duration::from_secs(2),
             storage_ttl: Duration::from_secs(15),
             last_storage: Mutex::new(Instant::now() - Duration::from_secs(60)),
             storage_cache: Mutex::new(Vec::new()),
@@ -52,6 +59,18 @@ impl HostSensorProvider {
         p
     }
 
+    pub fn enabled_flag(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.enabled)
+    }
+
+    pub fn set_enabled(&self, on: bool) {
+        self.enabled.store(on, Ordering::Relaxed);
+    }
+
+    fn is_enabled(&self) -> bool {
+        self.enabled.load(Ordering::Relaxed)
+    }
+
     fn ensure_bg_refresh(&self) {
         let mut started = self.started.lock().unwrap_or_else(|e| e.into_inner());
         if *started {
@@ -59,36 +78,59 @@ impl HostSensorProvider {
         }
         *started = true;
         let cache = Arc::clone(&self.cache);
-        let gpu_ttl = self.gpu_ttl;
-        // Background loop: nvidia-smi frequently; storage refreshed on demand (merge_storage_if_due)
+        let enabled = Arc::clone(&self.enabled);
         thread::Builder::new()
             .name("host-sensors".into())
-            .spawn(move || loop {
-                let gpu = probe_nvidia();
-                {
-                    let mut g = cache.lock().unwrap_or_else(|e| e.into_inner());
-                    let storage = g
-                        .as_ref()
-                        .map(|c| {
-                            c.values
-                                .iter()
-                                .filter(|(id, _, _)| id.starts_with("host.ssd"))
-                                .cloned()
-                                .collect::<Vec<_>>()
-                        })
-                        .unwrap_or_default();
-                    let mut values = gpu;
-                    values.extend(storage);
-                    *g = Some(Cached {
-                        values: Arc::new(values),
-                    });
+            .spawn(move || {
+                let mut empty_gpu_streak = 0u32;
+                loop {
+                    if !enabled.load(Ordering::Relaxed) {
+                        empty_gpu_streak = 0;
+                        thread::sleep(Duration::from_secs(2));
+                        continue;
+                    }
+                    let gpu = probe_nvidia();
+                    if gpu.is_empty() {
+                        empty_gpu_streak = empty_gpu_streak.saturating_add(1);
+                    } else {
+                        empty_gpu_streak = 0;
+                    }
+                    {
+                        let mut g = cache.lock().unwrap_or_else(|e| e.into_inner());
+                        let storage = g
+                            .as_ref()
+                            .map(|c| {
+                                c.values
+                                    .iter()
+                                    .filter(|(id, _, _)| id.starts_with("host.ssd"))
+                                    .cloned()
+                                    .collect::<Vec<_>>()
+                            })
+                            .unwrap_or_default();
+                        let mut values = gpu;
+                        values.extend(storage);
+                        *g = Some(Cached {
+                            values: Arc::new(values),
+                        });
+                    }
+                    // Backoff when no NVIDIA GPU / smi missing to avoid process spam.
+                    let sleep = if empty_gpu_streak == 0 {
+                        Duration::from_secs(3)
+                    } else if empty_gpu_streak < 3 {
+                        Duration::from_secs(15)
+                    } else {
+                        Duration::from_secs(60)
+                    };
+                    thread::sleep(sleep);
                 }
-                thread::sleep(gpu_ttl);
             })
             .ok();
     }
 
     fn merge_storage_if_due(&self) {
+        if !self.is_enabled() {
+            return;
+        }
         let mut last = self.last_storage.lock().unwrap_or_else(|e| e.into_inner());
         if last.elapsed() < self.storage_ttl {
             return;
@@ -115,6 +157,9 @@ impl HostSensorProvider {
     }
 
     fn snapshot(&self) -> Arc<Vec<(String, String, f64)>> {
+        if !self.is_enabled() {
+            return Arc::new(Vec::new());
+        }
         self.ensure_bg_refresh();
         self.merge_storage_if_due();
         let g = self.cache.lock().unwrap_or_else(|e| e.into_inner());
@@ -130,6 +175,9 @@ impl SensorProvider for HostSensorProvider {
     }
 
     fn sensors(&self) -> Vec<SensorDescriptor> {
+        if !self.is_enabled() {
+            return Vec::new();
+        }
         self.snapshot()
             .iter()
             .map(|(id, name, _)| SensorDescriptor {
@@ -143,6 +191,9 @@ impl SensorProvider for HostSensorProvider {
     }
 
     fn read(&self, id: &SensorId) -> Result<f64> {
+        if !self.is_enabled() {
+            return Err(PluginError::SensorNotFound(id.to_string()));
+        }
         self.snapshot()
             .iter()
             .find(|(i, _, _)| i == id.as_str())
@@ -190,52 +241,48 @@ fn probe_nvidia() -> Vec<(String, String, f64)> {
     rows
 }
 
-/// Prefer absolute NVIDIA install paths so we do **not** walk a polluted `PATH`
-/// (VirusTotal sandboxes often list every `…\javapath\nvidia-smi.exe` probe as a
-/// "file opened"). Bare `nvidia-smi` on PATH is last resort only.
+/// Prefer absolute NVIDIA install paths so we do **not** walk a polluted `PATH`.
 fn resolve_nvidia_smi() -> Option<std::path::PathBuf> {
     use std::path::PathBuf;
+    use std::sync::OnceLock;
 
-    let mut candidates: Vec<PathBuf> = Vec::new();
-
-    #[cfg(windows)]
-    {
-        const REL: &str = r"NVIDIA Corporation\NVSMI\nvidia-smi.exe";
-        for env_key in ["ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"] {
-            if let Ok(root) = std::env::var(env_key) {
-                candidates.push(PathBuf::from(root).join(REL));
+    static CACHED: OnceLock<Option<PathBuf>> = OnceLock::new();
+    CACHED
+        .get_or_init(|| {
+            let mut candidates: Vec<PathBuf> = Vec::new();
+            #[cfg(windows)]
+            {
+                const REL: &str = r"NVIDIA Corporation\NVSMI\nvidia-smi.exe";
+                for env_key in ["ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"] {
+                    if let Ok(root) = std::env::var(env_key) {
+                        candidates.push(PathBuf::from(root).join(REL));
+                    }
+                }
+                candidates.push(PathBuf::from(
+                    r"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe",
+                ));
+                candidates.push(PathBuf::from(
+                    r"C:\Program Files (x86)\NVIDIA Corporation\NVSMI\nvidia-smi.exe",
+                ));
+                if let Ok(sys) = std::env::var("SystemRoot") {
+                    candidates.push(PathBuf::from(sys).join(r"System32\nvidia-smi.exe"));
+                }
             }
-        }
-        // Common defaults if env is odd in a sandbox
-        candidates.push(PathBuf::from(
-            r"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe",
-        ));
-        candidates.push(PathBuf::from(
-            r"C:\Program Files (x86)\NVIDIA Corporation\NVSMI\nvidia-smi.exe",
-        ));
-        // Some driver layouts also place a copy under System32
-        if let Ok(sys) = std::env::var("SystemRoot") {
-            candidates.push(PathBuf::from(sys).join(r"System32\nvidia-smi.exe"));
-        }
-    }
-
-    for p in &candidates {
-        if p.is_file() {
-            return Some(p.clone());
-        }
-    }
-
-    // No bare PATH lookup on Windows: CreateProcess("nvidia-smi") and manual PATH
-    // walks both produce VirusTotal "files opened" noise under every odd PATH entry
-    // (Oracle javapath, Unrar, …). Non-Windows: allow PATH for dev convenience.
-    #[cfg(not(windows))]
-    {
-        which_on_path("nvidia-smi")
-    }
-    #[cfg(windows)]
-    {
-        None
-    }
+            for p in &candidates {
+                if p.is_file() {
+                    return Some(p.clone());
+                }
+            }
+            #[cfg(not(windows))]
+            {
+                return which_on_path("nvidia-smi");
+            }
+            #[cfg(windows)]
+            {
+                None
+            }
+        })
+        .clone()
 }
 
 #[cfg(not(windows))]

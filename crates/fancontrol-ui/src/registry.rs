@@ -5,11 +5,14 @@ use fancontrol_pawnio::PawnioProvider;
 use fancontrol_plugins::{
     ControlProvider, HostSensorProvider, MockProvider, ProviderRegistry, Result, SensorProvider,
 };
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 pub struct BuiltProviders {
     pub reg: ProviderRegistry,
     pub pawnio: Option<Arc<PawnioProvider>>,
+    /// Live gate for host GPU/SSD sensors (shared with Options toggle).
+    pub host_enabled: Arc<AtomicBool>,
 }
 
 pub fn build_registry(
@@ -36,10 +39,16 @@ pub fn build_registry(
         reg.register_control_provider(Box::new(ArcControl(arc.clone())));
         pawnio = Some(arc);
     }
-    if include_host {
-        reg.register_sensor_provider(Box::new(HostSensorProvider::new()));
+    // Always register host provider; gate with AtomicBool for live Options toggle.
+    let host_enabled = Arc::new(AtomicBool::new(include_host));
+    reg.register_sensor_provider(Box::new(HostSensorProvider::with_enabled(Arc::clone(
+        &host_enabled,
+    ))));
+    BuiltProviders {
+        reg,
+        pawnio,
+        host_enabled,
     }
-    BuiltProviders { reg, pawnio }
 }
 
 struct ArcSensor(Arc<PawnioProvider>);

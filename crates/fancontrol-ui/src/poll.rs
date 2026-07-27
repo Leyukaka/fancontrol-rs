@@ -48,11 +48,11 @@ pub fn spawn_poller(
         .name("fancontrol-poll".into())
         .spawn(move || {
             let mut tick = 0u64;
-            // Cache descriptor lists (invalidation only on process restart for now)
-            let sensors = reg.all_sensors();
-            let controls = reg.all_controls();
+            // Re-list each tick so host provider enable/disable is live.
             loop {
                 let start = Instant::now();
+                let sensors = reg.all_sensors();
+                let controls = reg.all_controls();
                 let map_snap = map.lock().map(|g| g.clone()).unwrap_or_default();
                 let snap =
                     take_snapshot(&reg, pawnio.as_ref(), &sensors, &controls, &map_snap, tick);
@@ -86,10 +86,11 @@ fn take_snapshot(
     let mut cpu_temp_id = None;
     let mut gpu_temp_id = None;
 
-    // Fast path: one HWM bus transaction for all pawnio channels
+    // Fast path: one HWM bus transaction for all pawnio channels.
+    // Fan/duty maps keyed by (device_index, slot) so multi-chip boards don't clobber.
     let mut pawnio_temp: HashMap<String, f64> = HashMap::new();
-    let mut pawnio_fan: HashMap<usize, f64> = HashMap::new();
-    let mut pawnio_duty: HashMap<usize, u8> = HashMap::new();
+    let mut pawnio_fan: HashMap<(usize, usize), f64> = HashMap::new();
+    let mut pawnio_duty: HashMap<(usize, usize), u8> = HashMap::new();
 
     if let Some(p) = pawnio {
         for (di, sample) in p.sample_all_devices() {
@@ -101,12 +102,12 @@ fn take_snapshot(
             }
             for (fi, v) in sample.fans {
                 if let Some(rpm) = v {
-                    pawnio_fan.insert(fi, rpm);
+                    pawnio_fan.insert((di, fi), rpm);
                 }
             }
             for (slot, v) in sample.duties {
                 if let Some(d) = v {
-                    pawnio_duty.insert(slot, d);
+                    pawnio_duty.insert((di, slot), d);
                 }
             }
         }
@@ -133,8 +134,8 @@ fn take_snapshot(
                         }
                     }
                     if let Some(idx) = tail.strip_prefix("fan") {
-                        if let Ok(fi) = idx.parse::<usize>() {
-                            if let Some(&rpm) = pawnio_fan.get(&fi) {
+                        if let (Ok(di), Ok(fi)) = (di_s.parse::<usize>(), idx.parse::<usize>()) {
+                            if let Some(&rpm) = pawnio_fan.get(&(di, fi)) {
                                 let label = map.sensor_name(id, &s.name).to_string();
                                 fans.push((id.to_string(), label, rpm));
                                 continue;
@@ -184,10 +185,10 @@ fn take_snapshot(
         let id = c.id.as_str();
         let duty = if let Some(rest) = id.strip_prefix("pawnio.") {
             rest.split_once('.')
-                .and_then(|(di, tail)| {
-                    let _ = di.parse::<usize>().ok()?;
+                .and_then(|(di_s, tail)| {
+                    let di = di_s.parse::<usize>().ok()?;
                     let slot = tail.strip_prefix("ctrl")?.parse::<usize>().ok()?;
-                    pawnio_duty.get(&slot).copied()
+                    pawnio_duty.get(&(di, slot)).copied()
                 })
                 .or_else(|| reg.get_duty(&c.id).ok())
         } else {

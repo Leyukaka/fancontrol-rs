@@ -142,21 +142,21 @@ cargo run -- init-profile --hw
 
 ## UI (egui)
 
-Default: bare exe / no subcommand launches the **UI** with **PWM writes on** and **curve control on**.
+Default: bare exe / no subcommand launches the **UI** with **PWM writes on** and **curve control on** (first-run modal to confirm fan control). Mock sensors are **off** unless `--mock`.
 
 ```bash
 # Double-click fancontrol-rs.exe  — or:
 cargo run --release
 # same as: cargo run --release -- ui
 
-# Mock only (no admin, rarely flagged)
-cargo run -- --no-hw ui
+# Dev: include mock channels
+cargo run -- --mock --no-hw ui
 
 # Live hardware, writes on (Administrator recommended)
 cargo run -- --hw-only ui
 
 # Live hardware, sensors only (no PWM)
-cargo run -- --hw-only --read-only ui
+cargo run -- --read-only ui
 ```
 
 Rename fans/sensors: edit `channel-map.json` under the app config dir (`map-init` creates it).

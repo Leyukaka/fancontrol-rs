@@ -25,11 +25,11 @@ use std::time::Duration;
     version
 )]
 struct Cli {
-    /// Include mock sensors/controls (default: on unless --hw-only)
+    /// Include mock sensors/controls (**opt-in**; product default is hardware/host only)
     #[arg(long, global = true)]
     mock: bool,
 
-    /// Do not register mock provider
+    /// Hardware/host only (no mock). Default product mode; kept for scripts. Same as omitting `--mock`.
     #[arg(long, global = true)]
     hw_only: bool,
 
@@ -147,7 +147,7 @@ enum Commands {
         #[arg(long)]
         force: bool,
     },
-    /// Launch desktop UI (egui). Default when no subcommand. Flags: --hw-only, --read-only, --no-hw
+    /// Launch desktop UI (egui). Default when no subcommand. Flags: --mock, --hw-only, --read-only, --no-hw
     Ui,
 }
 
@@ -220,17 +220,20 @@ fn main() -> anyhow::Result<()> {
         .init();
 
     let cli = Cli::parse();
-    // Default product launch: hardware probe ON, PWM writes ON, subcommand UI.
-    // Use --read-only / --no-hw / --hw-only for diagnostics.
-    let include_mock = !cli.hw_only;
+    // Default product launch: hardware/host ON, mock OFF, PWM writes ON, subcommand UI.
+    // --mock for dev sensors; --read-only / --no-hw for diagnostics.
+    let include_mock = cli.mock && !cli.hw_only;
     let include_hw = !cli.no_hw;
     // Writes **enabled by default**. Only `--read-only` disables PWM.
     // `--allow-hw-write` remains valid for old scripts (no-op when already default-on).
     let allow_hw_write = !cli.read_only;
-    let _ = (cli.mock, cli.allow_hw_write); // reserved / back-compat
+    let _ = cli.allow_hw_write;
 
     if allow_hw_write {
         tracing::warn!("hardware PWM writes enabled (default; use --read-only to disable)");
+    }
+    if include_mock {
+        tracing::info!("mock provider enabled (--mock)");
     }
 
     // Double-click / bare `fancontrol-rs.exe` → desktop UI

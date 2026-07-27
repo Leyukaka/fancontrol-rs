@@ -128,11 +128,14 @@ fn query_temperature_nvme_fallback(handle: HANDLE) -> Option<f64> {
 
     let header_len = std::mem::size_of::<STORAGE_PROPERTY_QUERY>();
     let protocol_data_len = std::mem::size_of::<STORAGE_PROTOCOL_SPECIFIC_DATA>();
+    let health_len = std::mem::size_of::<NVME_HEALTH_INFO_LOG>();
     // STORAGE_PROPERTY_QUERY::AdditionalParameters is a 1-byte placeholder for the
     // protocol-specific data that immediately follows the two u32 header fields.
     let query_offset = header_len - 1;
 
-    let mut in_buf = vec![0u8; query_offset + protocol_data_len];
+    // Leave room for the log page after the protocol-specific header (some stacks
+    // expect a larger transfer buffer than the bare request structure).
+    let mut in_buf = vec![0u8; query_offset + protocol_data_len + health_len];
     // SAFETY: `in_buf` is large enough for the header at offset 0.
     unsafe {
         let q = in_buf.as_mut_ptr() as *mut STORAGE_PROPERTY_QUERY;
@@ -148,10 +151,12 @@ fn query_temperature_nvme_fallback(handle: HANDLE) -> Option<f64> {
         (*p).ProtocolDataRequestValue = NVME_LOG_PAGE_HEALTH_INFO;
         (*p).ProtocolDataRequestSubValue = 0;
         (*p).ProtocolDataOffset = protocol_data_len as u32;
-        (*p).ProtocolDataLength = std::mem::size_of::<NVME_HEALTH_INFO_LOG>() as u32;
+        (*p).ProtocolDataLength = health_len as u32;
     }
 
-    let mut out = vec![0u8; 512];
+    // Descriptor header + protocol data + full health log (aligned generously).
+    let out_need = std::mem::size_of::<STORAGE_PROTOCOL_DATA_DESCRIPTOR>() + health_len + 64;
+    let mut out = vec![0u8; out_need.max(512)];
     let mut returned = 0u32;
     let ok = unsafe {
         DeviceIoControl(

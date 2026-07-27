@@ -17,6 +17,7 @@ use fancontrol_core::{
     FanCurve, Profile,
 };
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -74,6 +75,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         options.allow_hw_write,
         settings.show_host_sensors,
     );
+    let host_enabled = built.host_enabled;
     let reg = Arc::new(built.reg);
     let map = Arc::new(Mutex::new(ChannelMap::load_or_seed().unwrap_or_default()));
     let status = backend_status(options.include_hw);
@@ -90,6 +92,8 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         settings.save();
     }
     let pawnio_dialog = detect_pawnio_dialog(options.include_hw);
+    // First-run writes consent only when the process actually allows PWM.
+    let show_writes_consent = options.allow_hw_write && !settings.writes_risk_acknowledged;
 
     let app = FanApp {
         options,
@@ -98,6 +102,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         writes,
         status,
         settings,
+        host_enabled,
         slider_state: HashMap::new(),
         user_lock_until: HashMap::new(),
         write_error: None,
@@ -117,6 +122,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         profile_status: None,
         new_profile_name: "default".into(),
         pawnio_dialog,
+        show_writes_consent,
         tray: None,
         really_exit: false,
         updates: UpdateChecker::new(),
@@ -200,6 +206,8 @@ struct FanApp {
     writes: WriteQueue,
     status: BackendStatus,
     settings: UiSettings,
+    /// Live gate for host GPU/SSD (Options toggle).
+    host_enabled: Arc<AtomicBool>,
     slider_state: HashMap<String, f32>,
     user_lock_until: HashMap<String, Instant>,
     write_error: Option<String>,
@@ -225,6 +233,8 @@ struct FanApp {
     profile_status: Option<String>,
     new_profile_name: String,
     pawnio_dialog: Option<PawnioDialogKind>,
+    /// First-run modal: user must acknowledge PWM control risk.
+    show_writes_consent: bool,
     tray: Option<AppTray>,
     /// Set when the tray "Exit" item fires, so the close-request handler lets it through
     /// instead of minimizing to tray.
@@ -349,9 +359,10 @@ impl eframe::App for FanApp {
         self.histories
             .retain(|id, _| self.settings.graph_sensor_ids.contains(id));
 
-        // Auto-apply curves ~1 Hz when enabled + write allowed
+        // Auto-apply curves ~1 Hz when enabled + write allowed + consent accepted
         if self.settings.auto_apply_curves
             && self.options.allow_hw_write
+            && !self.show_writes_consent
             && self.last_curve_apply.elapsed() >= Duration::from_millis(1000)
         {
             self.apply_curves_from_snapshot(&snap);
@@ -500,12 +511,17 @@ impl eframe::App for FanApp {
                             t!("options.show_cpu_graph").to_string(),
                         )
                         .changed();
-                    dirty |= ui
+                    if ui
                         .checkbox(
                             &mut self.settings.show_host_sensors,
                             t!("options.show_host_sensors").to_string(),
                         )
-                        .changed();
+                        .changed()
+                    {
+                        self.host_enabled
+                            .store(self.settings.show_host_sensors, Ordering::Relaxed);
+                        dirty = true;
+                    }
                     dirty |= ui
                         .checkbox(
                             &mut self.settings.auto_apply_curves,
@@ -977,6 +993,7 @@ impl eframe::App for FanApp {
                                     *self.slider_state.get(&c.id).unwrap_or(&f32::from(hw_duty));
 
                                 let enabled = c.writable
+                                    && !self.show_writes_consent
                                     && (self.options.allow_hw_write || c.id.starts_with("mock."));
 
                                 if c.duty.is_none() {
@@ -1018,7 +1035,11 @@ impl eframe::App for FanApp {
         });
 
         self.show_rename_modal(&ctx);
-        self.show_pawnio_dialog(&ctx);
+        // Writes consent first (blocks PWM until answered); then PawnIO help if needed.
+        self.show_writes_consent_dialog(&ctx);
+        if !self.show_writes_consent {
+            self.show_pawnio_dialog(&ctx);
+        }
     }
 }
 
@@ -1054,6 +1075,39 @@ impl FanApp {
                 );
             }
         }
+    }
+
+    fn show_writes_consent_dialog(&mut self, ctx: &egui::Context) {
+        if !self.show_writes_consent {
+            return;
+        }
+        egui::Window::new(t!("writes_consent.title").to_string())
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.set_max_width(460.0);
+                ui.label(t!("writes_consent.body").to_string());
+                ui.add_space(8.0);
+                ui.small(t!("writes_consent.hint").to_string());
+                ui.add_space(12.0);
+                ui.horizontal(|ui| {
+                    if ui.button(t!("writes_consent.accept").to_string()).clicked() {
+                        self.settings.writes_risk_acknowledged = true;
+                        self.settings.save();
+                        self.show_writes_consent = false;
+                    }
+                    if ui
+                        .button(t!("writes_consent.read_only_session").to_string())
+                        .clicked()
+                    {
+                        // Session-only: do not persist read-only; re-prompt next launch.
+                        self.options.allow_hw_write = false;
+                        self.settings.auto_apply_curves = false;
+                        self.show_writes_consent = false;
+                    }
+                });
+            });
     }
 
     fn show_pawnio_dialog(&mut self, ctx: &egui::Context) {
@@ -1370,6 +1424,12 @@ impl FanApp {
     }
 
     fn queue_write(&mut self, id: &str, duty: f32) {
+        if self.show_writes_consent {
+            return;
+        }
+        if !self.options.allow_hw_write && !id.starts_with("mock.") {
+            return;
+        }
         let percent = duty.round().clamp(0.0, 100.0) as u8;
         // Optimistic UI skip only after queue success drain; clear on failure.
         self.last_applied_duty.remove(id);

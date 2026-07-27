@@ -37,6 +37,9 @@ pub struct UiSettings {
     /// One-shot migration marker: product defaults (curve control on, etc.).
     #[serde(default)]
     pub product_defaults_applied: bool,
+    /// User saw the first-run “PWM writes enabled” dialog and accepted fan control.
+    #[serde(default)]
+    pub writes_risk_acknowledged: bool,
     /// Last profile switched to / saved in the UI — auto-loaded on next startup.
     #[serde(default)]
     pub last_profile_id: Option<String>,
@@ -116,6 +119,8 @@ impl Default for UiSettings {
             graph_window_minutes: default_graph_window_minutes(),
             graph_sample_secs: default_graph_sample_secs(),
             product_defaults_applied: true,
+            // New installs still show the consent dialog once (false).
+            writes_risk_acknowledged: false,
             last_profile_id: None,
             language: None,
             graph_style: GraphStyle::default(),
