@@ -33,3 +33,6 @@ CLAUDE.local.md
 # Local icon tool build
 tools/render-logo/target/
 
+
+fancontrol-rs-windows/
+

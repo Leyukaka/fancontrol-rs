@@ -44,7 +44,7 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 
 ## Status (keep updated)
 
-- Product line: **v0.2.0** (bumped from 0.1.5; the intermediate `v0.1.6-i18n-beta.1` prerelease is superseded). Bundles: full 8-language i18n, fractal/shader gallery, write-status/resize UI, hide-zero-duty controls, multi-sensor graph + sensor picker + curve binding, and the egui_plot rendering rewrite. Specs under `specs/` aligned with this status.
+- Product line: **v0.2.1** (from 0.2.0: mock opt-in, first-run writes consent, host toggle live, multi-device poll keys, NVMe buffer harden). Specs under `specs/` largely aligned; keep updating with status.
 - Phase 0 foundation: **done**.
 - Phase 1: PawnIOLib FFI + LpcIO + **NCT668x EC HWM** (validated class id `0xD5` rev `0x92` @ `0x0A20`) + banked NCT path (experimental) + control loop + CLI.
 - Elevation required for `pawnio_open` (Administrator). **PawnIO is a prerequisite** (not bundled) — UI shows a startup dialog if missing / not openable.
@@ -66,7 +66,7 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 4. AMD/Intel GPU temp — blocked on hardware to validate against, see `docs/GPU_VENDOR_APIS.md`.
 5. RGB (future — not Super I/O).
 6. Verify SSD/NVMe temperature detection (`crates/fancontrol-plugins/src/storage_win.rs`, `DeviceIoControl` + NVMe health-log fallback) against real hardware — implemented and reviewed, but not yet confirmed to report correctly on an actual machine.
-7. Decide whether `MockProvider` should stay included by default: `include_mock = !cli.hw_only` in `src/main.rs` means mock sensors/fans/controls are mixed into every normal run (including plain `ui`) unless `--hw-only` is passed explicitly. Worth revisiting whether that's still the right default for a shipped build, or whether mocks should become opt-in instead.
+7. Mock is **opt-in** (`--mock`); product default is hardware/host only (v0.2.1).
 
 ## Safety product rules
 
