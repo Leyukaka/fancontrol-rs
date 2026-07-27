@@ -113,7 +113,7 @@ enum Commands {
         /// Interval between steps in ms
         #[arg(long, default_value_t = 1000)]
         interval_ms: u64,
-        /// Actually call set_duty (requires --allow-hw-write for pawnio)
+        /// Actually call set_duty (writes are on by default; do not pass --read-only)
         #[arg(long)]
         apply: bool,
     },

@@ -126,7 +126,8 @@ impl Default for UiSettings {
             show_fractal: false,
             graph_style_migrated: true,
             graph_sensor_ids: Vec::new(),
-            graph_sensor_ids_seeded: true,
+            // false so first live snapshot seeds CPU/GPU (true + empty = permanent empty graph)
+            graph_sensor_ids_seeded: false,
         }
     }
 }
@@ -145,11 +146,17 @@ impl UiSettings {
         };
         let mut s: Self = serde_json::from_str(&data).unwrap_or_default();
         s.clamp_graph_options();
+        let mut dirty = false;
+        // Recover first-run bug: seeded=true with empty ids never auto-filled the graph.
+        if s.graph_sensor_ids_seeded && s.graph_sensor_ids.is_empty() {
+            s.graph_sensor_ids_seeded = false;
+            dirty = true;
+        }
         // Upgrade older installs: enable curve control once (user can still turn it off).
         if !s.product_defaults_applied {
             s.auto_apply_curves = true;
             s.product_defaults_applied = true;
-            s.save();
+            dirty = true;
         }
         // Upgrade older installs: carry the old `show_fractal` toggle over to
         // the new graph-style picker, once.
@@ -158,6 +165,9 @@ impl UiSettings {
                 s.graph_style = GraphStyle::FractalPyramid;
             }
             s.graph_style_migrated = true;
+            dirty = true;
+        }
+        if dirty {
             s.save();
         }
         s

@@ -27,7 +27,7 @@ impl PawnioProvider {
                 notes.push(if write_enabled {
                     "mode=READ+WRITE (hardware writes enabled)".into()
                 } else {
-                    "mode=READ-ONLY (hardware writes blocked; pass --allow-hw-write to enable)"
+                    "mode=READ-ONLY (hardware writes blocked; drop --read-only / don't pass --read-only)"
                         .into()
                 });
                 for c in &chips {
@@ -203,7 +203,7 @@ impl ControlProvider for PawnioProvider {
     fn set_duty(&self, id: &ControlId, percent: u8) -> Result<()> {
         if !self.write_enabled {
             return Err(PluginError::NotWritable(format!(
-                "{id}: hardware writes disabled (read-only mode). Re-run with --allow-hw-write when ready."
+                "{id}: hardware writes disabled (read-only mode). Re-run without --read-only when ready."
             )));
         }
         let (di, slot) = parse_ctrl(id.as_str())?;

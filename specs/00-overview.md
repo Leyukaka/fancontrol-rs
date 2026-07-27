@@ -3,7 +3,7 @@
 **Spiritual successor to FanControl (Rem0o), rewritten in Rust.**
 
 Public repo: https://github.com/Leyukaka/fancontrol-rs  
-Current product line: **v0.1.x** (early public, NCT668x-focused hardware path).
+Current product line: **v0.2.x** (early public, NCT668x-focused hardware path).
 
 ## Vision
 
@@ -21,7 +21,7 @@ A modern, secure, full-featured desktop fan control application for Windows that
 2. **Spec-driven** — Major decisions and features are documented in `/specs` (and public `docs/` for users) and kept in sync with reality.
 3. **Plugin-first architecture** — Core stays thin; hardware support and advanced features live in providers/plugins when possible.
 4. **Full-featured, not minimal** — Target feature parity (and beyond) with the original FanControl over time.
-5. **User control** — The user is always in control of curves, profiles, and automation. Hardware writes are **opt-in**.
+5. **User control** — The user is always in control of curves, profiles, and automation. Product default: **PWM writes on** (use `--read-only` for diagnostics).
 
 ## Target Platform
 

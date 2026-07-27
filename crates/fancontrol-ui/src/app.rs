@@ -290,14 +290,22 @@ impl eframe::App for FanApp {
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        // Drain write-queue outcomes before applying more curve steps.
+        for (id, duty) in self.writes.take_successes() {
+            self.last_applied_duty.insert(id, duty);
+            self.write_error = None;
+        }
+        for id in self.writes.take_failures() {
+            self.last_applied_duty.remove(&id);
+        }
         if let Some(e) = self.writes.take_error() {
             self.write_error = Some(e);
         }
 
         let snap = self.snapshot.lock().map(|g| g.clone()).unwrap_or_default();
 
-        // One-shot seed: carry the old cpu/gpu auto-guess over as the initial graph
-        // selection so upgrading users don't lose their CPU line.
+        // One-shot seed: CPU/GPU (when known) as the initial multi-sensor graph selection.
+        // `graph_sensor_ids_seeded` must start false for new installs (see settings Default).
         if !self.settings.graph_sensor_ids_seeded && (snap.tick > 0 || !snap.temps.is_empty()) {
             let mut seed = Vec::new();
             if let Some(id) = &snap.cpu_temp_id {
@@ -305,6 +313,12 @@ impl eframe::App for FanApp {
             }
             if let Some(id) = &snap.gpu_temp_id {
                 seed.push(id.clone());
+            }
+            // Fallback: first available temp if CPU id not yet labeled
+            if seed.is_empty() {
+                if let Some((id, _, _)) = snap.temps.first() {
+                    seed.push(id.clone());
+                }
             }
             self.settings.graph_sensor_ids = seed;
             self.settings.graph_sensor_ids_seeded = true;
@@ -904,10 +918,15 @@ impl eframe::App for FanApp {
                                                 .unwrap_or(false);
                                             if ui.selectable_label(selected, &cid).clicked() {
                                                 self.profile.assignments.insert(c.id.clone(), cid);
-                                                self.profile.sensor_bindings.insert(
-                                                    c.id.clone(),
-                                                    "pawnio.0.temp.CPU".into(),
-                                                );
+                                                // Keep existing sensor binding; only default when missing.
+                                                self.profile
+                                                    .sensor_bindings
+                                                    .entry(c.id.clone())
+                                                    .or_insert_with(|| {
+                                                        snap.cpu_temp_id.clone().unwrap_or_else(
+                                                            || "pawnio.0.temp.CPU".into(),
+                                                        )
+                                                    });
                                             }
                                         }
                                     });
@@ -1285,8 +1304,8 @@ impl FanApp {
             if self.last_applied_duty.get(&ctrl) == Some(&duty) {
                 continue;
             }
+            // Do not mark applied until WriteQueue reports success (see take_successes).
             self.writes.enqueue(&ctrl, duty);
-            self.last_applied_duty.insert(ctrl.clone(), duty);
             self.slider_state.insert(ctrl, f32::from(duty));
         }
         for e in step.errors {
@@ -1352,7 +1371,8 @@ impl FanApp {
 
     fn queue_write(&mut self, id: &str, duty: f32) {
         let percent = duty.round().clamp(0.0, 100.0) as u8;
+        // Optimistic UI skip only after queue success drain; clear on failure.
+        self.last_applied_duty.remove(id);
         self.writes.enqueue(id, percent);
-        self.last_applied_duty.insert(id.to_string(), percent);
     }
 }
