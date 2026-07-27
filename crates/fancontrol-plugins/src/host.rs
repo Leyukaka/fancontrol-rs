@@ -50,7 +50,8 @@ impl HostSensorProvider {
         let p = Self {
             enabled,
             cache: Arc::new(Mutex::new(None)),
-            storage_ttl: Duration::from_secs(15),
+            // Independent of GPU backoff — refresh SSD temps often enough to look live.
+            storage_ttl: Duration::from_secs(5),
             last_storage: Mutex::new(Instant::now() - Duration::from_secs(60)),
             storage_cache: Mutex::new(Vec::new()),
             started: Mutex::new(false),
@@ -83,12 +84,37 @@ impl HostSensorProvider {
             .name("host-sensors".into())
             .spawn(move || {
                 let mut empty_gpu_streak = 0u32;
+                let mut last_storage = Instant::now() - Duration::from_secs(60);
+                let storage_every = Duration::from_secs(5);
                 loop {
                     if !enabled.load(Ordering::Relaxed) {
                         empty_gpu_streak = 0;
                         thread::sleep(Duration::from_secs(2));
                         continue;
                     }
+                    // Storage on its own cadence (not tied to GPU backoff).
+                    let refresh_storage = last_storage.elapsed() >= storage_every;
+                    if refresh_storage {
+                        last_storage = Instant::now();
+                    }
+                    let storage = if refresh_storage {
+                        probe_storage_temps()
+                    } else {
+                        // Keep previous SSD rows from cache
+                        cache
+                            .lock()
+                            .ok()
+                            .and_then(|g| {
+                                g.as_ref().map(|c| {
+                                    c.values
+                                        .iter()
+                                        .filter(|(id, _, _)| id.starts_with("host.ssd"))
+                                        .cloned()
+                                        .collect::<Vec<_>>()
+                                })
+                            })
+                            .unwrap_or_default()
+                    };
                     let gpu = probe_nvidia();
                     if gpu.is_empty() {
                         empty_gpu_streak = empty_gpu_streak.saturating_add(1);
@@ -97,29 +123,19 @@ impl HostSensorProvider {
                     }
                     {
                         let mut g = cache.lock().unwrap_or_else(|e| e.into_inner());
-                        let storage = g
-                            .as_ref()
-                            .map(|c| {
-                                c.values
-                                    .iter()
-                                    .filter(|(id, _, _)| id.starts_with("host.ssd"))
-                                    .cloned()
-                                    .collect::<Vec<_>>()
-                            })
-                            .unwrap_or_default();
                         let mut values = gpu;
                         values.extend(storage);
                         *g = Some(Cached {
                             values: Arc::new(values),
                         });
                     }
-                    // Backoff when no NVIDIA GPU / smi missing to avoid process spam.
+                    // GPU probe backoff when absent; storage still refreshed above.
                     let sleep = if empty_gpu_streak == 0 {
                         Duration::from_secs(3)
                     } else if empty_gpu_streak < 3 {
-                        Duration::from_secs(15)
+                        Duration::from_secs(5)
                     } else {
-                        Duration::from_secs(60)
+                        Duration::from_secs(15)
                     };
                     thread::sleep(sleep);
                 }

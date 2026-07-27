@@ -44,7 +44,7 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 
 ## Status (keep updated)
 
-- Product line: **v0.2.1** (from 0.2.0: mock opt-in, first-run writes consent, host toggle live, multi-device poll keys, NVMe buffer harden). Specs under `specs/` largely aligned; keep updating with status.
+- Product line: **v0.2.2** (SSD temps: NVMe health preferred + multi-slot storage property; mock opt-in; writes consent; host toggle live).
 - Phase 0 foundation: **done**.
 - Phase 1: PawnIOLib FFI + LpcIO + **NCT668x EC HWM** (validated class id `0xD5` rev `0x92` @ `0x0A20`) + banked NCT path (experimental) + control loop + CLI.
 - Elevation required for `pawnio_open` (Administrator). **PawnIO is a prerequisite** (not bundled) — UI shows a startup dialog if missing / not openable.
@@ -65,8 +65,8 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 3. Auto-update: download + SHA256 verify + install (manual check already done) — see `docs/SECURITY.md`.
 4. AMD/Intel GPU temp — blocked on hardware to validate against, see `docs/GPU_VENDOR_APIS.md`.
 5. RGB (future — not Super I/O).
-6. Verify SSD/NVMe temperature detection (`crates/fancontrol-plugins/src/storage_win.rs`, `DeviceIoControl` + NVMe health-log fallback) against real hardware — implemented and reviewed, but not yet confirmed to report correctly on an actual machine.
-7. Mock is **opt-in** (`--mock`); product default is hardware/host only (v0.2.1).
+6. Confirm SSD/NVMe temps on real hardware under load (`sample-storage --times 3`); path prefers NVMe health composite over fixed TemperatureInfo[0].
+7. Mock is **opt-in** (`--mock`); product default is hardware/host only.
 
 ## Safety product rules
 

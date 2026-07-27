@@ -72,6 +72,15 @@ enum Commands {
     BackendStatus,
     /// Probe Super I/O chips only
     Detect,
+    /// Diagnose SSD/HDD temperature sources (DeviceIoControl paths, no PowerShell).
+    /// Prefer an elevated terminal so `\\.\PhysicalDriveN` opens.
+    SampleStorage {
+        /// Samples spaced by interval-ms (to check if temps change)
+        #[arg(long, default_value_t = 3)]
+        times: u32,
+        #[arg(long, default_value_t = 5000)]
+        interval_ms: u64,
+    },
     /// Read-only snapshot: temps + fan RPMs + current duties (no writes)
     Sample {
         /// How many times to sample
@@ -312,6 +321,39 @@ fn main() -> anyhow::Result<()> {
             println!("\nProvider probe:\n{}", p.detection_report());
             println!("opened_devices={}", p.device_count());
             println!("hw_write_enabled={}", p.write_enabled());
+        }
+        Commands::SampleStorage { times, interval_ms } => {
+            #[cfg(windows)]
+            {
+                use fancontrol_plugins::storage_win::diagnose_storage_temps;
+                let n = times.max(1);
+                for i in 0..n {
+                    println!("=== sample-storage {}/{} ===", i + 1, n);
+                    let rows = diagnose_storage_temps();
+                    if rows.is_empty() {
+                        println!("(no PhysicalDrive opened — run as Administrator, or no disks)");
+                    }
+                    for d in &rows {
+                        println!(
+                            "  drive{}  {}  chosen={:?} ({})  nvme={:?}  device_prop={:?}  adapter_prop={:?}",
+                            d.index,
+                            d.name,
+                            d.chosen_c,
+                            d.chosen_source.as_deref().unwrap_or("-"),
+                            d.nvme_c,
+                            d.device_prop_c,
+                            d.adapter_prop_c,
+                        );
+                    }
+                    if i + 1 < n {
+                        thread::sleep(Duration::from_millis(interval_ms.max(500)));
+                    }
+                }
+            }
+            #[cfg(not(windows))]
+            {
+                anyhow::bail!("sample-storage is Windows-only");
+            }
         }
         Commands::Detect => match fancontrol_pawnio::detect_chips() {
             Ok(chips) if chips.is_empty() => println!("No Super I/O chips detected."),
