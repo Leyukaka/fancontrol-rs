@@ -125,6 +125,9 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         activity_filter: String::new(),
         show_settings: false,
         show_curves: true,
+        show_temps: true,
+        show_fans: true,
+        show_controls: true,
         profile,
         profile_list: list_profiles().unwrap_or_default(),
         selected_curve: 0,
@@ -240,6 +243,10 @@ struct FanApp {
     activity_filter: String,
     show_settings: bool,
     show_curves: bool,
+    /// Session toggles for the three central columns (like `show_curves`).
+    show_temps: bool,
+    show_fans: bool,
+    show_controls: bool,
     profile: Profile,
     profile_list: Vec<String>,
     selected_curve: usize,
@@ -438,6 +445,31 @@ impl eframe::App for FanApp {
                     {
                         self.show_settings = !self.show_settings;
                     }
+                    // right-to-left: add Controls, Fans, Temps, then Curves
+                    if ui
+                        .selectable_label(
+                            self.show_controls,
+                            t!("top_bar.controls_toggle").to_string(),
+                        )
+                        .on_hover_text(t!("top_bar.controls_toggle_tooltip").to_string())
+                        .clicked()
+                    {
+                        self.show_controls = !self.show_controls;
+                    }
+                    if ui
+                        .selectable_label(self.show_fans, t!("top_bar.fans_toggle").to_string())
+                        .on_hover_text(t!("top_bar.fans_toggle_tooltip").to_string())
+                        .clicked()
+                    {
+                        self.show_fans = !self.show_fans;
+                    }
+                    if ui
+                        .selectable_label(self.show_temps, t!("top_bar.temps_toggle").to_string())
+                        .on_hover_text(t!("top_bar.temps_toggle_tooltip").to_string())
+                        .clicked()
+                    {
+                        self.show_temps = !self.show_temps;
+                    }
                     if ui
                         .selectable_label(self.show_curves, t!("top_bar.curves_toggle").to_string())
                         .on_hover_text(t!("top_bar.curves_toggle_tooltip").to_string())
@@ -479,13 +511,8 @@ impl eframe::App for FanApp {
                     t!("top_bar.curve_readonly_warning").to_string(),
                 );
             }
-            let status_text = match &self.status {
-                BackendStatus::Disabled => t!("registry.hw_probe_disabled").to_string(),
-                BackendStatus::Ok(detail) => t!("registry.pawnio_ok", detail = detail).to_string(),
-                BackendStatus::NeedsAdmin => t!("registry.needs_admin").to_string(),
-                BackendStatus::NotInstalled => t!("registry.not_installed").to_string(),
-            };
-            ui.label(status_text);
+            // Backend detail + channel counts live in Options (less noise on the main strip).
+            // Keep live errors here so failures stay visible.
             if let Some(err) = &snap.error {
                 ui.colored_label(
                     egui::Color32::YELLOW,
@@ -501,16 +528,6 @@ impl eframe::App for FanApp {
             if !self.options.allow_hw_write {
                 ui.small(t!("top_bar.sliders_locked").to_string());
             }
-            ui.small(
-                t!(
-                    "top_bar.debug_counts",
-                    temps = snap.temps.len(),
-                    fans = snap.fans.len(),
-                    controls = snap.controls.len(),
-                    tick = snap.tick
-                )
-                .to_string(),
-            );
         });
 
         if self.show_settings {
@@ -519,6 +536,27 @@ impl eframe::App for FanApp {
                 .default_size(260.0)
                 .show(ui, |ui| {
                     ui.heading(t!("options.heading").to_string());
+                    ui.separator();
+                    ui.label(t!("options.backend_heading").to_string());
+                    let status_text = match &self.status {
+                        BackendStatus::Disabled => t!("registry.hw_probe_disabled").to_string(),
+                        BackendStatus::Ok(detail) => {
+                            t!("registry.pawnio_ok", detail = detail).to_string()
+                        }
+                        BackendStatus::NeedsAdmin => t!("registry.needs_admin").to_string(),
+                        BackendStatus::NotInstalled => t!("registry.not_installed").to_string(),
+                    };
+                    ui.small(status_text);
+                    ui.small(
+                        t!(
+                            "top_bar.debug_counts",
+                            temps = snap.temps.len(),
+                            fans = snap.fans.len(),
+                            controls = snap.controls.len(),
+                            tick = snap.tick
+                        )
+                        .to_string(),
+                    );
                     ui.separator();
                     let mut dirty = false;
                     dirty |= ui
@@ -799,6 +837,8 @@ impl eframe::App for FanApp {
 
         let show_thermal = self.settings.show_graph_panel;
         let show_activity = self.settings.show_activity_deck;
+        // When Temps/Fans/Controls are all closed, grow graphs into that space.
+        let dashboard_open = self.show_temps || self.show_fans || self.show_controls;
         if show_thermal || show_activity {
             let labels: HashMap<&str, &str> = snap
                 .temps
@@ -806,8 +846,9 @@ impl eframe::App for FanApp {
                 .map(|(id, label, _)| (id.as_str(), label.as_str()))
                 .collect();
 
-            // Prefer one solid top strip: thermal alone ~240, activity alone ~220,
-            // both stacked ~420 so neither plot collapses to 0 height.
+            // Compact defaults when the dashboard lists are visible; when they are
+            // all closed, fill almost all remaining height so plots are not stuck
+            // at ~half the window.
             let default_h = match (show_thermal, show_activity) {
                 (true, true) => 420.0,
                 (true, false) => 240.0,
@@ -821,366 +862,137 @@ impl eframe::App for FanApp {
                 (false, false) => 0.0,
             };
 
-            egui::Panel::top("graph_area")
-                .resizable(true)
-                .default_size(default_h)
-                .min_size(min_h)
-                .max_size(800.0)
-                .show(ui, |ui| {
-                    if show_thermal {
-                        self.ui_graph_controls(ui);
-                        // Build series for every selected id (create empty history if needed
-                        // so the plot frame always shows instead of a blank panel).
-                        let (win, samp) = (
-                            self.settings.graph_window_minutes,
-                            self.settings.graph_sample_secs,
-                        );
-                        for id in &self.settings.graph_sensor_ids {
-                            self.histories.entry(id.clone()).or_insert_with(|| {
-                                let mut h = TempHistory::default();
-                                h.configure(win, samp);
-                                h
-                            });
-                        }
-                        let series: Vec<GraphSeries> = self
-                            .settings
-                            .graph_sensor_ids
-                            .iter()
-                            .enumerate()
-                            .filter_map(|(i, id)| {
-                                self.histories.get(id).map(|h| GraphSeries {
-                                    label: labels.get(id.as_str()).copied().unwrap_or(id.as_str()),
-                                    palette_index: i,
-                                    history: h,
-                                })
-                            })
-                            .collect();
-                        let style = self.settings.graph_style;
-                        // Explicit plot height — do NOT use allocate_ui(available_height)
-                        // which can leave egui_plot with an unbounded/zero rect.
-                        let plot_h = if show_activity {
-                            (ui.available_height() * 0.5).clamp(140.0, 280.0)
-                        } else {
-                            ui.available_height().clamp(140.0, 480.0)
-                        };
-                        if style == GraphStyle::Classic || !self.shader_backend_available {
-                            show_temp_graph(
-                                ui,
-                                &series,
-                                self.settings.graph_window_minutes,
-                                &mut self.graph_axis_max,
-                                plot_h,
-                            );
-                            if style.is_shader() {
-                                ui.small(t!("graph.shader_fallback_note").to_string());
-                            }
-                        } else {
-                            let t = self.shader_clock.elapsed().as_secs_f32()
-                                * self.settings.shader_speed;
-                            let readings: Vec<(String, f32)> = series
-                                .iter()
-                                .filter_map(|s| s.history.last().map(|v| (s.label.to_string(), v)))
-                                .collect();
-                            let signal = ThermalSignal::from_readings(readings);
-                            // Shader panel needs a sized rect too.
-                            ui.allocate_ui(egui::vec2(ui.available_width(), plot_h), |ui| {
-                                show_shader_panel(
-                                    ui,
-                                    style,
-                                    t,
-                                    signal,
-                                    self.settings.shader_color_a,
-                                    self.settings.shader_color_b,
-                                );
-                            });
-                        }
-                    }
+            let avail = ui.available_height();
+            let mut graph_panel = egui::Panel::top("graph_area").resizable(true);
+            if dashboard_open {
+                // Leave room for the central columns; user can still drag larger.
+                graph_panel = graph_panel
+                    .default_size(default_h)
+                    .min_size(min_h)
+                    .max_size((avail * 0.75).max(min_h + 40.0));
+            } else {
+                // Lists hidden: claim nearly all remaining height (leave a thin strip).
+                let fill = (avail - 8.0).clamp(min_h.max(200.0), avail.max(200.0));
+                graph_panel = graph_panel.exact_size(fill);
+            }
 
-                    if show_activity {
-                        if show_thermal {
-                            ui.separator();
+            graph_panel.show(ui, |ui| {
+                if show_thermal {
+                    self.ui_graph_controls(ui);
+                    let (win, samp) = (
+                        self.settings.graph_window_minutes,
+                        self.settings.graph_sample_secs,
+                    );
+                    for id in &self.settings.graph_sensor_ids {
+                        self.histories.entry(id.clone()).or_insert_with(|| {
+                            let mut h = TempHistory::default();
+                            h.configure(win, samp);
+                            h
+                        });
+                    }
+                    let series: Vec<GraphSeries> = self
+                        .settings
+                        .graph_sensor_ids
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(i, id)| {
+                            self.histories.get(id).map(|h| GraphSeries {
+                                label: labels.get(id.as_str()).copied().unwrap_or(id.as_str()),
+                                palette_index: i,
+                                history: h,
+                            })
+                        })
+                        .collect();
+                    let style = self.settings.graph_style;
+                    // Use the full panel height (no artificial 480px cap).
+                    let room = ui.available_height().max(80.0);
+                    let plot_h = if show_activity {
+                        (room * 0.55).clamp(140.0, room - 100.0)
+                    } else {
+                        room.clamp(140.0, room)
+                    };
+                    if style == GraphStyle::Classic || !self.shader_backend_available {
+                        show_temp_graph(
+                            ui,
+                            &series,
+                            self.settings.graph_window_minutes,
+                            &mut self.graph_axis_max,
+                            plot_h,
+                        );
+                        if style.is_shader() {
+                            ui.small(t!("graph.shader_fallback_note").to_string());
                         }
-                        // Reuse snapshot taken at start of frame (no second clone).
-                        let act = activity_snap.as_ref().cloned().unwrap_or_default();
-                        let sort_before = self.settings.activity_sort;
-                        let act_h = ui.available_height().clamp(140.0, 320.0);
-                        ui.allocate_ui(egui::vec2(ui.available_width(), act_h), |ui| {
-                            show_activity_deck(
+                    } else {
+                        let t =
+                            self.shader_clock.elapsed().as_secs_f32() * self.settings.shader_speed;
+                        let readings: Vec<(String, f32)> = series
+                            .iter()
+                            .filter_map(|s| s.history.last().map(|v| (s.label.to_string(), v)))
+                            .collect();
+                        let signal = ThermalSignal::from_readings(readings);
+                        ui.allocate_ui(egui::vec2(ui.available_width(), plot_h), |ui| {
+                            show_shader_panel(
                                 ui,
-                                ActivityDeckView {
-                                    load_history: &self.load_history,
-                                    processes: &act.processes,
-                                    load_pct: act.load_pct,
-                                    mode: self.settings.activity_mode,
-                                    sort: &mut self.settings.activity_sort,
-                                    filter: &mut self.activity_filter,
-                                    top_n: self.settings.activity_top_n as usize,
-                                    window_minutes: self.settings.activity_window_minutes,
-                                },
+                                style,
+                                t,
+                                signal,
+                                self.settings.shader_color_a,
+                                self.settings.shader_color_b,
                             );
                         });
-                        if self.settings.activity_sort != sort_before {
-                            self.settings.save();
-                        }
                     }
-                });
+                }
+
+                if show_activity {
+                    if show_thermal {
+                        ui.separator();
+                    }
+                    let act = activity_snap.as_ref().cloned().unwrap_or_default();
+                    let sort_before = self.settings.activity_sort;
+                    let act_h = ui.available_height().clamp(120.0, ui.available_height().max(120.0));
+                    ui.allocate_ui(egui::vec2(ui.available_width(), act_h), |ui| {
+                        show_activity_deck(
+                            ui,
+                            ActivityDeckView {
+                                load_history: &self.load_history,
+                                processes: &act.processes,
+                                load_pct: act.load_pct,
+                                mode: self.settings.activity_mode,
+                                sort: &mut self.settings.activity_sort,
+                                filter: &mut self.activity_filter,
+                                top_n: self.settings.activity_top_n as usize,
+                                window_minutes: self.settings.activity_window_minutes,
+                            },
+                        );
+                    });
+                    if self.settings.activity_sort != sort_before {
+                        self.settings.save();
+                    }
+                }
+            });
         }
 
         egui::CentralPanel::default().show(ui, |ui| {
-            ui.columns(3, |cols| {
-                // Temps
-                cols[0].heading(t!("dashboard.temperatures").to_string());
-                cols[0].separator();
-                egui::ScrollArea::vertical()
-                    .id_salt("temps")
-                    .show(&mut cols[0], |ui| {
-                        if snap.temps.is_empty() {
-                            ui.label(t!("dashboard.none").to_string());
-                        }
-                        for (id, label, v) in &snap.temps {
-                            ui.horizontal(|ui| {
-                                if ui
-                                    .add(
-                                        egui::Label::new(label.as_str())
-                                            .sense(egui::Sense::click()),
-                                    )
-                                    .on_hover_text(t!("dashboard.click_to_rename").to_string())
-                                    .clicked()
-                                {
-                                    self.begin_rename(id, label, false);
-                                }
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        ui.monospace(format!("{v:5.1} °C"));
-                                    },
-                                );
-                            });
-                            ui.small(id);
-                        }
-                    });
-
-                // Fans
-                cols[1].heading(t!("dashboard.fans").to_string());
-                cols[1].separator();
-                egui::ScrollArea::vertical()
-                    .id_salt("fans")
-                    .show(&mut cols[1], |ui| {
-                        let fans: Vec<_> = snap
-                            .fans
-                            .iter()
-                            .filter(|(_, _, v)| !self.settings.hide_zero_rpm || *v >= 1.0)
-                            .collect();
-                        if fans.is_empty() {
-                            ui.label(t!("dashboard.none").to_string());
-                        }
-                        for (id, label, v) in fans {
-                            ui.horizontal(|ui| {
-                                if ui
-                                    .add(
-                                        egui::Label::new(label.as_str())
-                                            .sense(egui::Sense::click()),
-                                    )
-                                    .on_hover_text(t!("dashboard.click_to_rename").to_string())
-                                    .clicked()
-                                {
-                                    self.begin_rename(id, label, false);
-                                }
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        if *v < 1.0 {
-                                            ui.weak("0");
-                                        } else {
-                                            ui.monospace(format!("{v:6.0}"));
-                                        }
-                                    },
-                                );
-                            });
-                            ui.small(id);
-                        }
-                    });
-
-                // Controls
-                cols[2].heading(t!("dashboard.controls").to_string());
-                cols[2].separator();
-                egui::ScrollArea::vertical()
-                    .id_salt("ctrls")
-                    .show(&mut cols[2], |ui| {
-                        // hide_zero_rpm only affects the Fans list above; this is a
-                        // separate, opt-in filter based on duty (not rpm, since many
-                        // controls legitimately have no rpm sensor at all). `duty: None`
-                        // (unknown/unsupported readback) is treated as visible: hiding an
-                        // interactive control on missing data is worse than showing a stale one.
-                        let controls: Vec<_> = snap
-                            .controls
-                            .iter()
-                            .filter(|c| {
-                                !self.settings.hide_zero_duty_controls || c.duty.unwrap_or(1) >= 1
-                            })
-                            .collect();
-                        if controls.is_empty() {
-                            ui.label(t!("dashboard.none").to_string());
-                        }
-                        for c in controls {
-                            ui.group(|ui| {
-                                if ui
-                                    .add(
-                                        egui::Label::new(c.label.as_str())
-                                            .sense(egui::Sense::click()),
-                                    )
-                                    .on_hover_text(t!("dashboard.click_to_rename").to_string())
-                                    .clicked()
-                                {
-                                    self.begin_rename(&c.id, &c.label, true);
-                                }
-                                ui.small(&c.id);
-                                let slot =
-                                    c.id.rsplit("ctrl")
-                                        .next()
-                                        .and_then(|s| s.parse::<u32>().ok())
-                                        .unwrap_or(0);
-                                if slot >= 9 {
-                                    ui.small(t!("dashboard.ec_bios_warning").to_string());
-                                }
-                                if let Some(rpm) = c.rpm {
-                                    ui.monospace(format!("RPM {rpm:.0}"));
-                                } else {
-                                    ui.weak("RPM —");
-                                }
-
-                                // Curve assignment for this control
-                                let cur = self
-                                    .profile
-                                    .assignments
-                                    .get(&c.id)
-                                    .cloned()
-                                    .unwrap_or_else(|| t!("dashboard.none").to_string());
-                                egui::ComboBox::from_id_salt(format!("asg-{}", c.id))
-                                    .selected_text(cur)
-                                    .show_ui(ui, |ui| {
-                                        if ui
-                                            .selectable_label(
-                                                !self.profile.assignments.contains_key(&c.id),
-                                                t!("dashboard.none").to_string(),
-                                            )
-                                            .clicked()
-                                        {
-                                            self.profile.assignments.remove(&c.id);
-                                            self.profile.sensor_bindings.remove(&c.id);
-                                        }
-                                        let curve_ids: Vec<String> = self
-                                            .profile
-                                            .curves
-                                            .iter()
-                                            .map(|cv| cv.id.as_str().to_string())
-                                            .collect();
-                                        for cid in curve_ids {
-                                            let selected = self
-                                                .profile
-                                                .assignments
-                                                .get(&c.id)
-                                                .map(|x| x == &cid)
-                                                .unwrap_or(false);
-                                            if ui.selectable_label(selected, &cid).clicked() {
-                                                self.profile.assignments.insert(c.id.clone(), cid);
-                                                // Keep existing sensor binding; only default when missing.
-                                                self.profile
-                                                    .sensor_bindings
-                                                    .entry(c.id.clone())
-                                                    .or_insert_with(|| {
-                                                        snap.cpu_temp_id.clone().unwrap_or_else(
-                                                            || "pawnio.0.temp.CPU".into(),
-                                                        )
-                                                    });
-                                            }
-                                        }
-                                    });
-
-                                if self.profile.assignments.contains_key(&c.id) {
-                                    let bound_id = self
-                                        .profile
-                                        .sensor_bindings
-                                        .get(&c.id)
-                                        .cloned()
-                                        .unwrap_or_else(|| "pawnio.0.temp.CPU".to_string());
-                                    let bound_label = snap
-                                        .temps
-                                        .iter()
-                                        .find(|(id, _, _)| id == &bound_id)
-                                        .map(|(_, label, _)| label.clone())
-                                        .unwrap_or_else(|| bound_id.clone());
-                                    let bind_resp =
-                                        egui::ComboBox::from_id_salt(format!("bind-{}", c.id))
-                                            .selected_text(bound_label)
-                                            .show_ui(ui, |ui| {
-                                                for (id, label, _) in &snap.temps {
-                                                    let selected = id == &bound_id;
-                                                    if ui
-                                                        .selectable_label(selected, label.as_str())
-                                                        .clicked()
-                                                        && !selected
-                                                    {
-                                                        self.profile
-                                                            .sensor_bindings
-                                                            .insert(c.id.clone(), id.clone());
-                                                    }
-                                                }
-                                            });
-                                    bind_resp.response.on_hover_text(
-                                        t!("dashboard.curve_sensor_hover").to_string(),
-                                    );
-                                }
-
-                                let locked = self.is_user_locked(&c.id);
-                                let hw_duty = c.duty.unwrap_or(0);
-                                if !locked {
-                                    if let Some(d) = c.duty {
-                                        self.slider_state.insert(c.id.clone(), f32::from(d));
-                                    }
-                                }
-                                let mut value =
-                                    *self.slider_state.get(&c.id).unwrap_or(&f32::from(hw_duty));
-
-                                let enabled = c.writable
-                                    && !self.show_writes_consent
-                                    && (self.options.allow_hw_write || c.id.starts_with("mock."));
-
-                                if c.duty.is_none() {
-                                    ui.weak("duty —");
-                                }
-
-                                let mut changed = false;
-                                ui.add_enabled_ui(enabled, |ui| {
-                                    let resp = ui.add(
-                                        egui::Slider::new(&mut value, 0.0..=100.0)
-                                            .suffix("%")
-                                            .integer()
-                                            .clamping(egui::SliderClamping::Always),
-                                    );
-                                    changed = resp.changed();
-                                    if resp.dragged() || resp.has_focus() {
-                                        self.lock_user(&c.id, Duration::from_millis(2000));
-                                    }
-                                    // Write only on release — avoids EC spam + UI freezes
-                                    if resp.drag_stopped() {
-                                        self.lock_user(&c.id, Duration::from_millis(1500));
-                                        self.queue_write(&c.id, value);
-                                    } else if changed && !resp.dragged() {
-                                        // Keyboard / click step
-                                        self.lock_user(&c.id, Duration::from_millis(1500));
-                                        self.queue_write(&c.id, value);
-                                    }
-                                });
-
-                                self.slider_state.insert(c.id.clone(), value);
-                                if !enabled {
-                                    ui.small(t!("dashboard.locked").to_string());
-                                }
-                            });
-                            ui.add_space(6.0);
-                        }
-                    });
+            let n = usize::from(self.show_temps)
+                + usize::from(self.show_fans)
+                + usize::from(self.show_controls);
+            if n == 0 {
+                ui.weak(t!("dashboard.all_hidden").to_string());
+                return;
+            }
+            ui.columns(n, |cols| {
+                let mut i = 0;
+                if self.show_temps {
+                    self.ui_temps_column(&mut cols[i], &snap);
+                    i += 1;
+                }
+                if self.show_fans {
+                    self.ui_fans_column(&mut cols[i], &snap);
+                    i += 1;
+                }
+                if self.show_controls {
+                    self.ui_controls_column(&mut cols[i], &snap);
+                }
             });
         });
 
@@ -1194,6 +1006,235 @@ impl eframe::App for FanApp {
 }
 
 impl FanApp {
+    fn ui_temps_column(&mut self, ui: &mut egui::Ui, snap: &crate::poll::Snapshot) {
+        ui.heading(t!("dashboard.temperatures").to_string());
+        ui.separator();
+        egui::ScrollArea::vertical()
+            .id_salt("temps")
+            .show(ui, |ui| {
+                if snap.temps.is_empty() {
+                    ui.label(t!("dashboard.none").to_string());
+                }
+                for (id, label, v) in &snap.temps {
+                    ui.horizontal(|ui| {
+                        if ui
+                            .add(egui::Label::new(label.as_str()).sense(egui::Sense::click()))
+                            .on_hover_text(t!("dashboard.click_to_rename").to_string())
+                            .clicked()
+                        {
+                            self.begin_rename(id, label, false);
+                        }
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.monospace(format!("{v:5.1} °C"));
+                        });
+                    });
+                    ui.small(id);
+                }
+            });
+    }
+
+    fn ui_fans_column(&mut self, ui: &mut egui::Ui, snap: &crate::poll::Snapshot) {
+        ui.heading(t!("dashboard.fans").to_string());
+        ui.separator();
+        egui::ScrollArea::vertical()
+            .id_salt("fans")
+            .show(ui, |ui| {
+                let fans: Vec<_> = snap
+                    .fans
+                    .iter()
+                    .filter(|(_, _, v)| !self.settings.hide_zero_rpm || *v >= 1.0)
+                    .collect();
+                if fans.is_empty() {
+                    ui.label(t!("dashboard.none").to_string());
+                }
+                for (id, label, v) in fans {
+                    ui.horizontal(|ui| {
+                        if ui
+                            .add(egui::Label::new(label.as_str()).sense(egui::Sense::click()))
+                            .on_hover_text(t!("dashboard.click_to_rename").to_string())
+                            .clicked()
+                        {
+                            self.begin_rename(id, label, false);
+                        }
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if *v < 1.0 {
+                                ui.weak("0");
+                            } else {
+                                ui.monospace(format!("{v:6.0}"));
+                            }
+                        });
+                    });
+                    ui.small(id);
+                }
+            });
+    }
+
+    fn ui_controls_column(&mut self, ui: &mut egui::Ui, snap: &crate::poll::Snapshot) {
+        ui.heading(t!("dashboard.controls").to_string());
+        ui.separator();
+        egui::ScrollArea::vertical()
+            .id_salt("ctrls")
+            .show(ui, |ui| {
+                // hide_zero_rpm only affects the Fans list; this is a separate opt-in
+                // filter based on duty. `duty: None` stays visible.
+                let controls: Vec<_> = snap
+                    .controls
+                    .iter()
+                    .filter(|c| !self.settings.hide_zero_duty_controls || c.duty.unwrap_or(1) >= 1)
+                    .collect();
+                if controls.is_empty() {
+                    ui.label(t!("dashboard.none").to_string());
+                }
+                for c in controls {
+                    ui.group(|ui| {
+                        if ui
+                            .add(egui::Label::new(c.label.as_str()).sense(egui::Sense::click()))
+                            .on_hover_text(t!("dashboard.click_to_rename").to_string())
+                            .clicked()
+                        {
+                            self.begin_rename(&c.id, &c.label, true);
+                        }
+                        ui.small(&c.id);
+                        let slot = c
+                            .id
+                            .rsplit("ctrl")
+                            .next()
+                            .and_then(|s| s.parse::<u32>().ok())
+                            .unwrap_or(0);
+                        if slot >= 9 {
+                            ui.small(t!("dashboard.ec_bios_warning").to_string());
+                        }
+                        if let Some(rpm) = c.rpm {
+                            ui.monospace(format!("RPM {rpm:.0}"));
+                        } else {
+                            ui.weak("RPM —");
+                        }
+
+                        let cur = self
+                            .profile
+                            .assignments
+                            .get(&c.id)
+                            .cloned()
+                            .unwrap_or_else(|| t!("dashboard.none").to_string());
+                        egui::ComboBox::from_id_salt(format!("asg-{}", c.id))
+                            .selected_text(cur)
+                            .show_ui(ui, |ui| {
+                                if ui
+                                    .selectable_label(
+                                        !self.profile.assignments.contains_key(&c.id),
+                                        t!("dashboard.none").to_string(),
+                                    )
+                                    .clicked()
+                                {
+                                    self.profile.assignments.remove(&c.id);
+                                    self.profile.sensor_bindings.remove(&c.id);
+                                }
+                                let curve_ids: Vec<String> = self
+                                    .profile
+                                    .curves
+                                    .iter()
+                                    .map(|cv| cv.id.as_str().to_string())
+                                    .collect();
+                                for cid in curve_ids {
+                                    let selected = self
+                                        .profile
+                                        .assignments
+                                        .get(&c.id)
+                                        .map(|x| x == &cid)
+                                        .unwrap_or(false);
+                                    if ui.selectable_label(selected, &cid).clicked() {
+                                        self.profile.assignments.insert(c.id.clone(), cid);
+                                        self.profile
+                                            .sensor_bindings
+                                            .entry(c.id.clone())
+                                            .or_insert_with(|| {
+                                                snap.cpu_temp_id
+                                                    .clone()
+                                                    .unwrap_or_else(|| "pawnio.0.temp.CPU".into())
+                                            });
+                                    }
+                                }
+                            });
+
+                        if self.profile.assignments.contains_key(&c.id) {
+                            let bound_id = self
+                                .profile
+                                .sensor_bindings
+                                .get(&c.id)
+                                .cloned()
+                                .unwrap_or_else(|| "pawnio.0.temp.CPU".to_string());
+                            let bound_label = snap
+                                .temps
+                                .iter()
+                                .find(|(id, _, _)| id == &bound_id)
+                                .map(|(_, label, _)| label.clone())
+                                .unwrap_or_else(|| bound_id.clone());
+                            let bind_resp = egui::ComboBox::from_id_salt(format!("bind-{}", c.id))
+                                .selected_text(bound_label)
+                                .show_ui(ui, |ui| {
+                                    for (id, label, _) in &snap.temps {
+                                        let selected = id == &bound_id;
+                                        if ui.selectable_label(selected, label.as_str()).clicked()
+                                            && !selected
+                                        {
+                                            self.profile
+                                                .sensor_bindings
+                                                .insert(c.id.clone(), id.clone());
+                                        }
+                                    }
+                                });
+                            bind_resp
+                                .response
+                                .on_hover_text(t!("dashboard.curve_sensor_hover").to_string());
+                        }
+
+                        let locked = self.is_user_locked(&c.id);
+                        let hw_duty = c.duty.unwrap_or(0);
+                        if !locked {
+                            if let Some(d) = c.duty {
+                                self.slider_state.insert(c.id.clone(), f32::from(d));
+                            }
+                        }
+                        let mut value =
+                            *self.slider_state.get(&c.id).unwrap_or(&f32::from(hw_duty));
+
+                        let enabled = c.writable
+                            && !self.show_writes_consent
+                            && (self.options.allow_hw_write || c.id.starts_with("mock."));
+
+                        if c.duty.is_none() {
+                            ui.weak("duty —");
+                        }
+
+                        let mut changed = false;
+                        ui.add_enabled_ui(enabled, |ui| {
+                            let resp = ui.add(
+                                egui::Slider::new(&mut value, 0.0..=100.0)
+                                    .suffix("%")
+                                    .integer()
+                                    .clamping(egui::SliderClamping::Always),
+                            );
+                            changed = resp.changed();
+                            if resp.dragged() || resp.has_focus() {
+                                self.lock_user(&c.id, Duration::from_millis(2000));
+                            }
+                            // Write on release, or keyboard/click step without drag.
+                            if resp.drag_stopped() || (changed && !resp.dragged()) {
+                                self.lock_user(&c.id, Duration::from_millis(1500));
+                                self.queue_write(&c.id, value);
+                            }
+                        });
+
+                        self.slider_state.insert(c.id.clone(), value);
+                        if !enabled {
+                            ui.small(t!("dashboard.locked").to_string());
+                        }
+                    });
+                    ui.add_space(6.0);
+                }
+            });
+    }
+
     fn ui_graph_controls(&mut self, ui: &mut egui::Ui) {
         let mut dirty = false;
         ui.horizontal(|ui| {
