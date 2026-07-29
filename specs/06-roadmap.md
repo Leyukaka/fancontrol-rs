@@ -1,6 +1,6 @@
 # Roadmap
 
-Last aligned with product reality: **v0.2.0** (2026-07).
+Last aligned with product reality: **v0.3.0** (2026-07) — Activity deck.
 
 ## Phase 0 — Foundation
 
@@ -33,6 +33,7 @@ Last aligned with product reality: **v0.2.0** (2026-07).
 - [x] Multi-sensor graph (`egui_plot`) + sensor picker + per-control curve binding
 - [x] Graph window 10/20/30/60 min + sample interval
 - [x] Shader / gallery graph styles (`shaders/`)
+- [x] Activity deck (CPU load + top processes CPU/RAM, filter; opt-in Options) — v0.3.0
 - [x] PawnIO install/admin dialog
 - [x] Profile UX (switch / last-used / startup)
 - [x] System tray

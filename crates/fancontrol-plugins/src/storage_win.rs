@@ -187,28 +187,34 @@ fn query_temperature_property(handle: HANDLE, property_id: i32) -> Option<f64> {
             ptr::null_mut(),
         )
     };
-    let header_size = std::mem::size_of::<STORAGE_TEMPERATURE_DATA_DESCRIPTOR>()
-        - std::mem::size_of::<STORAGE_TEMPERATURE_INFO>();
-    if ok == 0
-        || (returned as usize) < header_size + std::mem::size_of::<STORAGE_TEMPERATURE_INFO>()
-    {
+    // Flexible array starts at TemperatureInfo — not `size_of(desc) - size_of(info)`,
+    // which can be wrong if the trailing [1] is padded into the parent size.
+    let info_offset = std::mem::offset_of!(STORAGE_TEMPERATURE_DATA_DESCRIPTOR, TemperatureInfo);
+    let entry_size = std::mem::size_of::<STORAGE_TEMPERATURE_INFO>();
+    if ok == 0 || (returned as usize) < info_offset + entry_size {
         return None;
     }
-    let desc = unsafe { &*(buf.as_ptr() as *const STORAGE_TEMPERATURE_DATA_DESCRIPTOR) };
-    let count = desc.InfoCount as usize;
+    // InfoCount is a u16 at a fixed offset; read unaligned-safe via byte copy.
+    let count = {
+        let off = std::mem::offset_of!(STORAGE_TEMPERATURE_DATA_DESCRIPTOR, InfoCount);
+        if (returned as usize) < off + 2 {
+            return None;
+        }
+        u16::from_le_bytes([buf[off], buf[off + 1]]) as usize
+    };
     if count == 0 {
         return None;
     }
-    // TemperatureInfo is a flexible array; walk all reported sensors.
-    let info_offset = header_size;
-    let entry_size = std::mem::size_of::<STORAGE_TEMPERATURE_INFO>();
     let mut best: Option<f64> = None;
     for i in 0..count {
         let off = info_offset + i * entry_size;
         if off + entry_size > returned as usize {
             break;
         }
-        let info = unsafe { &*(buf.as_ptr().add(off) as *const STORAGE_TEMPERATURE_INFO) };
+        // SAFETY: bounds checked; use read_unaligned (IOCTL buffer, no align guarantee).
+        let info = unsafe {
+            ptr::read_unaligned(buf.as_ptr().add(off) as *const STORAGE_TEMPERATURE_INFO)
+        };
         let t = info.Temperature;
         if (t as u16) == (STORAGE_TEMPERATURE_VALUE_NOT_REPORTED as u16) {
             continue;
@@ -233,26 +239,44 @@ fn query_temperature_nvme(handle: HANDLE) -> Option<f64> {
 
     const NVME_LOG_PAGE_HEALTH_INFO: u32 = 0x02;
 
-    let header_len = std::mem::size_of::<STORAGE_PROPERTY_QUERY>();
     let protocol_data_len = std::mem::size_of::<STORAGE_PROTOCOL_SPECIFIC_DATA>();
     let health_len = std::mem::size_of::<NVME_HEALTH_INFO_LOG>();
-    let query_offset = header_len - 1;
+    // CRITICAL: do NOT use `size_of::<STORAGE_PROPERTY_QUERY>() - 1`.
+    // In Rust, that struct is padded to 12 bytes; size-1 = 11 → misaligned write
+    // of STORAGE_PROTOCOL_SPECIFIC_DATA (align 4) and abort in debug builds.
+    // AdditionalParameters starts at offset 8 (after PropertyId + QueryType).
+    let query_offset = std::mem::offset_of!(STORAGE_PROPERTY_QUERY, AdditionalParameters);
 
     let mut in_buf = vec![0u8; query_offset + protocol_data_len + health_len];
+    // Write PropertyId / QueryType at the start (buf is always well-aligned).
     unsafe {
         let q = in_buf.as_mut_ptr() as *mut STORAGE_PROPERTY_QUERY;
         (*q).PropertyId = StorageDeviceProtocolSpecificProperty;
         (*q).QueryType = PropertyStandardQuery;
     }
-    unsafe {
-        let p = in_buf.as_mut_ptr().add(query_offset) as *mut STORAGE_PROTOCOL_SPECIFIC_DATA;
-        (*p).ProtocolType = ProtocolTypeNvme;
-        (*p).DataType = NVMeDataTypeLogPage as u32;
-        (*p).ProtocolDataRequestValue = NVME_LOG_PAGE_HEALTH_INFO;
-        (*p).ProtocolDataRequestSubValue = 0;
+    let protocol = STORAGE_PROTOCOL_SPECIFIC_DATA {
+        ProtocolType: ProtocolTypeNvme,
+        DataType: NVMeDataTypeLogPage as u32,
+        ProtocolDataRequestValue: NVME_LOG_PAGE_HEALTH_INFO,
+        ProtocolDataRequestSubValue: 0,
         // Offset of protocol data relative to start of STORAGE_PROTOCOL_SPECIFIC_DATA
-        (*p).ProtocolDataOffset = protocol_data_len as u32;
-        (*p).ProtocolDataLength = health_len as u32;
+        ProtocolDataOffset: protocol_data_len as u32,
+        ProtocolDataLength: health_len as u32,
+        FixedProtocolReturnData: 0,
+        ProtocolDataRequestSubValue2: 0,
+        ProtocolDataRequestSubValue3: 0,
+        ProtocolDataRequestSubValue4: 0,
+    };
+    // query_offset is 8 → 4-byte aligned relative to vec allocation.
+    debug_assert_eq!(
+        query_offset % std::mem::align_of::<STORAGE_PROTOCOL_SPECIFIC_DATA>(),
+        0
+    );
+    unsafe {
+        ptr::write(
+            in_buf.as_mut_ptr().add(query_offset) as *mut STORAGE_PROTOCOL_SPECIFIC_DATA,
+            protocol,
+        );
     }
 
     let out_need =
@@ -275,7 +299,8 @@ fn query_temperature_nvme(handle: HANDLE) -> Option<f64> {
     if ok == 0 || returned < desc_header_len {
         return None;
     }
-    let desc = unsafe { &*(out.as_ptr() as *const STORAGE_PROTOCOL_DATA_DESCRIPTOR) };
+    let desc: STORAGE_PROTOCOL_DATA_DESCRIPTOR =
+        unsafe { ptr::read_unaligned(out.as_ptr() as *const STORAGE_PROTOCOL_DATA_DESCRIPTOR) };
     // ProtocolSpecificData sits at end of descriptor; log bytes follow at ProtocolDataOffset
     // relative to ProtocolSpecificData start.
     let protocol_data_start = (desc_header_len as usize).saturating_sub(protocol_data_len);
@@ -287,13 +312,21 @@ fn query_temperature_nvme(handle: HANDLE) -> Option<f64> {
         if (returned as usize) < alt + health_len {
             return None;
         }
-        return kelvin_to_c(unsafe { &*(out.as_ptr().add(alt) as *const NVME_HEALTH_INFO_LOG) });
+        return kelvin_to_c_from_bytes(&out[alt..alt + health_len]);
     }
-    let log = unsafe { &*(out.as_ptr().add(log_offset) as *const NVME_HEALTH_INFO_LOG) };
-    kelvin_to_c(log)
+    if log_offset + health_len > out.len() {
+        return None;
+    }
+    kelvin_to_c_from_bytes(&out[log_offset..log_offset + health_len])
 }
 
-fn kelvin_to_c(log: &windows_sys::Win32::Storage::Nvme::NVME_HEALTH_INFO_LOG) -> Option<f64> {
+fn kelvin_to_c_from_bytes(bytes: &[u8]) -> Option<f64> {
+    use windows_sys::Win32::Storage::Nvme::NVME_HEALTH_INFO_LOG;
+    if bytes.len() < std::mem::size_of::<NVME_HEALTH_INFO_LOG>() {
+        return None;
+    }
+    let log: NVME_HEALTH_INFO_LOG =
+        unsafe { ptr::read_unaligned(bytes.as_ptr() as *const NVME_HEALTH_INFO_LOG) };
     let kelvin = u16::from_le_bytes(log.Temperature);
     if !(200..=400).contains(&kelvin) {
         // Not a plausible absolute temperature in Kelvin

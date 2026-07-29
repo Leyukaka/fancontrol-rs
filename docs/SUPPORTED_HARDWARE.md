@@ -36,6 +36,7 @@ Vendored PawnIO modules (e.g. `LpcIO.bin`) ship under `crates/fancontrol-pawnio/
 | **Banked Nuvoton NCT / ITE IT87** (classic Super I/O HWM) | Detect / sensors | **Experimental** | Detection helpers exist; not the primary validated path. |
 | **Host: GPU** (`nvidia-smi`) | Temperature | **Read-only** | Process spawn; no fan curve write through nvidia-smi. |
 | **Host: storage** (`DeviceIoControl`, no PowerShell) | Temperature | **Read-only** | Prefer **NVMe health log** (composite °C), then `StorageDeviceTemperatureProperty` / adapter (all sensors scanned). Elevate for `\\.\PhysicalDriveN`. CLI: `sample-storage`. |
+| **Host: Activity deck** (Options, default on) | CPU load %, top processes (CPU + RAM) | **Read-only** | Windows APIs only (`GetSystemTimes`, Toolhelp, `GetProcessTimes`, working set). **No PowerShell, no WMI.** ~1 s while enabled; Load-only skips process enum. |
 | **Mock provider** | Dev / UI without hardware | Always available | `--no-hw` |
 
 ---

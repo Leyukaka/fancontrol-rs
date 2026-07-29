@@ -51,6 +51,8 @@ pub enum SensorKind {
     FanRpm,
     Voltage,
     Power,
+    /// Utilization / load percentage (e.g. host CPU load 0–100).
+    Load,
     Other,
 }
 

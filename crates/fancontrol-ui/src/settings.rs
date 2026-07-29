@@ -1,5 +1,6 @@
 //! UI preferences persisted next to channel-map.
 
+use crate::activity::{ActivityMode, ProcessSort};
 use crate::shaders::GraphStyle;
 use fancontrol_core::config::{config_dir, ensure_config_dirs};
 use serde::{Deserialize, Serialize};
@@ -78,6 +79,27 @@ pub struct UiSettings {
     /// until the poller runs.
     #[serde(default)]
     pub graph_sensor_ids_seeded: bool,
+    /// Activity deck (CPU load + top processes). Toggle in Options; **default on**.
+    #[serde(default = "default_true")]
+    pub show_activity_deck: bool,
+    #[serde(default)]
+    pub activity_mode: ActivityMode,
+    #[serde(default)]
+    pub activity_sort: ProcessSort,
+    /// How many process rows to show after filter/sort.
+    #[serde(default = "default_activity_top_n")]
+    pub activity_top_n: u8,
+    /// Load history window (minutes).
+    #[serde(default = "default_activity_window_minutes")]
+    pub activity_window_minutes: u16,
+}
+
+fn default_activity_top_n() -> u8 {
+    10
+}
+
+fn default_activity_window_minutes() -> u16 {
+    10
 }
 
 fn default_true() -> bool {
@@ -133,6 +155,11 @@ impl Default for UiSettings {
             graph_sensor_ids: Vec::new(),
             // false so first live snapshot seeds CPU/GPU (true + empty = permanent empty graph)
             graph_sensor_ids_seeded: false,
+            show_activity_deck: true,
+            activity_mode: ActivityMode::default(),
+            activity_sort: ProcessSort::default(),
+            activity_top_n: default_activity_top_n(),
+            activity_window_minutes: default_activity_window_minutes(),
         }
     }
 }
@@ -198,6 +225,12 @@ impl UiSettings {
         }
         if !SHADER_FPS_ALLOWED.contains(&self.shader_fps) {
             self.shader_fps = default_shader_fps();
+        }
+        if ![5, 8, 10, 12, 16, 20].contains(&self.activity_top_n) {
+            self.activity_top_n = default_activity_top_n();
+        }
+        if !WINDOW_ALLOWED.contains(&self.activity_window_minutes) {
+            self.activity_window_minutes = default_activity_window_minutes();
         }
     }
 }

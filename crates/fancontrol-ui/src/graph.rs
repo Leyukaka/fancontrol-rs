@@ -80,17 +80,32 @@ impl TempHistory {
         self.samples.is_empty()
     }
 
-    /// `[minutes-ago, celsius]` pairs for `egui_plot`, oldest first, so "now"
-    /// sits at x = 0 and older samples sit at negative x (same convention the
-    /// `-Nm … now` axis labels use).
-    pub fn plot_points(&self, now: Instant) -> Vec<[f64; 2]> {
+    /// Timestamp of the newest sample, if any (shared multi-series X epoch).
+    pub fn last_ts(&self) -> Option<Instant> {
+        self.samples.back().map(|(t, _)| *t)
+    }
+
+    /// `[minutes-ago, value]` pairs for `egui_plot`, oldest first.
+    ///
+    /// X is anchored to `epoch` (usually the newest sample across series), **not**
+    /// paint-frame `Instant::now()`. That keeps the grid frozen between samples;
+    /// only a new sample scrolls the trace (Task Manager–style).
+    pub fn plot_points_since(&self, epoch: Instant) -> Vec<[f64; 2]> {
         self.samples
             .iter()
             .map(|(ts, temp)| {
-                let age_mins = now.saturating_duration_since(*ts).as_secs_f64() / 60.0;
-                [-age_mins, *temp as f64]
+                let age_mins = epoch.saturating_duration_since(*ts).as_secs_f64() / 60.0;
+                [-age_mins, f64::from(*temp)]
             })
             .collect()
+    }
+
+    /// Convenience: epoch = this history's newest sample.
+    pub fn plot_points(&self) -> Vec<[f64; 2]> {
+        match self.last_ts() {
+            Some(t0) => self.plot_points_since(t0),
+            None => Vec::new(),
+        }
     }
 }
 
@@ -150,8 +165,19 @@ pub fn show_temp_graph(
     series: &[GraphSeries<'_>],
     window_minutes: u16,
     axis_max: &mut Option<f32>,
+    // Explicit plot canvas height (caller sizes the panel; avoid relying on
+    // unbounded `available_height()` which can collapse egui_plot to nothing).
+    plot_height: f32,
 ) {
     ui.group(|ui| {
+        if series.is_empty() {
+            ui.horizontal(|ui| {
+                ui.heading(t!("graph.multi_sensor_title").to_string());
+                ui.weak(format!("({window_minutes}m)"));
+            });
+            ui.colored_label(Color32::GRAY, t!("graph.no_sensors_selected").to_string());
+            return;
+        }
         if series.len() <= 1 {
             ui.horizontal(|ui| {
                 ui.heading(series.first().map(|s| s.label).unwrap_or(""));
@@ -183,7 +209,8 @@ pub fn show_temp_graph(
             }
         }
 
-        let height = ui.available_height().max(60.0);
+        // Header ate some of the budget; keep a usable canvas.
+        let height = (plot_height - 36.0).clamp(80.0, plot_height.max(80.0));
 
         if series.iter().all(|s| s.history.is_empty()) {
             ui.allocate_ui(egui::vec2(ui.available_width(), height), |ui| {
@@ -210,7 +237,12 @@ pub fn show_temp_graph(
         );
         *axis_max = Some(max_t);
 
-        let now = Instant::now();
+        // Shared X epoch = newest sample across all series (not wall-clock paint time).
+        let epoch = series
+            .iter()
+            .filter_map(|s| s.history.last_ts())
+            .max()
+            .unwrap_or_else(Instant::now);
         let window_mins = f64::from(window_minutes.max(1));
 
         Plot::new("temp_graph")
@@ -247,7 +279,7 @@ pub fn show_temp_graph(
                     } else {
                         series_color(s.palette_index)
                     };
-                    let mut line = Line::new(s.label, s.history.plot_points(now))
+                    let mut line = Line::new(s.label, s.history.plot_points_since(epoch))
                         .color(color)
                         .width(2.0_f32);
                     if s.palette_index == 0 {
@@ -344,9 +376,34 @@ mod tests {
         let now = Instant::now();
         let mut h = TempHistory::default();
         h.push_if_due(55.0, now);
-        let pts = h.plot_points(now);
+        let pts = h.plot_points();
         assert_eq!(pts.len(), 1);
         assert_eq!(pts[0], [0.0, 55.0]);
+    }
+
+    #[test]
+    fn plot_points_stay_stable_when_wall_clock_advances() {
+        let t0 = Instant::now();
+        let mut h = TempHistory::default();
+        h.configure(10, 1);
+        // Force two samples at known stamps via push_if_due with spaced times.
+        h.push_if_due(40.0, t0);
+        // Bypass interval by using a later Instant directly on a second history path:
+        // push_if_due respects sample_interval — configure 1s then sleep is flaky in tests.
+        // Instead stamp via two histories' public API: only last sample at x=0 matters.
+        let pts_a = h.plot_points();
+        let pts_b = h.plot_points_since(t0 + Duration::from_secs(30));
+        // Same data anchored to different epochs → newest (only) sample moves relative to
+        // a future epoch; when anchored to own last_ts, still [0, y].
+        assert_eq!(pts_a[0], [0.0, 40.0]);
+        // Relative to a later epoch, the single sample is in the past (negative x).
+        assert!(
+            pts_b[0][0] < -0.4,
+            "expected left of 0, got {}",
+            pts_b[0][0]
+        );
+        // Re-anchor to last_ts again: back to stable zero (no paint-clock crawl).
+        assert_eq!(h.plot_points()[0], [0.0, 40.0]);
     }
 
     #[test]

@@ -27,9 +27,6 @@ pub struct HostSensorProvider {
     /// When false, `sensors()`/`read()` are empty and the background loop idles.
     enabled: Arc<AtomicBool>,
     cache: Arc<Mutex<Option<Cached>>>,
-    storage_ttl: Duration,
-    last_storage: Mutex<Instant>,
-    storage_cache: Mutex<Vec<(String, String, f64)>>,
     started: Mutex<bool>,
 }
 
@@ -50,10 +47,6 @@ impl HostSensorProvider {
         let p = Self {
             enabled,
             cache: Arc::new(Mutex::new(None)),
-            // Independent of GPU backoff — refresh SSD temps often enough to look live.
-            storage_ttl: Duration::from_secs(5),
-            last_storage: Mutex::new(Instant::now() - Duration::from_secs(60)),
-            storage_cache: Mutex::new(Vec::new()),
             started: Mutex::new(false),
         };
         p.ensure_bg_refresh();
@@ -98,7 +91,12 @@ impl HostSensorProvider {
                         last_storage = Instant::now();
                     }
                     let storage = if refresh_storage {
-                        probe_storage_temps()
+                        // Never let a storage IOCTL bug tear down the UI process.
+                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(probe_storage_temps))
+                            .unwrap_or_else(|_| {
+                                tracing::error!("storage temp probe panicked; skipping this cycle");
+                                Vec::new()
+                            })
                     } else {
                         // Keep previous SSD rows from cache
                         cache
@@ -143,41 +141,12 @@ impl HostSensorProvider {
             .ok();
     }
 
-    fn merge_storage_if_due(&self) {
-        if !self.is_enabled() {
-            return;
-        }
-        let mut last = self.last_storage.lock().unwrap_or_else(|e| e.into_inner());
-        if last.elapsed() < self.storage_ttl {
-            return;
-        }
-        *last = Instant::now();
-        let storage = probe_storage_temps();
-        *self.storage_cache.lock().unwrap_or_else(|e| e.into_inner()) = storage.clone();
-        let mut g = self.cache.lock().unwrap_or_else(|e| e.into_inner());
-        let gpu: Vec<_> = g
-            .as_ref()
-            .map(|c| {
-                c.values
-                    .iter()
-                    .filter(|(id, _, _)| id.starts_with("host.gpu"))
-                    .cloned()
-                    .collect()
-            })
-            .unwrap_or_default();
-        let mut values = gpu;
-        values.extend(storage);
-        *g = Some(Cached {
-            values: Arc::new(values),
-        });
-    }
-
     fn snapshot(&self) -> Arc<Vec<(String, String, f64)>> {
         if !self.is_enabled() {
             return Arc::new(Vec::new());
         }
+        // Storage + GPU probes run only on the bg thread (no second IOCTL path here).
         self.ensure_bg_refresh();
-        self.merge_storage_if_due();
         let g = self.cache.lock().unwrap_or_else(|e| e.into_inner());
         g.as_ref()
             .map(|c| Arc::clone(&c.values))

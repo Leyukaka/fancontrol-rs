@@ -1,5 +1,6 @@
 //! egui application: live sensors, sliders, graph, rename, options.
 
+use crate::activity::{show_activity_deck, ActivityDeckView, ActivityMode};
 use crate::curve_editor::show_curve_editor;
 use crate::graph::{show_temp_graph, GraphSeries, TempHistory, ThermalSignal};
 use crate::i18n::{display_name_for, resolve_startup_locale, SUPPORTED};
@@ -95,6 +96,15 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
     // First-run writes consent only when the process actually allows PWM.
     let show_writes_consent = options.allow_hw_write && !settings.writes_risk_acknowledged;
 
+    // Activity deck: sample only while the panel is enabled (default on).
+    fancontrol_plugins::cpu_activity::set_enabled(settings.show_activity_deck);
+    fancontrol_plugins::cpu_activity::set_sample_processes(
+        settings.show_activity_deck && !matches!(settings.activity_mode, ActivityMode::LoadOnly),
+    );
+
+    let mut load_history = TempHistory::default();
+    load_history.configure(settings.activity_window_minutes, 1);
+
     let app = FanApp {
         options,
         map,
@@ -111,6 +121,8 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         rename_is_control: false,
         histories: HashMap::new(),
         graph_axis_max: None,
+        load_history,
+        activity_filter: String::new(),
         show_settings: false,
         show_curves: true,
         profile,
@@ -222,6 +234,10 @@ struct FanApp {
     /// sample). Lives on `FanApp`, not `TempHistory`, since the axis is
     /// shared across every plotted series.
     graph_axis_max: Option<f32>,
+    /// CPU load % history for the Activity deck.
+    load_history: TempHistory,
+    /// Process name filter (Activity deck).
+    activity_filter: String,
     show_settings: bool,
     show_curves: bool,
     profile: Profile,
@@ -354,6 +370,18 @@ impl eframe::App for FanApp {
                         h
                     })
                     .push_if_due(v as f32, Instant::now());
+            }
+        }
+        // Activity: one snapshot per frame; history configure only when window settings change
+        // (done in Options / graph controls). Here we only push samples.
+        let activity_snap = if self.settings.show_activity_deck {
+            Some(fancontrol_plugins::cpu_activity::snapshot())
+        } else {
+            None
+        };
+        if let Some(act) = &activity_snap {
+            if let Some(load) = act.load_pct {
+                self.load_history.push_if_due(load as f32, Instant::now());
             }
         }
         self.histories
@@ -511,6 +539,63 @@ impl eframe::App for FanApp {
                             t!("options.show_cpu_graph").to_string(),
                         )
                         .changed();
+                    if ui
+                        .checkbox(
+                            &mut self.settings.show_activity_deck,
+                            t!("options.show_activity_deck").to_string(),
+                        )
+                        .changed()
+                    {
+                        fancontrol_plugins::cpu_activity::set_enabled(
+                            self.settings.show_activity_deck,
+                        );
+                        fancontrol_plugins::cpu_activity::set_sample_processes(
+                            self.settings.show_activity_deck
+                                && !matches!(self.settings.activity_mode, ActivityMode::LoadOnly),
+                        );
+                        dirty = true;
+                    }
+                    if self.settings.show_activity_deck {
+                        ui.indent("activity_opts", |ui| {
+                            ui.horizontal(|ui| {
+                                ui.label(t!("options.activity_mode").to_string());
+                                for (mode, key) in [
+                                    (ActivityMode::Both, "options.activity_mode_both"),
+                                    (ActivityMode::LoadOnly, "options.activity_mode_load"),
+                                    (ActivityMode::ProcessesOnly, "options.activity_mode_procs"),
+                                ] {
+                                    if ui
+                                        .selectable_value(
+                                            &mut self.settings.activity_mode,
+                                            mode,
+                                            t!(key).to_string(),
+                                        )
+                                        .changed()
+                                    {
+                                        fancontrol_plugins::cpu_activity::set_sample_processes(
+                                            !matches!(mode, ActivityMode::LoadOnly),
+                                        );
+                                        dirty = true;
+                                    }
+                                }
+                            });
+                            ui.horizontal(|ui| {
+                                ui.label(t!("options.activity_top_n").to_string());
+                                for n in [5_u8, 8, 10, 12, 16, 20] {
+                                    if ui
+                                        .selectable_value(
+                                            &mut self.settings.activity_top_n,
+                                            n,
+                                            n.to_string(),
+                                        )
+                                        .changed()
+                                    {
+                                        dirty = true;
+                                    }
+                                }
+                            });
+                        });
+                    }
                     if ui
                         .checkbox(
                             &mut self.settings.show_host_sensors,
@@ -712,66 +797,131 @@ impl eframe::App for FanApp {
                 });
         }
 
-        if self.settings.show_graph_panel {
+        let show_thermal = self.settings.show_graph_panel;
+        let show_activity = self.settings.show_activity_deck;
+        if show_thermal || show_activity {
             let labels: HashMap<&str, &str> = snap
                 .temps
                 .iter()
                 .map(|(id, label, _)| (id.as_str(), label.as_str()))
                 .collect();
 
+            // Prefer one solid top strip: thermal alone ~240, activity alone ~220,
+            // both stacked ~420 so neither plot collapses to 0 height.
+            let default_h = match (show_thermal, show_activity) {
+                (true, true) => 420.0,
+                (true, false) => 240.0,
+                (false, true) => 220.0,
+                (false, false) => 0.0,
+            };
+            let min_h = match (show_thermal, show_activity) {
+                (true, true) => 320.0,
+                (true, false) => 180.0,
+                (false, true) => 160.0,
+                (false, false) => 0.0,
+            };
+
             egui::Panel::top("graph_area")
                 .resizable(true)
-                .default_size(240.0)
-                // Floor high enough that the heading + graph-controls row + a usable
-                // graph always fit, so dragging the panel short can't force the
-                // canvas to overflow/clip against the panel boundary.
-                .min_size(200.0)
-                .max_size(600.0)
+                .default_size(default_h)
+                .min_size(min_h)
+                .max_size(800.0)
                 .show(ui, |ui| {
-                    self.ui_graph_controls(ui);
-                    let histories = &self.histories;
-                    let series: Vec<GraphSeries> = self
-                        .settings
-                        .graph_sensor_ids
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(i, id)| {
-                            histories.get(id).map(|h| GraphSeries {
-                                label: labels.get(id.as_str()).copied().unwrap_or(id.as_str()),
-                                palette_index: i,
-                                history: h,
-                            })
-                        })
-                        .collect();
-                    let style = self.settings.graph_style;
-                    if style == GraphStyle::Classic || !self.shader_backend_available {
-                        show_temp_graph(
-                            ui,
-                            &series,
+                    if show_thermal {
+                        self.ui_graph_controls(ui);
+                        // Build series for every selected id (create empty history if needed
+                        // so the plot frame always shows instead of a blank panel).
+                        let (win, samp) = (
                             self.settings.graph_window_minutes,
-                            &mut self.graph_axis_max,
+                            self.settings.graph_sample_secs,
                         );
-                        if style.is_shader() {
-                            // Selected style needs wgpu but it's unavailable this run — degrade
-                            // to Classic instead of leaving a blank panel with no explanation.
-                            ui.small(t!("graph.shader_fallback_note").to_string());
+                        for id in &self.settings.graph_sensor_ids {
+                            self.histories.entry(id.clone()).or_insert_with(|| {
+                                let mut h = TempHistory::default();
+                                h.configure(win, samp);
+                                h
+                            });
                         }
-                    } else {
-                        let t =
-                            self.shader_clock.elapsed().as_secs_f32() * self.settings.shader_speed;
-                        let readings: Vec<(String, f32)> = series
+                        let series: Vec<GraphSeries> = self
+                            .settings
+                            .graph_sensor_ids
                             .iter()
-                            .filter_map(|s| s.history.last().map(|v| (s.label.to_string(), v)))
+                            .enumerate()
+                            .filter_map(|(i, id)| {
+                                self.histories.get(id).map(|h| GraphSeries {
+                                    label: labels.get(id.as_str()).copied().unwrap_or(id.as_str()),
+                                    palette_index: i,
+                                    history: h,
+                                })
+                            })
                             .collect();
-                        let signal = ThermalSignal::from_readings(readings);
-                        show_shader_panel(
-                            ui,
-                            style,
-                            t,
-                            signal,
-                            self.settings.shader_color_a,
-                            self.settings.shader_color_b,
-                        );
+                        let style = self.settings.graph_style;
+                        // Explicit plot height — do NOT use allocate_ui(available_height)
+                        // which can leave egui_plot with an unbounded/zero rect.
+                        let plot_h = if show_activity {
+                            (ui.available_height() * 0.5).clamp(140.0, 280.0)
+                        } else {
+                            ui.available_height().clamp(140.0, 480.0)
+                        };
+                        if style == GraphStyle::Classic || !self.shader_backend_available {
+                            show_temp_graph(
+                                ui,
+                                &series,
+                                self.settings.graph_window_minutes,
+                                &mut self.graph_axis_max,
+                                plot_h,
+                            );
+                            if style.is_shader() {
+                                ui.small(t!("graph.shader_fallback_note").to_string());
+                            }
+                        } else {
+                            let t = self.shader_clock.elapsed().as_secs_f32()
+                                * self.settings.shader_speed;
+                            let readings: Vec<(String, f32)> = series
+                                .iter()
+                                .filter_map(|s| s.history.last().map(|v| (s.label.to_string(), v)))
+                                .collect();
+                            let signal = ThermalSignal::from_readings(readings);
+                            // Shader panel needs a sized rect too.
+                            ui.allocate_ui(egui::vec2(ui.available_width(), plot_h), |ui| {
+                                show_shader_panel(
+                                    ui,
+                                    style,
+                                    t,
+                                    signal,
+                                    self.settings.shader_color_a,
+                                    self.settings.shader_color_b,
+                                );
+                            });
+                        }
+                    }
+
+                    if show_activity {
+                        if show_thermal {
+                            ui.separator();
+                        }
+                        // Reuse snapshot taken at start of frame (no second clone).
+                        let act = activity_snap.as_ref().cloned().unwrap_or_default();
+                        let sort_before = self.settings.activity_sort;
+                        let act_h = ui.available_height().clamp(140.0, 320.0);
+                        ui.allocate_ui(egui::vec2(ui.available_width(), act_h), |ui| {
+                            show_activity_deck(
+                                ui,
+                                ActivityDeckView {
+                                    load_history: &self.load_history,
+                                    processes: &act.processes,
+                                    load_pct: act.load_pct,
+                                    mode: self.settings.activity_mode,
+                                    sort: &mut self.settings.activity_sort,
+                                    filter: &mut self.activity_filter,
+                                    top_n: self.settings.activity_top_n as usize,
+                                    window_minutes: self.settings.activity_window_minutes,
+                                },
+                            );
+                        });
+                        if self.settings.activity_sort != sort_before {
+                            self.settings.save();
+                        }
                     }
                 });
         }
@@ -1074,6 +1224,10 @@ impl FanApp {
                     self.settings.graph_sample_secs,
                 );
             }
+            self.load_history.configure(
+                self.settings.activity_window_minutes,
+                1, // activity worker ~1 Hz
+            );
         }
     }
 
