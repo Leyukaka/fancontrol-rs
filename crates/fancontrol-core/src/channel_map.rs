@@ -46,6 +46,11 @@ impl ChannelMap {
             ("pawnio.0.temp.System", "System"),
             ("pawnio.0.temp.MOS", "MOS"),
             ("pawnio.0.temp.PCH", "PCH"),
+            // Classic banked NCT (e.g. ROG STRIX B550-A): short names differ from NCT668x EC.
+            ("pawnio.0.temp.PECI_0", "CPU (PECI)"),
+            ("pawnio.0.temp.CPUTIN", "CPU (CPUTIN)"),
+            ("pawnio.0.temp.SYSTIN", "System (SYSTIN)"),
+            ("pawnio.0.temp.AUXTIN0", "Aux 0"),
             ("pawnio.0.fan0", "Fan 0"),
             ("pawnio.0.fan1", "Fan 1"),
             ("pawnio.0.fan12", "Fan 12"),

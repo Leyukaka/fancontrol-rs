@@ -1277,7 +1277,7 @@ dependencies = [
 
 [[package]]
 name = "fancontrol-core"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "directories",
  "serde",
@@ -1289,7 +1289,7 @@ dependencies = [
 
 [[package]]
 name = "fancontrol-pawnio"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "fancontrol-core",
  "fancontrol-plugins",
@@ -1301,7 +1301,7 @@ dependencies = [
 
 [[package]]
 name = "fancontrol-plugins"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "fancontrol-core",
  "thiserror 1.0.69",
@@ -1311,7 +1311,7 @@ dependencies = [
 
 [[package]]
 name = "fancontrol-rs"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -1328,7 +1328,7 @@ dependencies = [
 
 [[package]]
 name = "fancontrol-ui"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "bytemuck",
  "eframe",

@@ -44,11 +44,11 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 
 ## Status (keep updated)
 
-- Product line: **v0.3.0** (Activity deck: CPU load + top processes CPU/RAM opt-in; SSD temps IOCTL; mock opt-in; writes consent; host toggle live).
+- Product line: **v0.3.2** (B550 banked NCT validated + curve temp fallback CPUTIN/PECI; Activity deck; collapsible dashboard).
 - Phase 0 foundation: **done**.
-- Phase 1: PawnIOLib FFI + LpcIO + **NCT668x EC HWM** (validated class id `0xD5` rev `0x92` @ `0x0A20`) + banked NCT path (experimental) + control loop + CLI.
+- Phase 1: PawnIOLib FFI + LpcIO + **NCT668x EC HWM** (validated class id `0xD5` rev `0x92` @ `0x0A20`) + **banked NCT** (ROG B550-A `0xD4` validated reads+writes) + control loop + CLI.
 - Elevation required for `pawnio_open` (Administrator). **PawnIO is a prerequisite** (not bundled) — UI shows a startup dialog if missing / not openable.
-- Validated path: **Nuvoton NCT6687D-class**; **ctrl0–3** reliable PWM; higher controls = DR/experimental. See `docs/SUPPORTED_HARDWARE.md`.
+- Validated paths: **NCT6687D-class** (`0xD5`) and **banked NCT** on ROG STRIX B550-A (`0xD4`); higher NCT668x controls = DR/experimental. See `docs/SUPPORTED_HARDWARE.md`.
 - Host sensors: fixed-path `nvidia-smi` (NVIDIA-only; AMD/Intel research documented in `docs/GPU_VENDOR_APIS.md`, not implemented) + storage via `DeviceIoControl` with an NVMe health-log fallback (read-only, no PowerShell, no PATH walk for GPU).
 - Vendored modules: `crates/fancontrol-pawnio/modules/` (PawnIO.Modules).
 - i18n: 8 languages (en/fr/de/es/it/zh/ja/lb) via `rust-i18n`, picker in Options panel, OS-locale default on first run, live switch (no restart), Noto Sans CJK bundled for zh/ja glyph coverage. `crates/fancontrol-ui/locales/`.
@@ -61,7 +61,7 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 
 ## Next priorities (order)
 
-1. Broader chip validation (IT87 / banked NCT still experimental).
+1. Broader chip validation (ITE IT87 still experimental; more banked NCT boards).
 2. Code signing (SmartScreen) — see `docs/SIGNING_AND_DISTRIBUTION.md`.
 3. Auto-update: download + SHA256 verify + install (manual check already done) — see `docs/SECURITY.md`.
 4. AMD/Intel GPU temp — blocked on hardware to validate against, see `docs/GPU_VENDOR_APIS.md`.

@@ -1147,9 +1147,14 @@ impl FanApp {
                                             .sensor_bindings
                                             .entry(c.id.clone())
                                             .or_insert_with(|| {
-                                                snap.cpu_temp_id
-                                                    .clone()
-                                                    .unwrap_or_else(|| "pawnio.0.temp.CPU".into())
+                                                snap.cpu_temp_id.clone().unwrap_or_else(|| {
+                                                    snap.temps
+                                                        .first()
+                                                        .map(|(id, _, _)| id.clone())
+                                                        .unwrap_or_else(|| {
+                                                            "pawnio.0.temp.CPU".into()
+                                                        })
+                                                })
                                             });
                                     }
                                 }
@@ -1161,6 +1166,8 @@ impl FanApp {
                                 .sensor_bindings
                                 .get(&c.id)
                                 .cloned()
+                                .or_else(|| snap.cpu_temp_id.clone())
+                                .or_else(|| snap.temps.first().map(|(id, _, _)| id.clone()))
                                 .unwrap_or_else(|| "pawnio.0.temp.CPU".to_string());
                             let bound_label = snap
                                 .temps
@@ -1541,8 +1548,9 @@ impl FanApp {
             .iter()
             .map(|(id, _, v)| (id.clone(), *v))
             .collect();
-        if let Some(t) = snap.cpu_temp {
-            temps.entry("pawnio.0.temp.CPU".into()).or_insert(t);
+        // Ensure the live CPU candidate is present under its real id (CPUTIN/PECI/CPU).
+        if let (Some(id), Some(t)) = (&snap.cpu_temp_id, snap.cpu_temp) {
+            temps.entry(id.clone()).or_insert(t);
         }
         let step = evaluate_profile_step(&self.profile, &temps, &mut self.curve_states);
         for (ctrl, duty) in step.duties {

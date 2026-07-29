@@ -33,7 +33,8 @@ Vendored PawnIO modules (e.g. `LpcIO.bin`) ship under `crates/fancontrol-pawnio/
 | **Nuvoton NCT668x EC HWM** (class id `0xD5`, e.g. NCT6687D-class) | Temps, fans, PWM | **Validated** (reads + writes) | Owner board: id `0xD5` rev `0x92`, HWM base `0x0A20`, Super I/O slot @ `0x4E`. Via PawnIO **LpcIO**. |
 | **ctrl0–ctrl3** (NCT668x) | Fan duty | **Validated** | Reliable control path on validated board. |
 | **Higher control indices** (NCT668x) | Fan duty | **Experimental / DR path** | Direct-register style path; less trusted than ctrl0–3. Validate carefully before relying on it. |
-| **Banked Nuvoton NCT / ITE IT87** (classic Super I/O HWM) | Detect / sensors | **Experimental** | Detection helpers exist; not the primary validated path. |
+| **Banked Nuvoton NCT** (classic Super I/O HWM) | Temps, fans, PWM | **Validated** (reads + writes on ROG B550-A) | ASUS **ROG STRIX B550-A GAMING**: id `0xD4` rev `0x2B`, HWM `0x0290`, slot `@0x2E`. Temps named `CPUTIN` / `PECI_0` (not `temp.CPU`). Curve binding falls back if profile still points at `pawnio.0.temp.CPU`. Some fan channels may be noise (e.g. fan6 absurd RPM). |
+| **ITE IT87** / other banked layouts | Detect / sensors | **Experimental** | Detection helpers exist; not fully validated. |
 | **Host: GPU** (`nvidia-smi`) | Temperature | **Read-only** | Process spawn; no fan curve write through nvidia-smi. |
 | **Host: storage** (`DeviceIoControl`, no PowerShell) | Temperature | **Read-only** | Prefer **NVMe health log** (composite °C), then `StorageDeviceTemperatureProperty` / adapter (all sensors scanned). Elevate for `\\.\PhysicalDriveN`. CLI: `sample-storage`. |
 | **Host: Activity deck** (Options, default on) | CPU load %, top processes (CPU + RAM) | **Read-only** | Windows APIs only (`GetSystemTimes`, Toolhelp, `GetProcessTimes`, working set). **No PowerShell, no WMI.** ~1 s while enabled; Load-only skips process enum. |
@@ -66,6 +67,27 @@ cargo run -- --hw-only --read-only ui
 ```
 
 Prefer `sample`, `list-sensors`, `list-controls`, and `test-duty` for validation before leaving curves auto-apply on.
+
+---
+
+## Banked NCT (ROG STRIX B550-A GAMING)
+
+Validated configuration (2026-07-29):
+
+| Field | Value |
+|-------|--------|
+| Board | ASUS **ROG STRIX B550-A GAMING** |
+| Chip class | Nuvoton **NCT (banked)** |
+| Chip id / rev | `0xD4` / `0x2B` |
+| Super I/O | slot0 @ `0x2E` |
+| HWM base | `0x0290` |
+| Backend | PawnIO + LpcIO banked path |
+
+**Reads:** fan0 / fan1 / fan3 live RPM; PECI_0 / CPUTIN / SYSTIN / AUXTIN0 present (may report similar values depending on wiring). Host GPU (nvidia-smi) + storage temps OK.
+
+**Writes:** PWM control confirmed working by owner (not only read-only probe).
+
+**Curves:** default profiles may still bind `pawnio.0.temp.CPU` (NCT668x name). Runtime resolves missing bindings to `PECI_0` / `CPUTIN` via `fancontrol_core::resolve_curve_temp_sensor` (v0.3.2+).
 
 ---
 

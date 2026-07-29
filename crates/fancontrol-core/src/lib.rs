@@ -10,6 +10,7 @@ pub mod curve;
 pub mod error;
 pub mod models;
 pub mod profile;
+pub mod temp_source;
 
 pub use channel_map::ChannelMap;
 pub use config::{config_dir, ensure_config_dirs, profiles_dir};
@@ -21,3 +22,7 @@ pub use models::{
     SensorDescriptor, SensorId, SensorKind,
 };
 pub use profile::{delete_profile, list_profiles, load_profile, save_profile};
+pub use temp_source::{
+    cpu_temp_seed_priority, is_cpu_temp_candidate, pick_cpu_temp_id, resolve_curve_temp_sensor,
+    temp_sensor_short_name,
+};

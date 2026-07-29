@@ -2,6 +2,7 @@
 
 use crate::curve::{evaluate_curve, CurveEvalState};
 use crate::models::Profile;
+use crate::temp_source::resolve_curve_temp_sensor;
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -36,24 +37,12 @@ pub fn evaluate_profile_step(
             continue;
         };
 
-        let sensor_id = profile
-            .sensor_bindings
-            .get(control_id)
-            .cloned()
-            .or_else(|| {
-                // Deterministic fallbacks (never HashMap::keys().next())
-                if temps.contains_key("pawnio.0.temp.CPU") {
-                    Some("pawnio.0.temp.CPU".into())
-                } else if temps.contains_key("mock.cpu_temp") {
-                    Some("mock.cpu_temp".into())
-                } else {
-                    let mut keys: Vec<_> = temps.keys().cloned().collect();
-                    keys.sort();
-                    keys.into_iter().next()
-                }
-            });
-
-        let Some(sensor_id) = sensor_id else {
+        // Binding may still say pawnio.0.temp.CPU on banked NCT boards that only
+        // expose CPUTIN / PECI_0 — resolve to a live reading if the bound id is absent.
+        let Some(sensor_id) = resolve_curve_temp_sensor(
+            profile.sensor_bindings.get(control_id).map(|s| s.as_str()),
+            temps,
+        ) else {
             result
                 .errors
                 .push(format!("control {control_id}: no temperature source"));
@@ -99,6 +88,27 @@ mod tests {
         p.sensor_bindings.insert("fan1".into(), "cpu".into());
 
         let temps = HashMap::from([("cpu".into(), 50.0)]);
+        let mut states = HashMap::new();
+        let step = evaluate_profile_step(&p, &temps, &mut states);
+        assert_eq!(step.duties.get("fan1"), Some(&60));
+        assert!(step.errors.is_empty());
+    }
+
+    #[test]
+    fn stale_cpu_binding_uses_cputin() {
+        let mut p = Profile::new("t", "t");
+        p.curves.push(FanCurve {
+            id: crate::models::CurveId::new("c"),
+            name: "c".into(),
+            points: vec![CurvePoint::new(30.0, 20), CurvePoint::new(70.0, 100)],
+            hysteresis_c: 0.0,
+            response_time_s: 0.0,
+        });
+        p.assignments.insert("fan1".into(), "c".into());
+        p.sensor_bindings
+            .insert("fan1".into(), "pawnio.0.temp.CPU".into());
+
+        let temps = HashMap::from([("pawnio.0.temp.CPUTIN".into(), 50.0)]);
         let mut states = HashMap::new();
         let step = evaluate_profile_step(&p, &temps, &mut states);
         assert_eq!(step.duties.get("fan1"), Some(&60));

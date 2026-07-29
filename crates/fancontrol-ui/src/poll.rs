@@ -1,6 +1,6 @@
 //! Background hardware polling → UI snapshot.
 
-use fancontrol_core::{ChannelMap, SensorKind};
+use fancontrol_core::{cpu_temp_seed_priority, ChannelMap, SensorKind};
 use fancontrol_pawnio::PawnioProvider;
 use fancontrol_plugins::ProviderRegistry;
 use std::collections::HashMap;
@@ -84,6 +84,7 @@ fn take_snapshot(
     let mut error = None;
     let mut cpu_temp = None;
     let mut cpu_temp_id = None;
+    let mut cpu_prio = u8::MAX;
     let mut gpu_temp_id = None;
 
     // Fast path: one HWM bus transaction for all pawnio channels.
@@ -123,9 +124,11 @@ fn take_snapshot(
                         let key = format!("pawnio.{di_s}.temp.{name}");
                         if let Some(&t) = pawnio_temp.get(&key) {
                             let label = map.sensor_name(id, &s.name).to_string();
-                            if cpu_temp.is_none()
-                                && (name == "CPU" || label.eq_ignore_ascii_case("CPU"))
-                            {
+                            // Prefer CPU / PECI_0 / CPUTIN over "first temp" (banked NCT).
+                            let prio = cpu_temp_seed_priority(name)
+                                .min(cpu_temp_seed_priority(label.as_str()));
+                            if prio < cpu_prio {
+                                cpu_prio = prio;
                                 cpu_temp = Some(t);
                                 cpu_temp_id = Some(id.to_string());
                             }

@@ -14,7 +14,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/rust-edition%202021-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue" alt="License">
-  <img src="https://img.shields.io/badge/version-0.3.1-informational" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.3.2-informational" alt="Version">
   <img src="https://img.shields.io/badge/backend-PawnIO-success" alt="PawnIO">
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-blue" alt="Windows">
 </p>
@@ -50,7 +50,7 @@ Rough map of the Windows landscape. Support always depends on your board and EC.
 | MSI Afterburner | Free | **GPU** OC + GPU fans | GPU fan curve | Not a full motherboard fan suite | Mature (GPU) |
 | OEM apps (Armoury Crate, Gigabyte CC, …) | Free with board | Vendor board / RGB / fans | Varies | Heavy; brand-locked | Mature |
 | AIO / case apps (iCUE, CAM, …) | Free / freemium | Their pumps, fans, RGB | Good **inside** that ecosystem | Weak for random mobo headers | Mature niche |
-| **fancontrol-rs** (this repo) | MIT / Apache-2.0 | Fans + **Activity** (CPU load, top processes) | Curves, profiles, sliders, multi-sensor graph | **PawnIO only** (no WinRing0); egui UI; chip path still narrow (**NCT668x** validated first); binaries unsigned | Early (v0.3.x) |
+| **fancontrol-rs** (this repo) | MIT / Apache-2.0 | Fans + **Activity** (CPU load, top processes) | Curves, profiles, sliders, multi-sensor graph | **PawnIO only** (no WinRing0); egui UI; validated **NCT668x** + banked NCT on **ROG B550-A**; other boards still experimental; binaries unsigned | Early (v0.3.x) |
 
 **Quick pick**
 
@@ -87,18 +87,21 @@ Rough map of the Windows landscape. Support always depends on your board and EC.
 
 ## Status
 
-**v0.3.1**. NCT668x path + UI (sensors, sliders, curves, thermal graph, Activity deck, collapsible lists).  
+**v0.3.2**. NCT668x + banked NCT (ROG B550-A), curve temp fallback (`CPUTIN`/`PECI`), Activity deck, collapsible lists.  
 Public source of truth: this repo ([Releases](https://github.com/Leyukaka/fancontrol-rs/releases), issues, PRs).
 
 | Crate | Role |
 |-------|------|
 | `fancontrol-core` | Models, curves, profiles, channel map, control loop |
 | `fancontrol-plugins` | Traits, mock, host sensors, CPU activity |
-| `fancontrol-pawnio` | PawnIO FFI + LpcIO + NCT668x EC HWM |
+| `fancontrol-pawnio` | PawnIO FFI + LpcIO + NCT668x / banked NCT HWM |
 | `fancontrol-ui` | egui app |
 | `fancontrol-rs` | CLI + binary entry |
 
-Validated hardware: **Nuvoton NCT6687D-class** EC (id `0xD5` rev `0x92` @ `0x0A20`). Reads and PWM writes via PawnIO.  
+Validated hardware:
+- **Nuvoton NCT6687D-class** EC (id `0xD5` rev `0x92` @ `0x0A20`)
+- **Banked NCT** on **ASUS ROG STRIX B550-A GAMING** (id `0xD4` rev `0x2B` @ `0x2E` / HWM `0x0290`) — PWM OK
+
 Details: [docs/SUPPORTED_HARDWARE.md](./docs/SUPPORTED_HARDWARE.md).
 
 ## Download
