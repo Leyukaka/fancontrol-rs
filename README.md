@@ -6,14 +6,15 @@
 
 <p align="center">
   <strong>Windows fan control and system activity (CPU / RAM) in Rust.</strong><br>
-  Spiritual successor to <a href="https://github.com/Rem0o/FanControl.Releases">FanControl</a> by Rem0o.<br>
+  Open-source option next to tools like FanControl and Argus Monitor.<br>
+  Inspired by <a href="https://github.com/Rem0o/FanControl.Releases">FanControl</a> (Rem0o). Not affiliated.<br>
   PawnIO only (no WinRing0) · profiles & curves · live UI
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/rust-edition%202021-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue" alt="License">
-  <img src="https://img.shields.io/badge/version-0.3.0-informational" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.3.1-informational" alt="Version">
   <img src="https://img.shields.io/badge/backend-PawnIO-success" alt="PawnIO">
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-blue" alt="Windows">
 </p>
@@ -32,6 +33,36 @@
 - **CLI**: `sample`, `list-sensors`, `list-controls`, `test-duty`, `sample-storage`, …
 - **Optional fun**: shader graph styles (wgpu) in Options
 - Spec-driven design: decisions live under [`specs/`](./specs)
+
+## Compared to other tools
+
+Not affiliated with FanControl, Argus Monitor, LibreHardwareMonitor, or any OEM brand.  
+Rough map of the Windows landscape. Support always depends on your board and EC.
+
+| Software | License | Focus | Curves / profiles | Notes | Maturity |
+|----------|---------|--------|-------------------|-------|----------|
+| [FanControl](https://github.com/Rem0o/FanControl.Releases) (Rem0o) | Free | Fan control + **plugins** | Strong multi-curve setup | Large community; default pick for many desktops | Mature |
+| [Argus Monitor](https://www.argusmonitor.com/) | **Paid** (trial) | Monitoring suite + fans | Strong; synthetic temps, AIO, etc. | Closed source; also drive/SMART oriented | Mature |
+| [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) | Open source | **Sensors / monitoring** | Not a full fan-control app | Often used under other tools | Mature (monitor) |
+| [HWiNFO](https://www.hwinfo.com/) | Free / Pro | Logging & sensors | Not for PWM curves | Pair with a fan app if you need control | Mature (monitor) |
+| SpeedFan | Free (legacy) | Old all-in-one | Dated UI | Often fails on modern boards | Legacy |
+| [NBFC](https://github.com/hirschmann/nbfc) (and forks) | Open source | **Laptops** | Per-model configs | Desktop Super I/O is a different problem | Mature niche |
+| MSI Afterburner | Free | **GPU** OC + GPU fans | GPU fan curve | Not a full motherboard fan suite | Mature (GPU) |
+| OEM apps (Armoury Crate, Gigabyte CC, …) | Free with board | Vendor board / RGB / fans | Varies | Heavy; brand-locked | Mature |
+| AIO / case apps (iCUE, CAM, …) | Free / freemium | Their pumps, fans, RGB | Good **inside** that ecosystem | Weak for random mobo headers | Mature niche |
+| **fancontrol-rs** (this repo) | MIT / Apache-2.0 | Fans + **Activity** (CPU load, top processes) | Curves, profiles, sliders, multi-sensor graph | **PawnIO only** (no WinRing0); egui UI; chip path still narrow (**NCT668x** validated first); binaries unsigned | Early (v0.3.x) |
+
+**Quick pick**
+
+| You want… | Often a fit |
+|-----------|-------------|
+| Max features and plugins, battle-tested | FanControl |
+| Paid all-in-one (fans + disks + polish) | Argus Monitor |
+| Sensors / logging only | LibreHardwareMonitor, HWiNFO |
+| Laptop EC control | NBFC |
+| GPU fans only | Afterburner |
+| Brand AIO / RGB ecosystem | iCUE, CAM, etc. |
+| Open source, PawnIO-only I/O, fan UI + CPU/RAM activity, OK with limited hardware validation so far | **fancontrol-rs** |
 
 ## Specs
 
@@ -56,7 +87,7 @@
 
 ## Status
 
-**v0.3.0**. NCT668x path + full UI (sensors, sliders, curves, thermal graph, Activity deck).  
+**v0.3.1**. NCT668x path + UI (sensors, sliders, curves, thermal graph, Activity deck, collapsible lists).  
 Public source of truth: this repo ([Releases](https://github.com/Leyukaka/fancontrol-rs/releases), issues, PRs).
 
 | Crate | Role |
