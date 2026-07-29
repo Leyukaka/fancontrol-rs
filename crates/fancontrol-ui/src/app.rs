@@ -949,7 +949,9 @@ impl eframe::App for FanApp {
                     }
                     let act = activity_snap.as_ref().cloned().unwrap_or_default();
                     let sort_before = self.settings.activity_sort;
-                    let act_h = ui.available_height().clamp(120.0, ui.available_height().max(120.0));
+                    let act_h = ui
+                        .available_height()
+                        .clamp(120.0, ui.available_height().max(120.0));
                     ui.allocate_ui(egui::vec2(ui.available_width(), act_h), |ui| {
                         show_activity_deck(
                             ui,
@@ -1036,37 +1038,35 @@ impl FanApp {
     fn ui_fans_column(&mut self, ui: &mut egui::Ui, snap: &crate::poll::Snapshot) {
         ui.heading(t!("dashboard.fans").to_string());
         ui.separator();
-        egui::ScrollArea::vertical()
-            .id_salt("fans")
-            .show(ui, |ui| {
-                let fans: Vec<_> = snap
-                    .fans
-                    .iter()
-                    .filter(|(_, _, v)| !self.settings.hide_zero_rpm || *v >= 1.0)
-                    .collect();
-                if fans.is_empty() {
-                    ui.label(t!("dashboard.none").to_string());
-                }
-                for (id, label, v) in fans {
-                    ui.horizontal(|ui| {
-                        if ui
-                            .add(egui::Label::new(label.as_str()).sense(egui::Sense::click()))
-                            .on_hover_text(t!("dashboard.click_to_rename").to_string())
-                            .clicked()
-                        {
-                            self.begin_rename(id, label, false);
+        egui::ScrollArea::vertical().id_salt("fans").show(ui, |ui| {
+            let fans: Vec<_> = snap
+                .fans
+                .iter()
+                .filter(|(_, _, v)| !self.settings.hide_zero_rpm || *v >= 1.0)
+                .collect();
+            if fans.is_empty() {
+                ui.label(t!("dashboard.none").to_string());
+            }
+            for (id, label, v) in fans {
+                ui.horizontal(|ui| {
+                    if ui
+                        .add(egui::Label::new(label.as_str()).sense(egui::Sense::click()))
+                        .on_hover_text(t!("dashboard.click_to_rename").to_string())
+                        .clicked()
+                    {
+                        self.begin_rename(id, label, false);
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if *v < 1.0 {
+                            ui.weak("0");
+                        } else {
+                            ui.monospace(format!("{v:6.0}"));
                         }
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if *v < 1.0 {
-                                ui.weak("0");
-                            } else {
-                                ui.monospace(format!("{v:6.0}"));
-                            }
-                        });
                     });
-                    ui.small(id);
-                }
-            });
+                });
+                ui.small(id);
+            }
+        });
     }
 
     fn ui_controls_column(&mut self, ui: &mut egui::Ui, snap: &crate::poll::Snapshot) {
@@ -1095,12 +1095,11 @@ impl FanApp {
                             self.begin_rename(&c.id, &c.label, true);
                         }
                         ui.small(&c.id);
-                        let slot = c
-                            .id
-                            .rsplit("ctrl")
-                            .next()
-                            .and_then(|s| s.parse::<u32>().ok())
-                            .unwrap_or(0);
+                        let slot =
+                            c.id.rsplit("ctrl")
+                                .next()
+                                .and_then(|s| s.parse::<u32>().ok())
+                                .unwrap_or(0);
                         if slot >= 9 {
                             ui.small(t!("dashboard.ec_bios_warning").to_string());
                         }
