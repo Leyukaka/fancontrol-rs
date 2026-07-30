@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="copper" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E8914A"/>
+      <stop offset="50%" stop-color="#D46A2C"/>
+      <stop offset="100%" stop-color="#B84E1A"/>
+    </linearGradient>
+    <linearGradient id="blade" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#5A5A5A"/>
+      <stop offset="100%" stop-color="#2E2E2E"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Outer shield -->
+  <path d="M256 32
+           C170 32 64 68 64 150
+           L64 290
+           C64 400 170 480 256 500
+           C342 480 448 400 448 290
+           L448 150
+           C448 68 342 32 256 32 Z"
+        fill="none" stroke="url(#copper)" stroke-width="26" stroke-linejoin="round"/>
+  
+  <!-- Inner shield line -->
+  <path d="M256 62
+           C185 62 100 92 100 160
+           L100 285
+           C100 375 185 445 256 465
+           C327 445 412 375 412 285
+           L412 160
+           C412 92 327 62 256 62 Z"
+        fill="none" stroke="#E8914A" stroke-width="6" opacity="0.35"/>
+  
+  <!-- Fan group -->
+  <g transform="translate(256 275)">
+    <!-- Blades - 6 curved blades -->
+    <g fill="url(#blade)">
+      <path d="M0 -22 C18 -55 35 -95 28 -130 C10 -125 -10 -125 -28 -130 C-35 -95 -18 -55 0 -22 Z" transform="rotate(0)"/>
+      <path d="M0 -22 C18 -55 35 -95 28 -130 C10 -125 -10 -125 -28 -130 C-35 -95 -18 -55 0 -22 Z" transform="rotate(60)"/>
+      <path d="M0 -22 C18 -55 35 -95 28 -130 C10 -125 -10 -125 -28 -130 C-35 -95 -18 -55 0 -22 Z" transform="rotate(120)"/>
+      <path d="M0 -22 C18 -55 35 -95 28 -130 C10 -125 -10 -125 -28 -130 C-35 -95 -18 -55 0 -22 Z" transform="rotate(180)"/>
+      <path d="M0 -22 C18 -55 35 -95 28 -130 C10 -125 -10 -125 -28 -130 C-35 -95 -18 -55 0 -22 Z" transform="rotate(240)"/>
+      <path d="M0 -22 C18 -55 35 -95 28 -130 C10 -125 -10 -125 -28 -130 C-35 -95 -18 -55 0 -22 Z" transform="rotate(300)"/>
+    </g>
+    
+    <!-- Center hub -->
+    <circle cx="0" cy="0" r="32" fill="#1A1A1A"/>
+    <circle cx="0" cy="0" r="16" fill="#F0F0F0"/>
+    <circle cx="0" cy="0" r="6" fill="#1A1A1A"/>
+  </g>
+</svg>

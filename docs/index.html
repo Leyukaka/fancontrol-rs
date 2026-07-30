@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fancontrol-rs — Windows fan control &amp; system activity in Rust</title>
+<meta name="description" content="Open-source Windows fan control and CPU/RAM activity monitor written in Rust. PawnIO only, no WinRing0. Curves, profiles, live UI.">
+<link rel="icon" href="assets/icon.png">
+<style>
+  :root {
+    --copper: #D46A2C;
+    --copper-light: #E8914A;
+    --copper-dark: #B84E1A;
+    --bg: #12100e;
+    --bg-panel: #1b1815;
+    --bg-panel-alt: #221e19;
+    --border: #332c24;
+    --text: #f1ece4;
+    --text-dim: #b8ada0;
+    --text-faint: #8a8073;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #faf7f2;
+      --bg-panel: #ffffff;
+      --bg-panel-alt: #f2ede4;
+      --border: #e4dccb;
+      --text: #22190f;
+      --text-dim: #5a4d3c;
+      --text-faint: #7d6f5c;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12100e;
+    --bg-panel: #1b1815;
+    --bg-panel-alt: #221e19;
+    --border: #332c24;
+    --text: #f1ece4;
+    --text-dim: #b8ada0;
+    --text-faint: #8a8073;
+  }
+  :root[data-theme="light"] {
+    --bg: #faf7f2;
+    --bg-panel: #ffffff;
+    --bg-panel-alt: #f2ede4;
+    --border: #e4dccb;
+    --text: #22190f;
+    --text-dim: #5a4d3c;
+    --text-faint: #7d6f5c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+  }
+  a { color: var(--copper-light); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+
+  header.top {
+    padding: 20px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  header.top .wrap { display: flex; align-items: center; gap: 12px; }
+  header.top img { width: 32px; height: 32px; }
+  header.top .name { font-weight: 700; font-size: 1.05rem; }
+  header.top nav { margin-left: auto; display: flex; gap: 20px; font-size: 0.92rem; }
+
+  .hero {
+    padding: 64px 0 40px;
+    text-align: center;
+  }
+  .hero img.logo { width: 96px; height: 96px; margin-bottom: 18px; }
+  .hero h1 {
+    font-size: 2.4rem;
+    margin: 0 0 12px;
+    letter-spacing: -0.02em;
+  }
+  .hero p.tagline {
+    color: var(--text-dim);
+    font-size: 1.15rem;
+    max-width: 640px;
+    margin: 0 auto 24px;
+  }
+  .badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 28px; }
+  .badges img { height: 20px; }
+
+  .cta { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-bottom: 44px; }
+  .btn {
+    display: inline-block;
+    padding: 11px 22px;
+    border-radius: var(--radius);
+    font-weight: 600;
+    font-size: 0.95rem;
+    border: 1px solid var(--border);
+  }
+  .btn:hover { text-decoration: none; }
+  .btn.primary {
+    background: linear-gradient(135deg, var(--copper-light), var(--copper-dark));
+    color: #1a1006;
+    border: none;
+  }
+  .btn.secondary {
+    background: var(--bg-panel);
+    color: var(--text);
+  }
+  .btn.secondary:hover { border-color: var(--copper); }
+
+  .shot { text-align: center; margin-bottom: 8px; }
+  .shot img {
+    max-width: 100%;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+  }
+
+  section { padding: 48px 0; border-top: 1px solid var(--border); }
+  section h2 {
+    font-size: 1.4rem;
+    margin: 0 0 20px;
+  }
+  section h2 .accent { color: var(--copper-light); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+  }
+  .card h3 { margin: 0 0 8px; font-size: 1rem; }
+  .card p { margin: 0; color: var(--text-dim); font-size: 0.92rem; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--text-faint); font-weight: 600; }
+
+  .note {
+    background: var(--bg-panel-alt);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    font-size: 0.92rem;
+    color: var(--text-dim);
+  }
+  .note strong { color: var(--text); }
+
+  .signpath-badge {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin-top: 16px;
+  }
+  .signpath-badge img { height: 28px; flex-shrink: 0; }
+
+  footer {
+    padding: 32px 0 56px;
+    color: var(--text-faint);
+    font-size: 0.88rem;
+    text-align: center;
+  }
+  footer a { color: var(--text-dim); }
+
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.88rem;
+  }
+  pre {
+    background: var(--bg-panel-alt);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    overflow-x: auto;
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <img src="assets/icon.png" alt="">
+    <span class="name">fancontrol-rs</span>
+    <nav>
+      <a href="https://github.com/Leyukaka/fancontrol-rs">GitHub</a>
+      <a href="https://github.com/Leyukaka/fancontrol-rs/releases">Releases</a>
+      <a href="https://github.com/Leyukaka/fancontrol-rs/tree/main/specs">Specs</a>
+    </nav>
+  </div>
+</header>
+
+<div class="hero wrap">
+  <img class="logo" src="assets/logo.svg" alt="fancontrol-rs logo">
+  <h1>fancontrol-rs</h1>
+  <p class="tagline">
+    Windows fan control and system activity (CPU / RAM) monitoring, written in Rust.<br>
+    PawnIO only — no WinRing0. Curves, profiles, live UI.
+  </p>
+
+  <div class="badges">
+    <img src="https://img.shields.io/badge/rust-edition%202021-orange?logo=rust&logoColor=white" alt="Rust edition 2021">
+    <img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue" alt="License MIT or Apache-2.0">
+    <img src="https://img.shields.io/badge/version-0.3.3-informational" alt="Version 0.3.3">
+    <img src="https://img.shields.io/badge/backend-PawnIO-success" alt="Backend: PawnIO">
+    <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-blue" alt="Platform: Windows 10/11">
+  </div>
+
+  <div class="cta">
+    <a class="btn primary" href="https://github.com/Leyukaka/fancontrol-rs/releases">Download latest release</a>
+    <a class="btn secondary" href="https://github.com/Leyukaka/fancontrol-rs">View source on GitHub</a>
+  </div>
+
+  <div class="shot">
+    <img src="assets/screenshot.jpg" alt="fancontrol-rs UI: temps, fans, Activity deck, curves">
+  </div>
+</div>
+
+<section class="wrap">
+  <h2>What it <span class="accent">does</span></h2>
+  <div class="grid">
+    <div class="card">
+      <h3>Fan control</h3>
+      <p>Curves, profiles, live duty sliders, multi-sensor temperature graph.</p>
+    </div>
+    <div class="card">
+      <h3>Activity deck</h3>
+      <p>CPU load history and top processes (CPU % and RAM), filterable and sortable.</p>
+    </div>
+    <div class="card">
+      <h3>Security-first backend</h3>
+      <p><a href="https://pawnio.eu/">PawnIO</a> only for Super I/O / EC access. Never ships WinRing0 or other known-vulnerable ring-0 drivers.</p>
+    </div>
+    <div class="card">
+      <h3>Host sensors</h3>
+      <p>NVIDIA GPU temp via fixed-path <code>nvidia-smi</code>, SSD/NVMe temps via native DeviceIoControl (no PowerShell).</p>
+    </div>
+    <div class="card">
+      <h3>Desktop UI</h3>
+      <p>egui app, system tray, first-run write consent, 8 languages (en/fr/de/es/it/zh/ja/lb).</p>
+    </div>
+    <div class="card">
+      <h3>CLI</h3>
+      <p><code>sample</code>, <code>list-sensors</code>, <code>list-controls</code>, <code>test-duty</code>, <code>sample-storage</code>, and more.</p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap">
+  <h2>Motherboard <span class="accent">support</span></h2>
+  <p>Every desktop board with a Super I/O / EC HWM path should work in principle — broad chip coverage (Nuvoton NCT668x, banked NCT679x, ITE IT87, and friends) is the goal via PawnIO. Boards are only marked <strong>certified</strong> once someone has actually sent logs.</p>
+  <table>
+    <tr><th>Certified so far</th><td>NCT6687D-class EC HWM · ASUS ROG STRIX B550-A GAMING (banked NCT / NCT6798-class) — full read + PWM write on maintainer hardware</td></tr>
+    <tr><th>Help wanted</th><td>Any other board (ASUS / MSI / Gigabyte / ASRock / …). Run <code>detect</code> + <code>list-sensors</code> + <code>list-controls</code> and open a <a href="https://github.com/Leyukaka/fancontrol-rs/issues/new?template=hardware_report.yml">hardware report</a>.</td></tr>
+  </table>
+</section>
+
+<section class="wrap">
+  <h2>Signing &amp; <span class="accent">distribution</span></h2>
+  <p>Release binaries are built on <code>windows-latest</code> in GitHub Actions and published with a SHA256 checksum. They are <strong>not code-signed yet</strong> — expect SmartScreen and occasional Defender heuristics, the same class of warning most tools that talk to Super I/O / EC hardware get.</p>
+  <div class="note">
+    <strong>No telemetry.</strong> fancontrol-rs makes no automatic network calls. It spawns <code>nvidia-smi</code> locally for GPU temperature and reads storage temps through native Windows APIs — no data leaves the machine. The optional "check for updates" button in the UI is the only feature that reaches the network, and only when a user clicks it, to query GitHub's public Releases API.
+  </div>
+  <div class="signpath-badge">
+    <div>
+      <strong>Applying for free code signing from the <a href="https://signpath.org/">SignPath Foundation</a></strong>
+      <p style="margin:6px 0 0;color:var(--text-dim);font-size:0.9rem;">
+        SignPath Foundation provides free Authenticode signing for qualifying open-source projects. fancontrol-rs meets the OSS licensing, active-maintenance, and no-telemetry criteria and is applying for coverage — see
+        <a href="https://github.com/Leyukaka/fancontrol-rs/blob/main/docs/SIGNING_AND_DISTRIBUTION.md">docs/SIGNING_AND_DISTRIBUTION.md</a> for the full signing plan. This page will be updated with the standard SignPath attribution once a certificate is issued.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap">
+  <h2>Docs &amp; <span class="accent">specs</span></h2>
+  <table>
+    <tr><td><a href="https://github.com/Leyukaka/fancontrol-rs/tree/main/specs">specs/</a></td><td>Spec-driven design — vision, architecture, hardware backend, UI, roadmap</td></tr>
+    <tr><td><a href="https://github.com/Leyukaka/fancontrol-rs/blob/main/docs/SUPPORTED_HARDWARE.md">SUPPORTED_HARDWARE.md</a></td><td>Chip matrix, prerequisites, validation</td></tr>
+    <tr><td><a href="https://github.com/Leyukaka/fancontrol-rs/blob/main/docs/SIGNING_AND_DISTRIBUTION.md">SIGNING_AND_DISTRIBUTION.md</a></td><td>Signing options, release checklist, CI notes</td></tr>
+    <tr><td><a href="https://github.com/Leyukaka/fancontrol-rs/blob/main/docs/SECURITY.md">SECURITY.md</a></td><td>Reporting, CodeQL/audit, SHA256 verify, signing status</td></tr>
+    <tr><td><a href="https://github.com/Leyukaka/fancontrol-rs/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a></td><td>Bugs, PRs, AI contribution policy</td></tr>
+  </table>
+</section>
+
+<footer class="wrap">
+  <p>MIT OR Apache-2.0. Maintained by <a href="https://github.com/Leyukaka">Leyukaka</a>.</p>
+  <p>Inspired by <a href="https://github.com/Rem0o/FanControl.Releases">FanControl</a> (Rémi Mercier) and LibreHardwareMonitor. PawnIO by <a href="https://github.com/namazso">namazso</a>. Not affiliated with either.</p>
+  <p><a href="https://buymeacoffee.com/leyukaka">Buy me a coffee</a></p>
+</footer>
+
+</body>
+</html>
