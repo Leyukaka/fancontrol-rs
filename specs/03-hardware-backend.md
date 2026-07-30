@@ -20,19 +20,24 @@ We use **[PawnIO](https://pawnio.eu/)** as the sole privileged hardware access l
 | Super I/O detect + BAR / NCT668x EC path | **Done** (owner-validated NCT6687D-class) |
 | Batch HWM sample (`sample_all`) | **Done** |
 | PWM write (duty %) | **Done** for validated channels; write-gated at product layer |
-| Broader chip productization (IT87, banked NCT) | **Experimental / detect-only** — see `docs/SUPPORTED_HARDWARE.md` |
+| Banked NCT (Nuvoton NCT679x-class) | **Validated** on ASUS ROG STRIX B550-A (`0xD4`) reads+PWM; other boards uncertified - see `docs/SUPPORTED_HARDWARE.md` |
+| Broader chip productization (ITE IT87, more NCT ids) | **Experimental / detect-only** until board-certified |
 
-### Validated path (owner / reference)
+### Validated paths (owner / reference)
 
-| Item | Value |
-|------|--------|
-| Family | Nuvoton **NCT668x EC** (NCT6687D-class) |
-| Chip id / rev | `0xD5` / `0x92` |
-| HWM base | `0x0A20` |
-| Super I/O | slot @ `0x4E` (board-dependent) |
-| PWM | **ctrl0–3** reliable; higher ctrls may use DR / BIOS reclaim |
+| Item | NCT668x EC | Banked NCT (B550-A) |
+|------|------------|---------------------|
+| Family | Nuvoton **NCT668x EC** (NCT6687D-class) | Nuvoton **banked NCT** (NCT6798-class) |
+| Chip id / rev | `0xD5` / `0x92` | `0xD4` / `0x2B` |
+| HWM base | `0x0A20` | `0x0290` |
+| Super I/O | slot @ `0x4E` (board-dependent) | slot @ `0x2E` |
+| PWM | **ctrl0–3** reliable; higher may use DR / BIOS reclaim | Owner-confirmed PWM writes |
 
 Full user-facing matrix: **[docs/SUPPORTED_HARDWARE.md](../docs/SUPPORTED_HARDWARE.md)**.
+
+### Curve temperature source
+
+Fan curves use **CPU-like** Super I/O temps only (`CPU`, `PECI` / `PECI_0`, `CPUTIN`, package-style names). Runtime resolves stale `…temp.CPU` bindings on banked chips to a live CPU-like reading. **Not** used for regulation: SYSTIN / VRM / AUX / GPU (display-only in the UI graph).
 
 ### Fallback behavior
 

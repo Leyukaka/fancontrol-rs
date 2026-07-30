@@ -84,7 +84,7 @@ dashboard.all_hidden: "All lists hidden - use the top bar toggles (Temperatures 
 dashboard.click_to_rename: "Click to rename"
 dashboard.ec_bios_warning: "EC/BIOS may reclaim (SmartFan)"
 dashboard.locked: "locked"
-dashboard.curve_sensor_hover: "Sensor this curve reads from"
+dashboard.curve_sensor_hover: "CPU temperature this curve uses (CPU / PECI / CPUTIN only; not GPU or system)"
 
 graph_controls.window_label: "Window"
 graph_controls.sample_label: "Sampling"

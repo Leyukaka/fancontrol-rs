@@ -14,8 +14,8 @@ use crate::write_queue::WriteQueue;
 use crate::UiError;
 use eframe::egui;
 use fancontrol_core::{
-    evaluate_profile_step, list_profiles, load_profile, save_profile, ChannelMap, CurveEvalState,
-    FanCurve, Profile,
+    evaluate_profile_step, is_cpu_temp_candidate, list_profiles, load_profile, save_profile,
+    ChannelMap, CurveEvalState, FanCurve, Profile,
 };
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -25,6 +25,25 @@ use std::time::{Duration, Instant};
 const GRAPH_WINDOWS: [u16; 4] = [10, 20, 30, 60];
 const GRAPH_SAMPLES: [u16; 4] = [1, 2, 5, 10];
 const PAWNIO_URL: &str = "https://pawnio.eu";
+
+/// `f32::clamp` panics when `lo > hi`. Layout heights are dynamic; always order bounds.
+fn clamp_ui_height(v: f32, lo: f32, hi: f32) -> f32 {
+    let min_b = lo.min(hi);
+    let max_b = lo.max(hi);
+    v.clamp(min_b, max_b)
+}
+
+/// Default curve sensor: live CPU seed, else first CPU-like temp, else NCT668x-style id.
+fn default_cpu_curve_sensor(snap: &crate::poll::Snapshot) -> String {
+    if let Some(id) = &snap.cpu_temp_id {
+        return id.clone();
+    }
+    snap.temps
+        .iter()
+        .find(|(id, _, _)| is_cpu_temp_candidate(id))
+        .map(|(id, _, _)| id.clone())
+        .unwrap_or_else(|| "pawnio.0.temp.CPU".into())
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PawnioDialogKind {
@@ -872,7 +891,8 @@ impl eframe::App for FanApp {
                     .max_size((avail * 0.75).max(min_h + 40.0));
             } else {
                 // Lists hidden: claim nearly all remaining height (leave a thin strip).
-                let fill = (avail - 8.0).clamp(min_h.max(200.0), avail.max(200.0));
+                // Order bounds so a short window never panics `f32::clamp` (lo > hi).
+                let fill = clamp_ui_height(avail - 8.0, min_h.max(200.0), avail.max(200.0));
                 graph_panel = graph_panel.exact_size(fill);
             }
 
@@ -907,9 +927,10 @@ impl eframe::App for FanApp {
                     // Use the full panel height (no artificial 480px cap).
                     let room = ui.available_height().max(80.0);
                     let plot_h = if show_activity {
-                        (room * 0.55).clamp(140.0, room - 100.0)
+                        // room-100 can be < 140 on a short panel; clamp_ui_height orders bounds.
+                        clamp_ui_height(room * 0.55, 140.0, (room - 100.0).max(40.0))
                     } else {
-                        room.clamp(140.0, room)
+                        clamp_ui_height(room, 140.0_f32.min(room), room)
                     };
                     if style == GraphStyle::Classic || !self.shader_backend_available {
                         show_temp_graph(
@@ -1146,46 +1167,44 @@ impl FanApp {
                                         self.profile
                                             .sensor_bindings
                                             .entry(c.id.clone())
-                                            .or_insert_with(|| {
-                                                snap.cpu_temp_id.clone().unwrap_or_else(|| {
-                                                    snap.temps
-                                                        .first()
-                                                        .map(|(id, _, _)| id.clone())
-                                                        .unwrap_or_else(|| {
-                                                            "pawnio.0.temp.CPU".into()
-                                                        })
-                                                })
-                                            });
+                                            .or_insert_with(|| default_cpu_curve_sensor(snap));
                                     }
                                 }
                             });
 
                         if self.profile.assignments.contains_key(&c.id) {
-                            let bound_id = self
-                                .profile
-                                .sensor_bindings
-                                .get(&c.id)
-                                .cloned()
-                                .or_else(|| snap.cpu_temp_id.clone())
-                                .or_else(|| snap.temps.first().map(|(id, _, _)| id.clone()))
-                                .unwrap_or_else(|| "pawnio.0.temp.CPU".to_string());
-                            let bound_label = snap
+                            // Curves regulate on CPU-like temps only (not SYSTIN/VRM/GPU).
+                            let cpu_temps: Vec<_> = snap
                                 .temps
                                 .iter()
-                                .find(|(id, _, _)| id == &bound_id)
-                                .map(|(_, label, _)| label.clone())
+                                .filter(|(id, _, _)| is_cpu_temp_candidate(id))
+                                .collect();
+                            let stored = self.profile.sensor_bindings.get(&c.id).cloned();
+                            let bound_id = stored
+                                .filter(|id| is_cpu_temp_candidate(id))
+                                .filter(|id| cpu_temps.iter().any(|(sid, _, _)| sid == id))
+                                .unwrap_or_else(|| default_cpu_curve_sensor(snap));
+                            if self.profile.sensor_bindings.get(&c.id) != Some(&bound_id) {
+                                self.profile
+                                    .sensor_bindings
+                                    .insert(c.id.clone(), bound_id.clone());
+                            }
+                            let bound_label = cpu_temps
+                                .iter()
+                                .find(|(id, _, _)| *id == bound_id)
+                                .map(|(_, label, _)| (*label).clone())
                                 .unwrap_or_else(|| bound_id.clone());
                             let bind_resp = egui::ComboBox::from_id_salt(format!("bind-{}", c.id))
                                 .selected_text(bound_label)
                                 .show_ui(ui, |ui| {
-                                    for (id, label, _) in &snap.temps {
-                                        let selected = id == &bound_id;
+                                    for (id, label, _) in &cpu_temps {
+                                        let selected = *id == bound_id;
                                         if ui.selectable_label(selected, label.as_str()).clicked()
                                             && !selected
                                         {
                                             self.profile
                                                 .sensor_bindings
-                                                .insert(c.id.clone(), id.clone());
+                                                .insert(c.id.clone(), (*id).clone());
                                         }
                                     }
                                 });

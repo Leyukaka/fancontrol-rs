@@ -73,7 +73,7 @@ dashboard.all_hidden: "Alle Listen ausgeblendet - Top-Leiste (Temperaturen / Lü
 dashboard.click_to_rename: "Zum Umbenennen klicken"
 dashboard.ec_bios_warning: "EC/BIOS kann die Kontrolle übernehmen (SmartFan)"
 dashboard.locked: "gesperrt"
-dashboard.curve_sensor_hover: "Sensor, von dem diese Kurve liest"
+dashboard.curve_sensor_hover: "CPU-Temperatur für diese Kurve (nur CPU / PECI / CPUTIN; nicht GPU oder System)"
 
 graph_controls.window_label: "Fenster"
 graph_controls.sample_label: "Abtastung"

@@ -73,7 +73,7 @@ dashboard.all_hidden: "リスト非表示 - 上部のトグルを使用"
 dashboard.click_to_rename: "クリックして名前を変更"
 dashboard.ec_bios_warning: "EC/BIOSが制御を取り戻す可能性があります（SmartFan）"
 dashboard.locked: "ロック中"
-dashboard.curve_sensor_hover: "このカーブが読み取るセンサー"
+dashboard.curve_sensor_hover: "このカーブが使う CPU 温度（CPU / PECI / CPUTIN のみ。GPU・システム不可）"
 
 graph_controls.window_label: "表示範囲"
 graph_controls.sample_label: "サンプリング間隔"

@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Supported hardware docs
+    url: https://github.com/Leyukaka/fancontrol-rs/blob/main/docs/SUPPORTED_HARDWARE.md
+    about: Chip matrix, certified boards, and how to file a hardware report

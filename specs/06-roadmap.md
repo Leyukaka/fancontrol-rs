@@ -1,6 +1,6 @@
 # Roadmap
 
-Last aligned with product reality: **v0.3.0** (2026-07) — Activity deck.
+Last aligned with product reality: **v0.3.3** (2026-07): banked NCT B550-A validated, curve CPU-like only, clamp-safe dashboard, Activity deck, collapsible columns.
 
 ## Phase 0 — Foundation
 
@@ -21,8 +21,9 @@ Last aligned with product reality: **v0.3.0** (2026-07) — Activity deck.
 - [x] CLI: `detect`, `backend-status`, `sample`, `watch`, `test-duty`, `map-init`, `ui`, …
 - [x] Elevated read/write validation (owner NCT6687D-class)
 - [x] Host sensors: GPU (fixed-path `nvidia-smi`), storage (`DeviceIoControl`, no PowerShell)
-- [ ] Broader chip productization (ITE IT87, banked NCT — experimental detect only)
-- [ ] Confirm SSD/NVMe temps on real hardware (`storage_win.rs`)
+- [x] Banked NCT path validated on ASUS ROG STRIX B550-A (`0xD4`) - v0.3.2
+- [ ] Broader chip productization (ITE IT87, more banked NCT boards; experimental until certified)
+- [ ] Confirm SSD/NVMe temps broadly (owner path live; more drives / SATA edge cases)
 
 ## Phase 2 — UI MVP
 

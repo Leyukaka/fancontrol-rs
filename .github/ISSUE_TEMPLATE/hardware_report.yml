@@ -1,0 +1,99 @@
+name: Hardware report
+description: Help certify your motherboard (detect + sensors + optional PWM test)
+title: "Hardware: <motherboard model>"
+labels: ["hardware"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping expand the **certified** board list.
+
+        **Policy:** every desktop Super I/O board *should* work via PawnIO. We only mark a model **certified** after real logs from your machine.
+
+        Prerequisites: [PawnIO](https://pawnio.eu/) installed, run **as Administrator**, Windows desktop (not a VM).
+
+        Full instructions: [docs/SUPPORTED_HARDWARE.md](https://github.com/Leyukaka/fancontrol-rs/blob/main/docs/SUPPORTED_HARDWARE.md#contributing-a-chip--board-report)
+
+  - type: input
+    id: motherboard
+    attributes:
+      label: Motherboard model
+      description: Exact marketing name (sticker / CPU-Z / box).
+      placeholder: ASUS ROG STRIX B550-A GAMING
+    validations:
+      required: true
+
+  - type: input
+    id: superio
+    attributes:
+      label: Super I/O / chip (if known)
+      description: From HWiNFO, board manual, or leave blank.
+      placeholder: NCT6798D / NCT6687D / IT8689E / unknown
+
+  - type: input
+    id: version
+    attributes:
+      label: fancontrol-rs version
+      description: Release tag or `git rev-parse --short HEAD`.
+      placeholder: v0.3.2
+    validations:
+      required: true
+
+  - type: dropdown
+    id: result
+    attributes:
+      label: Overall result
+      options:
+        - Sensors look good (read-only)
+        - Sensors + PWM write worked
+        - Partial (some fans/temps wrong)
+        - Did not detect hardware / PawnIO failed
+        - Other (explain below)
+    validations:
+      required: true
+
+  - type: textarea
+    id: detect
+    attributes:
+      label: Output of `fancontrol-rs detect` (or `cargo run -- detect`)
+      description: Paste the full CLI output.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: list_sensors
+    attributes:
+      label: Output of `list-sensors`
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: list_controls
+    attributes:
+      label: Output of `list-controls`
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: sample
+    attributes:
+      label: Output of `sample` (optional but useful)
+      render: text
+
+  - type: textarea
+    id: write_test
+    attributes:
+      label: PWM write test (optional)
+      description: |
+        Only if you accepted the risk. Include control id, duty before/after, and RPM change.
+        Example: `test-duty --control pawnio.0.ctrl1 --percent 40`
+      render: text
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Comparison vs HWiNFO/FanControl, odd channels, dual Super I/O, Defender false positives, etc.

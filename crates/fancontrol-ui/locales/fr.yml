@@ -73,7 +73,7 @@ dashboard.all_hidden: "Listes masquées - utilisez les bascules en haut (Tempér
 dashboard.click_to_rename: "Cliquer pour renommer"
 dashboard.ec_bios_warning: "L'EC/BIOS peut reprendre la main (SmartFan)"
 dashboard.locked: "verrouillé"
-dashboard.curve_sensor_hover: "Capteur utilisé par cette courbe"
+dashboard.curve_sensor_hover: "Température CPU utilisée par cette courbe (CPU / PECI / CPUTIN uniquement; pas GPU ni système)"
 
 graph_controls.window_label: "Fenêtre"
 graph_controls.sample_label: "Échantillonnage"

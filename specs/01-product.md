@@ -11,7 +11,7 @@ Replace FanControl with a modern, secure, open-source alternative written in Rus
 | Capability | Status (v0.1.x) |
 |------------|-----------------|
 | Discover / list temps, fans, controls | **Done** (PawnIO NCT668x + mock + host) |
-| Motherboard Super I/O / EC via PawnIO | **Done** for NCT668x EC (validated); broader chips experimental |
+| Motherboard Super I/O / EC via PawnIO | **Done** for NCT668x EC + banked NCT on ROG B550-A (validated); other chips/boards experimental until certified |
 | Real-time temps + RPM | **Done** |
 | Manual duty % control | **Done** (CLI + UI sliders; write-gated) |
 | GPU / storage host sensors (read-only) | **Done** (`nvidia-smi` fixed paths; SSD via `DeviceIoControl`, no PowerShell) |
@@ -22,7 +22,7 @@ Replace FanControl with a modern, secure, open-source alternative written in Rus
 |------------|--------|
 | Create / edit / delete curves | **Done** (core + UI editor MVP) |
 | Multi-point temp → duty, linear interp | **Done** |
-| Assign curve to controls | **Done** (profile assignments) |
+| Assign curve to controls | **Done** (profile assignments; curve input = **CPU-like** temp only) |
 | Hysteresis | **Done** (core + UI field) |
 | Auto-apply curves to hardware | **Done** (UI “Curve control”; writes on by default, `--read-only` disables) |
 

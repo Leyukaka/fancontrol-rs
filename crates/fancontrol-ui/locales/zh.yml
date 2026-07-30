@@ -73,7 +73,7 @@ dashboard.all_hidden: "列表已隐藏 - 使用顶部开关"
 dashboard.click_to_rename: "点击以重命名"
 dashboard.ec_bios_warning: "EC/BIOS 可能会重新接管（SmartFan）"
 dashboard.locked: "已锁定"
-dashboard.curve_sensor_hover: "此曲线读取的传感器"
+dashboard.curve_sensor_hover: "此曲线使用的 CPU 温度（仅 CPU / PECI / CPUTIN；非 GPU 或系统）"
 
 graph_controls.window_label: "时间窗口"
 graph_controls.sample_label: "采样间隔"

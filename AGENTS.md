@@ -44,7 +44,7 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 
 ## Status (keep updated)
 
-- Product line: **v0.3.2** (B550 banked NCT validated + curve temp fallback CPUTIN/PECI; Activity deck; collapsible dashboard).
+- Product line: **v0.3.3** (B550 banked NCT validated + curve temp = **CPU-like only** with CPUTIN/PECI resolve; clamp-safe dashboard; Activity deck; collapsible columns).
 - Phase 0 foundation: **done**.
 - Phase 1: PawnIOLib FFI + LpcIO + **NCT668x EC HWM** (validated class id `0xD5` rev `0x92` @ `0x0A20`) + **banked NCT** (ROG B550-A `0xD4` validated reads+writes) + control loop + CLI.
 - Elevation required for `pawnio_open` (Administrator). **PawnIO is a prerequisite** (not bundled) — UI shows a startup dialog if missing / not openable.

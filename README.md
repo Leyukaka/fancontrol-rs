@@ -14,7 +14,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/rust-edition%202021-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue" alt="License">
-  <img src="https://img.shields.io/badge/version-0.3.2-informational" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.3.3-informational" alt="Version">
   <img src="https://img.shields.io/badge/backend-PawnIO-success" alt="PawnIO">
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-blue" alt="Windows">
 </p>
@@ -22,6 +22,20 @@
 <p align="center">
   <img src="assets/screenshot.jpg" alt="fancontrol-rs UI: temps, fans, Activity deck, curves" width="920">
 </p>
+
+## Motherboard support
+
+**Every desktop motherboard with a Super I/O / EC HWM path should be able to work** - we aim for broad chip coverage (Nuvoton NCT668x, banked NCT679x, ITE IT87, and friends) via [PawnIO](https://pawnio.eu/).
+
+What we still need from the community is **logs so we can certify** each model (read sensors, fan RPM, and optional PWM write). Without a report, we will not mark a board as certified even if the code path exists.
+
+| | |
+|--|--|
+| **Certified so far** | NCT6687D-class EC HWM · **ASUS ROG STRIX B550-A GAMING** (banked NCT / NCT6798-class) - full read + PWM write on maintainer hardware |
+| **Help wanted** | Any other board (ASUS / MSI / Gigabyte / ASRock / …). Paste `detect` + `list-sensors` + `list-controls` and open a [Hardware report](https://github.com/Leyukaka/fancontrol-rs/issues/new?template=hardware_report.yml) |
+| **How** | Install [PawnIO](https://pawnio.eu/), run **as Administrator**, follow [docs/SUPPORTED_HARDWARE.md](./docs/SUPPORTED_HARDWARE.md#contributing-a-chip--board-report) |
+
+Binaries are **unsigned** (SmartScreen may warn). PWM writes are on by default after first-run consent - use `--read-only` if you only want sensors.
 
 ## Features
 
@@ -50,7 +64,7 @@ Rough map of the Windows landscape. Support always depends on your board and EC.
 | MSI Afterburner | Free | **GPU** OC + GPU fans | GPU fan curve | Not a full motherboard fan suite | Mature (GPU) |
 | OEM apps (Armoury Crate, Gigabyte CC, …) | Free with board | Vendor board / RGB / fans | Varies | Heavy; brand-locked | Mature |
 | AIO / case apps (iCUE, CAM, …) | Free / freemium | Their pumps, fans, RGB | Good **inside** that ecosystem | Weak for random mobo headers | Mature niche |
-| **fancontrol-rs** (this repo) | MIT / Apache-2.0 | Fans + **Activity** (CPU load, top processes) | Curves, profiles, sliders, multi-sensor graph | **PawnIO only** (no WinRing0); egui UI; validated **NCT668x** + banked NCT on **ROG B550-A**; other boards still experimental; binaries unsigned | Early (v0.3.x) |
+| **fancontrol-rs** (this repo) | MIT / Apache-2.0 | Fans + **Activity** (CPU load, top processes) | Curves, profiles, sliders, multi-sensor graph | **PawnIO only** (no WinRing0); egui UI; **all boards welcome** - certified list is short until you send logs; binaries unsigned | Early (v0.3.x) |
 
 **Quick pick**
 
@@ -62,7 +76,7 @@ Rough map of the Windows landscape. Support always depends on your board and EC.
 | Laptop EC control | NBFC |
 | GPU fans only | Afterburner |
 | Brand AIO / RGB ecosystem | iCUE, CAM, etc. |
-| Open source, PawnIO-only I/O, fan UI + CPU/RAM activity, OK with limited hardware validation so far | **fancontrol-rs** |
+| Open source, PawnIO-only I/O, fan UI + CPU/RAM activity; help certify more boards with logs | **fancontrol-rs** |
 
 ## Specs
 
@@ -87,7 +101,7 @@ Rough map of the Windows landscape. Support always depends on your board and EC.
 
 ## Status
 
-**v0.3.2**. NCT668x + banked NCT (ROG B550-A), curve temp fallback (`CPUTIN`/`PECI`), Activity deck, collapsible lists.  
+**v0.3.3**. NCT668x + banked NCT (ROG B550-A) **certified**; other boards should work - **send logs to certify**. Curves on **CPU-like temps only**, Activity deck, collapsible lists.  
 Public source of truth: this repo ([Releases](https://github.com/Leyukaka/fancontrol-rs/releases), issues, PRs).
 
 | Crate | Role |
@@ -100,7 +114,7 @@ Public source of truth: this repo ([Releases](https://github.com/Leyukaka/fancon
 
 Validated hardware:
 - **Nuvoton NCT6687D-class** EC (id `0xD5` rev `0x92` @ `0x0A20`)
-- **Banked NCT** on **ASUS ROG STRIX B550-A GAMING** (id `0xD4` rev `0x2B` @ `0x2E` / HWM `0x0290`) — PWM OK
+- **Banked NCT** on **ASUS ROG STRIX B550-A GAMING** (id `0xD4` rev `0x2B` @ `0x2E` / HWM `0x0290`) - PWM OK
 
 Details: [docs/SUPPORTED_HARDWARE.md](./docs/SUPPORTED_HARDWARE.md).
 

@@ -73,7 +73,7 @@ dashboard.all_hidden: "All Lëschte verstoppt - benotz d'Top-Leescht"
 dashboard.click_to_rename: "Klicken fir ëmzebenennen"
 dashboard.ec_bios_warning: "EC/BIOS kann d'Kontroll zeréck iwwerhuelen (SmartFan)"
 dashboard.locked: "gespaart"
-dashboard.curve_sensor_hover: "Sensor deen dës Kurv liest"
+dashboard.curve_sensor_hover: "CPU-Temperatur fir dës Kurv (nëmmen CPU / PECI / CPUTIN; net GPU oder System)"
 
 graph_controls.window_label: "Fënster"
 graph_controls.sample_label: "Ofastung"

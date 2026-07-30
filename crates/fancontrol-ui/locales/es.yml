@@ -73,7 +73,7 @@ dashboard.all_hidden: "Listas ocultas - usa los botones de arriba"
 dashboard.click_to_rename: "Clic para renombrar"
 dashboard.ec_bios_warning: "El EC/BIOS puede retomar el control (SmartFan)"
 dashboard.locked: "bloqueado"
-dashboard.curve_sensor_hover: "Sensor del que lee esta curva"
+dashboard.curve_sensor_hover: "Temperatura de CPU de esta curva (solo CPU / PECI / CPUTIN; no GPU ni sistema)"
 
 graph_controls.window_label: "Ventana"
 graph_controls.sample_label: "Muestreo"

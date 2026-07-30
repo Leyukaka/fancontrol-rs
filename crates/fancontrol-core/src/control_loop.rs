@@ -37,8 +37,9 @@ pub fn evaluate_profile_step(
             continue;
         };
 
-        // Binding may still say pawnio.0.temp.CPU on banked NCT boards that only
-        // expose CPUTIN / PECI_0 — resolve to a live reading if the bound id is absent.
+        // Curves use CPU-like temps only. Stale NCT668x `…temp.CPU` bindings on
+        // banked boards resolve to CPUTIN/PECI; non-CPU bindings (SYSTIN/VRM/GPU)
+        // are ignored in favour of the best CPU-like reading.
         let Some(sensor_id) = resolve_curve_temp_sensor(
             profile.sensor_bindings.get(control_id).map(|s| s.as_str()),
             temps,
@@ -109,6 +110,31 @@ mod tests {
             .insert("fan1".into(), "pawnio.0.temp.CPU".into());
 
         let temps = HashMap::from([("pawnio.0.temp.CPUTIN".into(), 50.0)]);
+        let mut states = HashMap::new();
+        let step = evaluate_profile_step(&p, &temps, &mut states);
+        assert_eq!(step.duties.get("fan1"), Some(&60));
+        assert!(step.errors.is_empty());
+    }
+
+    #[test]
+    fn systin_binding_ignored_follows_cputin() {
+        let mut p = Profile::new("t", "t");
+        p.curves.push(FanCurve {
+            id: crate::models::CurveId::new("c"),
+            name: "c".into(),
+            points: vec![CurvePoint::new(30.0, 20), CurvePoint::new(70.0, 100)],
+            hysteresis_c: 0.0,
+            response_time_s: 0.0,
+        });
+        p.assignments.insert("fan1".into(), "c".into());
+        p.sensor_bindings
+            .insert("fan1".into(), "pawnio.0.temp.SYSTIN".into());
+
+        // SYSTIN cooler than CPUTIN: duty must track CPUTIN (50°C → 60%), not SYSTIN.
+        let temps = HashMap::from([
+            ("pawnio.0.temp.SYSTIN".into(), 30.0),
+            ("pawnio.0.temp.CPUTIN".into(), 50.0),
+        ]);
         let mut states = HashMap::new();
         let step = evaluate_profile_step(&p, &temps, &mut states);
         assert_eq!(step.duties.get("fan1"), Some(&60));

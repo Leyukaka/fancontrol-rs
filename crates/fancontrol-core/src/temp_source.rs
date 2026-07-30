@@ -2,8 +2,12 @@
 //!
 //! NCT668x EC uses names like `CPU` / `System`. Classic banked NCT (e.g. ROG
 //! B550) uses `CPUTIN` / `PECI_0` / `SYSTIN`. Profiles often default to
-//! `pawnio.0.temp.CPU`, which may be absent on banked chips — callers should
+//! `pawnio.0.temp.CPU`, which may be absent on banked chips - callers should
 //! resolve via [`pick_cpu_temp_id`] or [`resolve_curve_temp_sensor`].
+//!
+//! **Product rule:** fan curves regulate on **CPU-like** temps only (CPU / PECI /
+//! CPUTIN / package-style names). System, VRM, AUX, and GPU temps are never used
+//! as curve sources (different thermal envelopes).
 
 use std::collections::HashMap;
 
@@ -57,29 +61,25 @@ pub fn pick_cpu_temp_id(temps: &HashMap<String, f64>) -> Option<String> {
     })
 }
 
-/// Resolve which sensor to use for a control's curve:
-/// 1. Explicit binding if present **and** available in `temps`
-/// 2. Best CPU-like id among readings
-/// 3. First sorted temp key (last resort)
+/// Resolve which sensor to use for a control's curve (**CPU-like only**).
+///
+/// 1. Explicit binding if present in `temps` **and** CPU-like
+/// 2. Otherwise best CPU-like id among readings ([`pick_cpu_temp_id`])
+/// 3. `None` if no CPU-like reading exists (never falls back to SYSTIN/VRM/GPU/etc.)
 pub fn resolve_curve_temp_sensor(
     bound: Option<&str>,
     temps: &HashMap<String, f64>,
 ) -> Option<String> {
     if let Some(b) = bound {
-        if temps.contains_key(b) {
+        if temps.contains_key(b) && is_cpu_temp_candidate(b) {
             return Some(b.to_string());
         }
     }
-    if let Some(cpu) = pick_cpu_temp_id(temps) {
-        return Some(cpu);
-    }
-    let mut keys: Vec<_> = temps.keys().cloned().collect();
-    keys.sort();
-    keys.into_iter().next()
+    pick_cpu_temp_id(temps)
 }
 
 /// Whether this short name / full id looks like a primary CPU package temp
-/// (for UI `cpu_temp` / graph seed).
+/// (for UI `cpu_temp` / graph seed / curve binding).
 pub fn is_cpu_temp_candidate(id_or_name: &str) -> bool {
     let short = temp_sensor_short_name(id_or_name);
     cpu_name_priority(short).is_some()
@@ -134,11 +134,38 @@ mod tests {
     }
 
     #[test]
-    fn live_binding_kept() {
+    fn live_cpu_binding_kept() {
+        let mut t = HashMap::new();
+        t.insert("pawnio.0.temp.SYSTIN".into(), 30.0);
+        t.insert("pawnio.0.temp.CPUTIN".into(), 40.0);
+        let r = resolve_curve_temp_sensor(Some("pawnio.0.temp.CPUTIN"), &t);
+        assert_eq!(r.as_deref(), Some("pawnio.0.temp.CPUTIN"));
+    }
+
+    #[test]
+    fn live_systin_binding_ignored_uses_cputin() {
         let mut t = HashMap::new();
         t.insert("pawnio.0.temp.SYSTIN".into(), 30.0);
         t.insert("pawnio.0.temp.CPUTIN".into(), 40.0);
         let r = resolve_curve_temp_sensor(Some("pawnio.0.temp.SYSTIN"), &t);
-        assert_eq!(r.as_deref(), Some("pawnio.0.temp.SYSTIN"));
+        assert_eq!(r.as_deref(), Some("pawnio.0.temp.CPUTIN"));
+    }
+
+    #[test]
+    fn live_gpu_binding_ignored_uses_cputin() {
+        let mut t = HashMap::new();
+        t.insert("host.gpu0".into(), 80.0);
+        t.insert("pawnio.0.temp.CPUTIN".into(), 40.0);
+        let r = resolve_curve_temp_sensor(Some("host.gpu0"), &t);
+        assert_eq!(r.as_deref(), Some("pawnio.0.temp.CPUTIN"));
+    }
+
+    #[test]
+    fn no_cpu_like_returns_none() {
+        let mut t = HashMap::new();
+        t.insert("pawnio.0.temp.SYSTIN".into(), 30.0);
+        t.insert("host.gpu0".into(), 70.0);
+        assert!(resolve_curve_temp_sensor(Some("pawnio.0.temp.SYSTIN"), &t).is_none());
+        assert!(resolve_curve_temp_sensor(None, &t).is_none());
     }
 }
