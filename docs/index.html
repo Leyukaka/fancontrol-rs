@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>fancontrol-rs — Windows fan control &amp; system activity in Rust</title>
+<title>fancontrol-rs: Windows fan control &amp; system activity in Rust</title>
 <meta name="description" content="Open-source Windows fan control and CPU/RAM activity monitor written in Rust. PawnIO only, no WinRing0. Curves, profiles, live UI.">
 <link rel="icon" href="assets/icon.png">
 <style>
@@ -204,7 +204,7 @@
   <h1>fancontrol-rs</h1>
   <p class="tagline">
     Windows fan control and system activity (CPU / RAM) monitoring, written in Rust.<br>
-    PawnIO only — no WinRing0. Curves, profiles, live UI.
+    PawnIO only, no WinRing0. Curves, profiles, live UI.
   </p>
 
   <div class="badges">
@@ -257,24 +257,24 @@
 
 <section class="wrap">
   <h2>Motherboard <span class="accent">support</span></h2>
-  <p>Every desktop board with a Super I/O / EC HWM path should work in principle — broad chip coverage (Nuvoton NCT668x, banked NCT679x, ITE IT87, and friends) is the goal via PawnIO. Boards are only marked <strong>certified</strong> once someone has actually sent logs.</p>
+  <p>Every desktop board with a Super I/O / EC HWM path should work in principle: broad chip coverage (Nuvoton NCT668x, banked NCT679x, ITE IT87, and friends) is the goal via PawnIO. Boards are only marked <strong>certified</strong> once someone has actually sent logs.</p>
   <table>
-    <tr><th>Certified so far</th><td>NCT6687D-class EC HWM · ASUS ROG STRIX B550-A GAMING (banked NCT / NCT6798-class) — full read + PWM write on maintainer hardware</td></tr>
+    <tr><th>Certified so far</th><td>NCT6687D-class EC HWM · ASUS ROG STRIX B550-A GAMING (banked NCT / NCT6798-class), full read + PWM write on maintainer hardware</td></tr>
     <tr><th>Help wanted</th><td>Any other board (ASUS / MSI / Gigabyte / ASRock / …). Run <code>detect</code> + <code>list-sensors</code> + <code>list-controls</code> and open a <a href="https://github.com/Leyukaka/fancontrol-rs/issues/new?template=hardware_report.yml">hardware report</a>.</td></tr>
   </table>
 </section>
 
 <section class="wrap">
   <h2>Signing &amp; <span class="accent">distribution</span></h2>
-  <p>Release binaries are built on <code>windows-latest</code> in GitHub Actions and published with a SHA256 checksum. They are <strong>not code-signed yet</strong> — expect SmartScreen and occasional Defender heuristics, the same class of warning most tools that talk to Super I/O / EC hardware get.</p>
+  <p>Release binaries are built on <code>windows-latest</code> in GitHub Actions and published with a SHA256 checksum. They are <strong>not code-signed yet</strong>, so expect SmartScreen and occasional Defender heuristics, the same class of warning most tools that talk to Super I/O / EC hardware get.</p>
   <div class="note">
-    <strong>No telemetry.</strong> fancontrol-rs makes no automatic network calls. It spawns <code>nvidia-smi</code> locally for GPU temperature and reads storage temps through native Windows APIs — no data leaves the machine. The optional "check for updates" button in the UI is the only feature that reaches the network, and only when a user clicks it, to query GitHub's public Releases API.
+    <strong>No telemetry.</strong> fancontrol-rs makes no automatic network calls. It spawns <code>nvidia-smi</code> locally for GPU temperature and reads storage temps through native Windows APIs. No data leaves the machine. The optional "check for updates" button in the UI is the only feature that reaches the network, and only when a user clicks it, to query GitHub's public Releases API.
   </div>
   <div class="signpath-badge">
     <div>
       <strong>Applying for free code signing from the <a href="https://signpath.org/">SignPath Foundation</a></strong>
       <p style="margin:6px 0 0;color:var(--text-dim);font-size:0.9rem;">
-        SignPath Foundation provides free Authenticode signing for qualifying open-source projects. fancontrol-rs meets the OSS licensing, active-maintenance, and no-telemetry criteria and is applying for coverage — see
+        SignPath Foundation provides free Authenticode signing for qualifying open-source projects. fancontrol-rs meets the OSS licensing, active-maintenance, and no-telemetry criteria and is applying for coverage. See
         <a href="https://github.com/Leyukaka/fancontrol-rs/blob/main/docs/SIGNING_AND_DISTRIBUTION.md">docs/SIGNING_AND_DISTRIBUTION.md</a> for the full signing plan. This page will be updated with the standard SignPath attribution once a certificate is issued.
       </p>
     </div>
@@ -284,7 +284,7 @@
 <section class="wrap">
   <h2>Docs &amp; <span class="accent">specs</span></h2>
   <table>
-    <tr><td><a href="https://github.com/Leyukaka/fancontrol-rs/tree/main/specs">specs/</a></td><td>Spec-driven design — vision, architecture, hardware backend, UI, roadmap</td></tr>
+    <tr><td><a href="https://github.com/Leyukaka/fancontrol-rs/tree/main/specs">specs/</a></td><td>Spec-driven design: vision, architecture, hardware backend, UI, roadmap</td></tr>
     <tr><td><a href="https://github.com/Leyukaka/fancontrol-rs/blob/main/docs/SUPPORTED_HARDWARE.md">SUPPORTED_HARDWARE.md</a></td><td>Chip matrix, prerequisites, validation</td></tr>
     <tr><td><a href="https://github.com/Leyukaka/fancontrol-rs/blob/main/docs/SIGNING_AND_DISTRIBUTION.md">SIGNING_AND_DISTRIBUTION.md</a></td><td>Signing options, release checklist, CI notes</td></tr>
     <tr><td><a href="https://github.com/Leyukaka/fancontrol-rs/blob/main/docs/SECURITY.md">SECURITY.md</a></td><td>Reporting, CodeQL/audit, SHA256 verify, signing status</td></tr>
