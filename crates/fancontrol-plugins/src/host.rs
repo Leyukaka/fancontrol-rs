@@ -248,7 +248,26 @@ fn parse_nvidia_smi_csv(text: &str) -> Vec<SensorRow> {
         let label = format!("GPU {idx} ({name})");
         let prefix = format!("host.gpu{idx}");
 
-        // Helpers to push optional numeric fields.
+        let temp_core = parts.get(2).copied().and_then(parse_smi_f64);
+        if let Some(t) = temp_core {
+            // Compat alias used by graph seed / older channel maps.
+            rows.push(SensorRow {
+                id: prefix.clone(),
+                name: label.clone(),
+                value: t,
+                kind: SensorKind::Temperature,
+                unit: Some("°C"),
+            });
+            rows.push(SensorRow {
+                id: format!("{prefix}.temp.core"),
+                name: format!("{label} · Core"),
+                value: t,
+                kind: SensorKind::Temperature,
+                unit: Some("°C"),
+            });
+        }
+
+        // Optional multi-metric fields (skip N/A).
         let mut push = |suffix: &str,
                         display: &str,
                         raw: Option<&str>,
@@ -268,25 +287,6 @@ fn parse_nvidia_smi_csv(text: &str) -> Vec<SensorRow> {
                 unit,
             });
         };
-
-        let temp_core = parts.get(2).copied().and_then(parse_smi_f64);
-        if let Some(t) = temp_core {
-            // Compat alias used by graph seed / older channel maps.
-            rows.push(SensorRow {
-                id: prefix.clone(),
-                name: label.clone(),
-                value: t,
-                kind: SensorKind::Temperature,
-                unit: Some("°C"),
-            });
-            rows.push(SensorRow {
-                id: format!("{prefix}.temp.core"),
-                name: format!("{label} · Core"),
-                value: t,
-                kind: SensorKind::Temperature,
-                unit: Some("°C"),
-            });
-        }
 
         push(
             "temp.memory",
