@@ -51,7 +51,8 @@ If PawnIO is missing or not openable:
 
 | Source | Method | Notes |
 |--------|--------|-------|
-| NVIDIA GPU temp | `nvidia-smi` at **fixed install paths** (no PATH walk) | Read-only |
+| NVIDIA GPU multi-metric | `nvidia-smi` at **fixed install paths** (no PATH walk): temp, power, util, clocks, fan %, VRAM | Read-only |
+| NVIDIA Hot Spot | Not via smi/NVML public; would need NvAPI (not shipped) | — |
 | Storage temp | `DeviceIoControl` + `StorageDeviceTemperatureProperty` on `\\.\PhysicalDriveN` | No PowerShell; often needs elevation |
 | Mock provider | In-process | Dev / CI / `--no-hw` |
 

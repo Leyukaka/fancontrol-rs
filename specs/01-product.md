@@ -14,7 +14,8 @@ Replace FanControl with a modern, secure, open-source alternative written in Rus
 | Motherboard Super I/O / EC via PawnIO | **Done** for NCT668x EC + banked NCT on ROG B550-A (validated); other chips/boards experimental until certified |
 | Real-time temps + RPM | **Done** |
 | Manual duty % control | **Done** (CLI + UI sliders; write-gated) |
-| GPU / storage host sensors (read-only) | **Done** (`nvidia-smi` fixed paths; SSD via `DeviceIoControl`, no PowerShell) |
+| GPU / storage host sensors (read-only) | **Done** (`nvidia-smi` multi-metric + GPU panel; SSD via `DeviceIoControl`, no PowerShell) |
+| GPU detail panel (power / util / clocks / VRAM) | **Done** (v0.3.5; Hot Spot shown unavailable without NvAPI) |
 
 ### Fan Curves
 

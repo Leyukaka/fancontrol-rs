@@ -1,12 +1,45 @@
+# GPU vendor APIs
+
+## NVIDIA — shipped (multi-metric `nvidia-smi`)
+
+**Implemented** in `crates/fancontrol-plugins/src/host.rs` (v0.3.5+): one fixed-path
+`nvidia-smi` query with `csv,noheader,nounits` for:
+
+| Metric | Sensor id pattern | Notes |
+|--------|-------------------|--------|
+| Core temp | `host.gpu{N}` + `host.gpu{N}.temp.core` | Alias kept for graph seed / renames |
+| Memory temp | `host.gpu{N}.temp.memory` | Often `N/A` on consumer cards |
+| Power draw / limit | `…power.draw` / `…power.limit` | Watts |
+| Utilization | `…load.gpu` / `…load.mem` | % |
+| Clocks | `…clock.graphics` / `…clock.memory` | MHz |
+| Fan | `…fan` | % intended speed (not RPM) |
+| VRAM | `…mem.used` / `…mem.total` | MiB |
+
+UI: GPU detail panel shares the top visualization area with the thermal graph
+(`crates/fancontrol-ui/src/gpu_panel.rs`).
+
+### Hot Spot (not shipped)
+
+LibreHardwareMonitor reads **GPU Hot Spot** (and memory junction) via **NvAPI**
+`NvAPI_GPU_GetThermalSensors` with generation-specific index maps (RTX 40 vs 50).
+That path is reverse-engineered, driver-fragile, and **not** exposed by
+`nvidia-smi` or public NVML temperature enums. The UI shows Hot Spot as **unavailable**
+rather than inventing a value. Optional future: experimental NvAPI behind a flag.
+
+### NVML (not shipped)
+
+In-process `nvml.dll` (LHM uses it for package power / PCIe) would avoid process
+spawns. Deferred; smi multi-metric already covers power + util for the product UI.
+
+---
+
 # GPU vendor API research (AMD / Intel)
 
-Research notes only — **no code implements this yet**. GPU temperature today is
-NVIDIA-only via `nvidia-smi` (see `crates/fancontrol-plugins/src/host.rs`). This
-machine only has an NVIDIA GPU available, so neither path below has been validated
-against real hardware. Per `CONTRIBUTING.md`'s ban on hallucinated APIs and fake
-hardware-validation claims, nothing here should be implemented as a confident FFI
-binding until either real hardware is available to test against, or the actual SDK
-headers have been read end to end (not paraphrased from secondary docs).
+Research notes only for AMD/Intel — **no code implements these yet**. This machine
+has been validated with NVIDIA only. Per `CONTRIBUTING.md`'s ban on hallucinated
+APIs and fake hardware-validation claims, nothing below should be implemented as a
+confident FFI binding until either real hardware is available to test against, or
+the actual SDK headers have been read end to end (not paraphrased from secondary docs).
 
 ## AMD — ADL (AMD Display Library)
 

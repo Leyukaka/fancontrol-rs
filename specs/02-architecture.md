@@ -47,7 +47,7 @@ Workspace version: **0.1.5** (see root `Cargo.toml`).
 
 - Traits live in `fancontrol-plugins`.
 - **v1 shipping model**: official providers **compiled in** (mock, host, pawnio). Dynamic `.dll` plugins later.
-- Host sensors avoid PowerShell: GPU via fixed-path `nvidia-smi`; storage via `DeviceIoControl` temperature property.
+- Host sensors avoid PowerShell: GPU multi-metric via fixed-path `nvidia-smi`; storage via `DeviceIoControl` temperature property.
 
 ### 3. UI choice (locked for v1)
 

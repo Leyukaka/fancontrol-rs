@@ -13,15 +13,38 @@ pub struct Snapshot {
     pub temps: Vec<(String, String, f64)>,
     pub fans: Vec<(String, String, f64)>,
     pub controls: Vec<ControlSnap>,
+    /// Aggregated host GPU metrics for the GPU detail panel (nvidia-smi multi-metric).
+    pub gpus: Vec<GpuSnap>,
     pub cpu_temp: Option<f64>,
     /// Sensor id behind `cpu_temp`, so the UI can seed a sensor picker with it.
     pub cpu_temp_id: Option<String>,
-    /// Sensor id of the first host GPU sensor found (`host.gpu{index}`), so the UI
+    /// Sensor id of the first host GPU core temp (`host.gpu{index}` alias), so the UI
     /// can seed a sensor picker with it. `None` on machines without a supported
     /// discrete GPU (no `nvidia-smi`, AMD/Intel not probed).
     pub gpu_temp_id: Option<String>,
     pub error: Option<String>,
     pub tick: u64,
+}
+
+/// One discrete GPU as assembled from host sensor ids (`host.gpu{N}.*`).
+#[derive(Debug, Clone, Default)]
+pub struct GpuSnap {
+    pub index: u32,
+    /// Friendly name from the alias sensor (`GPU 0 (RTX …)`).
+    pub name: String,
+    pub temp_core: Option<f64>,
+    pub temp_memory: Option<f64>,
+    /// Always `None` with the current nvidia-smi path (hotspot needs NvAPI).
+    pub temp_hotspot: Option<f64>,
+    pub power_w: Option<f64>,
+    pub power_limit_w: Option<f64>,
+    pub util_gpu: Option<f64>,
+    pub util_mem: Option<f64>,
+    pub clock_graphics_mhz: Option<f64>,
+    pub clock_memory_mhz: Option<f64>,
+    pub fan_percent: Option<f64>,
+    pub mem_used_mib: Option<f64>,
+    pub mem_total_mib: Option<f64>,
 }
 
 #[derive(Debug, Clone)]
@@ -86,6 +109,9 @@ fn take_snapshot(
     let mut cpu_temp_id = None;
     let mut cpu_prio = u8::MAX;
     let mut gpu_temp_id = None;
+    // id → value for host GPU metrics (also mock.gpu* for UI demos).
+    let mut host_gpu_vals: HashMap<String, f64> = HashMap::new();
+    let mut host_gpu_names: HashMap<u32, String> = HashMap::new();
 
     // Fast path: one HWM bus transaction for all pawnio channels.
     // Fan/duty maps keyed by (device_index, slot) so multi-chip boards don't clobber.
@@ -153,20 +179,47 @@ fn take_snapshot(
 
         // Host / mock / fallback
         match reg.read_sensor(&s.id) {
-            Ok(v) => match s.kind {
-                SensorKind::Temperature if v != 0.0 => {
-                    let label = map.sensor_name(id, &s.name).to_string();
-                    if gpu_temp_id.is_none() && id.starts_with("host.gpu") {
-                        gpu_temp_id = Some(id.to_string());
+            Ok(v) => {
+                if id.starts_with("host.gpu") || id.starts_with("mock.gpu") {
+                    host_gpu_vals.insert(id.to_string(), v);
+                }
+                match s.kind {
+                    SensorKind::Temperature if v != 0.0 || id.starts_with("host.gpu") => {
+                        let label = map.sensor_name(id, &s.name).to_string();
+                        // Prefer the short alias `host.gpu{N}` for graph seed.
+                        let is_alias = id
+                            .strip_prefix("host.gpu")
+                            .is_some_and(|rest| {
+                                !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit())
+                            })
+                            || id == "mock.gpu_temp";
+                        if gpu_temp_id.is_none() && is_alias {
+                            gpu_temp_id = Some(id.to_string());
+                            if let Some(rest) = id.strip_prefix("host.gpu") {
+                                if let Ok(idx) = rest.parse::<u32>() {
+                                    host_gpu_names.insert(idx, label.clone());
+                                }
+                            }
+                        }
+                        // Skip `.temp.core` duplicate of the short alias in Temps/graph picker.
+                        if id.ends_with(".temp.core") {
+                            // still in host_gpu_vals; not listed separately
+                        } else {
+                            temps.push((id.to_string(), label, v));
+                        }
                     }
-                    temps.push((id.to_string(), label, v));
+                    SensorKind::FanRpm if v >= 0.0 && !v.is_nan() => {
+                        let label = map.sensor_name(id, &s.name).to_string();
+                        fans.push((id.to_string(), label, v));
+                    }
+                    // Power / Load / Other: GPU panel only (not Temps/Fans columns).
+                    SensorKind::Power
+                    | SensorKind::Load
+                    | SensorKind::Voltage
+                    | SensorKind::Other => {}
+                    _ => {}
                 }
-                SensorKind::FanRpm if v >= 0.0 && !v.is_nan() => {
-                    let label = map.sensor_name(id, &s.name).to_string();
-                    fans.push((id.to_string(), label, v));
-                }
-                _ => {}
-            },
+            }
             Err(e) => {
                 let msg = e.to_string();
                 let benign = msg.contains("fan not present")
@@ -180,6 +233,8 @@ fn take_snapshot(
             }
         }
     }
+
+    let gpus = assemble_gpu_snaps(&host_gpu_vals, &host_gpu_names);
 
     let rpm_by_id: HashMap<String, f64> =
         fans.iter().map(|(id, _, rpm)| (id.clone(), *rpm)).collect();
@@ -221,10 +276,85 @@ fn take_snapshot(
         temps,
         fans,
         controls: ctrl_snaps,
+        gpus,
         cpu_temp,
         cpu_temp_id,
         gpu_temp_id,
         error,
         tick,
     }
+}
+
+/// Build [`GpuSnap`] entries from flat host/mock sensor values.
+fn assemble_gpu_snaps(
+    vals: &HashMap<String, f64>,
+    names: &HashMap<u32, String>,
+) -> Vec<GpuSnap> {
+    // Discover GPU indices from any host.gpu{N}… id.
+    let mut indices: Vec<u32> = vals
+        .keys()
+        .filter_map(|id| {
+            let rest = id.strip_prefix("host.gpu")?;
+            let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+            digits.parse().ok()
+        })
+        .collect();
+    indices.sort_unstable();
+    indices.dedup();
+
+    let mut out: Vec<GpuSnap> = indices
+        .into_iter()
+        .map(|index| {
+            let prefix = format!("host.gpu{index}");
+            let get = |suffix: &str| vals.get(&format!("{prefix}.{suffix}")).copied();
+            let name = names
+                .get(&index)
+                .cloned()
+                .or_else(|| {
+                    vals.get(&prefix)
+                        .map(|_| format!("GPU {index}"))
+                })
+                .unwrap_or_else(|| format!("GPU {index}"));
+            GpuSnap {
+                index,
+                name,
+                temp_core: vals.get(&prefix).copied().or_else(|| get("temp.core")),
+                temp_memory: get("temp.memory"),
+                temp_hotspot: None, // nvidia-smi does not expose hotspot
+                power_w: get("power.draw"),
+                power_limit_w: get("power.limit"),
+                util_gpu: get("load.gpu"),
+                util_mem: get("load.mem"),
+                clock_graphics_mhz: get("clock.graphics"),
+                clock_memory_mhz: get("clock.memory"),
+                fan_percent: get("fan"),
+                mem_used_mib: get("mem.used"),
+                mem_total_mib: get("mem.total"),
+            }
+        })
+        .collect();
+
+    // Mock path: single synthetic GPU when no host NVIDIA metrics.
+    if out.is_empty() {
+        if let Some(&core) = vals.get("mock.gpu_temp") {
+            out.push(GpuSnap {
+                index: 0,
+                name: "GPU (mock)".into(),
+                temp_core: Some(core),
+                temp_memory: vals.get("mock.gpu_temp_memory").copied(),
+                temp_hotspot: None,
+                power_w: vals.get("mock.gpu_power").copied(),
+                power_limit_w: vals.get("mock.gpu_power_limit").copied(),
+                util_gpu: vals.get("mock.gpu_load").copied(),
+                util_mem: vals.get("mock.gpu_load_mem").copied(),
+                clock_graphics_mhz: vals.get("mock.gpu_clock").copied(),
+                clock_memory_mhz: vals.get("mock.gpu_clock_mem").copied(),
+                fan_percent: vals.get("mock.gpu_fan").copied(),
+                mem_used_mib: vals.get("mock.gpu_mem_used").copied(),
+                mem_total_mib: vals.get("mock.gpu_mem_total").copied(),
+            });
+        }
+    }
+
+    out
 }

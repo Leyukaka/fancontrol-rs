@@ -8,6 +8,7 @@ i18n!("locales", fallback = "en");
 mod activity;
 mod app;
 mod curve_editor;
+mod gpu_panel;
 mod graph;
 mod i18n;
 mod poll;

@@ -44,16 +44,16 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 
 ## Status (keep updated)
 
-- Product line: **v0.3.3** (B550 banked NCT validated + curve temp = **CPU-like only** with CPUTIN/PECI resolve; clamp-safe dashboard; Activity deck; collapsible columns).
+- Product line: **v0.3.5** (NVIDIA multi-metric host GPU + GPU detail panel shared with graph; B550 banked NCT + CPU-like curves; Activity deck).
 - Phase 0 foundation: **done**.
 - Phase 1: PawnIOLib FFI + LpcIO + **NCT668x EC HWM** (validated class id `0xD5` rev `0x92` @ `0x0A20`) + **banked NCT** (ROG B550-A `0xD4` validated reads+writes) + control loop + CLI.
 - Elevation required for `pawnio_open` (Administrator). **PawnIO is a prerequisite** (not bundled) — UI shows a startup dialog if missing / not openable.
 - Validated paths: **NCT6687D-class** (`0xD5`) and **banked NCT** on ROG STRIX B550-A (`0xD4`); higher NCT668x controls = DR/experimental. See `docs/SUPPORTED_HARDWARE.md`.
-- Host sensors: fixed-path `nvidia-smi` (NVIDIA-only; AMD/Intel research documented in `docs/GPU_VENDOR_APIS.md`, not implemented) + storage via `DeviceIoControl` with an NVMe health-log fallback (read-only, no PowerShell, no PATH walk for GPU).
+- Host sensors: fixed-path `nvidia-smi` **multi-metric** (temp core/memory, power W, util %, clocks, fan %, VRAM; NVIDIA-only; Hot Spot **not** via smi — needs NvAPI, not shipped) + storage via `DeviceIoControl` (NVMe health-log fallback; read-only, no PowerShell, no PATH walk). AMD/Intel GPU research in `docs/GPU_VENDOR_APIS.md`.
 - Vendored modules: `crates/fancontrol-pawnio/modules/` (PawnIO.Modules).
 - i18n: 8 languages (en/fr/de/es/it/zh/ja/lb) via `rust-i18n`, picker in Options panel, OS-locale default on first run, live switch (no restart), Noto Sans CJK bundled for zh/ja glyph coverage. `crates/fancontrol-ui/locales/`.
 - Fun extra: optional fractal pyramid panel (raymarched, GLSL→WGSL port) rendered via a custom wgpu pipeline through `egui_wgpu::CallbackTrait` — first custom wgpu callback in this codebase (`crates/fancontrol-ui/src/fractal.rs` + `fractal_shader.wgsl`). Toggle + speed + 2 colors in Options panel; off by default.
-- UI: **egui/eframe 0.35** — live sensors, sliders, curve editor, curve auto-apply, graph windows, rename map, options, system tray (minimize-to-tray, state icon, quick menu), profile switch/save persisted as last-used and auto-loaded on startup, manual "Check for updates" (GitHub latest-release compare + link, no auto-download).
+- UI: **egui/eframe 0.35** — live sensors, sliders, curve editor, curve auto-apply, graph windows, **GPU detail panel** (shares top viz with multi-sensor graph; power/util/clocks/VRAM; Hot Spot shown as unavailable), rename map, options, system tray, profile last-used, manual update check.
 - Graph: multi-sensor (pick any combination of live sensors in Options, ordered `graph_sensor_ids`, categorical color legend once >1 is plotted), per-control curve sensor binding next to the curve-assignment combo (defaults unchanged, so untouched controls behave exactly as before), "hide controls at 0% duty" option. Rendered via **`egui_plot`** (0.36, the release that pairs with `egui` 0.35, not 0.35.0 which pairs with `egui` 0.34) instead of a hand-rolled painter — the old custom fill polygon (`egui::Shape::convex_polygon`) fanned triangles from the oldest sample, which is only correct for a convex area and produced spike artifacts on any real (concave) trace. `crates/fancontrol-ui/src/graph.rs`.
 - **Activity deck** (v0.3.0, Options toggle, **default on**): CPU load sparkline (0–100 %, X anchored to last sample) + top processes with CPU % and RAM, sort CPU/RAM, name filter. Load-only mode skips process scan. Windows APIs only — no PowerShell, no WMI, no process kill.
 - Binary is GUI-subsystem (no console flash on launch); CLI usage from an existing terminal re-attaches to it automatically.
@@ -64,7 +64,7 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 1. Broader chip validation (ITE IT87 still experimental; more banked NCT boards).
 2. Code signing (SmartScreen) — see `docs/SIGNING_AND_DISTRIBUTION.md`.
 3. Auto-update: download + SHA256 verify + install (manual check already done) — see `docs/SECURITY.md`.
-4. AMD/Intel GPU temp — blocked on hardware to validate against, see `docs/GPU_VENDOR_APIS.md`.
+4. AMD/Intel GPU sensors — blocked on hardware; see `docs/GPU_VENDOR_APIS.md`. Optional later: NVML in-process, experimental NvAPI Hot Spot.
 5. RGB (future — not Super I/O).
 6. SSD/NVMe temps: validated under load on owner hardware (device_prop live); EVO SATA may report no temp.
 7. Mock is **opt-in** (`--mock`); product default is hardware/host only.

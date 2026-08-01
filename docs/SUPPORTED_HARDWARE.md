@@ -65,7 +65,7 @@ These are **high value** for expanding the certified list. Code may already rout
 | **Banked Nuvoton NCT** (classic Super I/O HWM) | Temps, fans, PWM | **Validated** (reads + writes on ROG B550-A) | ASUS **ROG STRIX B550-A GAMING**: id `0xD4` rev `0x2B`, HWM `0x0290`, slot `@0x2E`. Temps named `CPUTIN` / `PECI_0` (not `temp.CPU`). Curve binding falls back if profile still points at `pawnio.0.temp.CPU`. Some fan channels may be noise (e.g. fan6 absurd RPM). |
 | **ITE IT87** / other banked layouts | Detect / sensors | **Experimental** (needs reports) | Detection helpers exist; not certified on maintainer hardware. |
 | **Any other Super I/O board** | - | **Should work - not certified until reported** | Open a hardware report with logs. |
-| **Host: GPU** (`nvidia-smi`) | Temperature | **Read-only** | Process spawn; no fan curve write through nvidia-smi. |
+| **Host: GPU** (`nvidia-smi` multi-metric) | Temp core/memory, power W, util %, clocks, fan %, VRAM | **Read-only** | Fixed paths; UI GPU panel. **Hot Spot not available** via smi (would need NvAPI). No GPU fan curve writes. |
 | **Host: storage** (`DeviceIoControl`, no PowerShell) | Temperature | **Read-only** | Prefer **NVMe health log** (composite °C), then `StorageDeviceTemperatureProperty` / adapter (all sensors scanned). Elevate for `\\.\PhysicalDriveN`. CLI: `sample-storage`. |
 | **Host: Activity deck** (Options, default on) | CPU load %, top processes (CPU + RAM) | **Read-only** | Windows APIs only (`GetSystemTimes`, Toolhelp, `GetProcessTimes`, working set). **No PowerShell, no WMI.** ~1 s while enabled; Load-only skips process enum. |
 | **Mock provider** | Dev / UI without hardware | Always available | `--no-hw` |

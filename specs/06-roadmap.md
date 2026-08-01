@@ -20,7 +20,7 @@ Last aligned with product reality: **v0.3.3** (2026-07): banked NCT B550-A valid
 - [x] Profile serialization (JSON)
 - [x] CLI: `detect`, `backend-status`, `sample`, `watch`, `test-duty`, `map-init`, `ui`, …
 - [x] Elevated read/write validation (owner NCT6687D-class)
-- [x] Host sensors: GPU (fixed-path `nvidia-smi`), storage (`DeviceIoControl`, no PowerShell)
+- [x] Host sensors: GPU (fixed-path `nvidia-smi` multi-metric + UI panel), storage (`DeviceIoControl`, no PowerShell)
 - [x] Banked NCT path validated on ASUS ROG STRIX B550-A (`0xD4`) - v0.3.2
 - [ ] Broader chip productization (ITE IT87, more banked NCT boards; experimental until certified)
 - [ ] Confirm SSD/NVMe temps broadly (owner path live; more drives / SATA edge cases)
@@ -58,7 +58,9 @@ Last aligned with product reality: **v0.3.3** (2026-07): banked NCT B550-A valid
 - [ ] Multi-sensor curves (e.g. max CPU+GPU as single input)
 - [ ] Additional official plugins
 - [ ] Auto-update: download + SHA256 verify + install
-- [ ] AMD/Intel GPU temperature sensors — see `docs/GPU_VENDOR_APIS.md`
+- [x] NVIDIA multi-metric + GPU panel (v0.3.5; Hot Spot not via smi)
+- [ ] AMD/Intel GPU sensors — see `docs/GPU_VENDOR_APIS.md`
+- [ ] Optional: NVML in-process; experimental NvAPI Hot Spot
 
 ## Next priorities (order)
 

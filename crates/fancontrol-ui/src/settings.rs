@@ -82,6 +82,10 @@ pub struct UiSettings {
     /// Activity deck (CPU load + top processes). Toggle in Options; **default on**.
     #[serde(default = "default_true")]
     pub show_activity_deck: bool,
+    /// GPU detail panel (power, util, clocks, VRAM). Shares the top visualization area.
+    /// **Default on** — empty/placeholder when no host GPU is present.
+    #[serde(default = "default_true")]
+    pub show_gpu_panel: bool,
     #[serde(default)]
     pub activity_mode: ActivityMode,
     #[serde(default)]
@@ -156,6 +160,7 @@ impl Default for UiSettings {
             // false so first live snapshot seeds CPU/GPU (true + empty = permanent empty graph)
             graph_sensor_ids_seeded: false,
             show_activity_deck: true,
+            show_gpu_panel: true,
             activity_mode: ActivityMode::default(),
             activity_sort: ProcessSort::default(),
             activity_top_n: default_activity_top_n(),

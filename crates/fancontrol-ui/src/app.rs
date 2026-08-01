@@ -2,6 +2,7 @@
 
 use crate::activity::{show_activity_deck, ActivityDeckView, ActivityMode};
 use crate::curve_editor::show_curve_editor;
+use crate::gpu_panel::show_gpu_panel;
 use crate::graph::{show_temp_graph, GraphSeries, TempHistory, ThermalSignal};
 use crate::i18n::{display_name_for, resolve_startup_locale, SUPPORTED};
 use crate::poll::{spawn_poller, SharedMap, SharedSnapshot};
@@ -490,6 +491,17 @@ impl eframe::App for FanApp {
                         self.show_temps = !self.show_temps;
                     }
                     if ui
+                        .selectable_label(
+                            self.settings.show_gpu_panel,
+                            t!("top_bar.gpu_toggle").to_string(),
+                        )
+                        .on_hover_text(t!("top_bar.gpu_toggle_tooltip").to_string())
+                        .clicked()
+                    {
+                        self.settings.show_gpu_panel = !self.settings.show_gpu_panel;
+                        self.settings.save();
+                    }
+                    if ui
                         .selectable_label(self.show_curves, t!("top_bar.curves_toggle").to_string())
                         .on_hover_text(t!("top_bar.curves_toggle_tooltip").to_string())
                         .clicked()
@@ -652,6 +664,15 @@ impl eframe::App for FanApp {
                                 }
                             });
                         });
+                    }
+                    if ui
+                        .checkbox(
+                            &mut self.settings.show_gpu_panel,
+                            t!("options.show_gpu_panel").to_string(),
+                        )
+                        .changed()
+                    {
+                        dirty = true;
                     }
                     if ui
                         .checkbox(
@@ -856,9 +877,10 @@ impl eframe::App for FanApp {
 
         let show_thermal = self.settings.show_graph_panel;
         let show_activity = self.settings.show_activity_deck;
+        let show_gpu = self.settings.show_gpu_panel;
         // When Temps/Fans/Controls are all closed, grow graphs into that space.
         let dashboard_open = self.show_temps || self.show_fans || self.show_controls;
-        if show_thermal || show_activity {
+        if show_thermal || show_activity || show_gpu {
             let labels: HashMap<&str, &str> = snap
                 .temps
                 .iter()
@@ -868,13 +890,14 @@ impl eframe::App for FanApp {
             // Compact defaults when the dashboard lists are visible; when they are
             // all closed, fill almost all remaining height so plots are not stuck
             // at ~half the window.
-            let default_h = match (show_thermal, show_activity) {
+            let top_viz = show_thermal || show_gpu;
+            let default_h = match (top_viz, show_activity) {
                 (true, true) => 420.0,
-                (true, false) => 240.0,
+                (true, false) => 260.0,
                 (false, true) => 220.0,
                 (false, false) => 0.0,
             };
-            let min_h = match (show_thermal, show_activity) {
+            let min_h = match (top_viz, show_activity) {
                 (true, true) => 320.0,
                 (true, false) => 180.0,
                 (false, true) => 160.0,
@@ -897,75 +920,40 @@ impl eframe::App for FanApp {
             }
 
             graph_panel.show(ui, |ui| {
-                if show_thermal {
-                    self.ui_graph_controls(ui);
-                    let (win, samp) = (
-                        self.settings.graph_window_minutes,
-                        self.settings.graph_sample_secs,
-                    );
-                    for id in &self.settings.graph_sensor_ids {
-                        self.histories.entry(id.clone()).or_insert_with(|| {
-                            let mut h = TempHistory::default();
-                            h.configure(win, samp);
-                            h
-                        });
-                    }
-                    let series: Vec<GraphSeries> = self
-                        .settings
-                        .graph_sensor_ids
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(i, id)| {
-                            self.histories.get(id).map(|h| GraphSeries {
-                                label: labels.get(id.as_str()).copied().unwrap_or(id.as_str()),
-                                palette_index: i,
-                                history: h,
-                            })
-                        })
-                        .collect();
-                    let style = self.settings.graph_style;
-                    // Use the full panel height (no artificial 480px cap).
+                // Top row: thermal graph and/or GPU detail (side-by-side when both).
+                if top_viz {
                     let room = ui.available_height().max(80.0);
-                    let plot_h = if show_activity {
-                        // room-100 can be < 140 on a short panel; clamp_ui_height orders bounds.
+                    let row_h = if show_activity {
                         clamp_ui_height(room * 0.55, 140.0, (room - 100.0).max(40.0))
                     } else {
                         clamp_ui_height(room, 140.0_f32.min(room), room)
                     };
-                    if style == GraphStyle::Classic || !self.shader_backend_available {
-                        show_temp_graph(
-                            ui,
-                            &series,
-                            self.settings.graph_window_minutes,
-                            &mut self.graph_axis_max,
-                            plot_h,
-                        );
-                        if style.is_shader() {
-                            ui.small(t!("graph.shader_fallback_note").to_string());
-                        }
-                    } else {
-                        let t =
-                            self.shader_clock.elapsed().as_secs_f32() * self.settings.shader_speed;
-                        let readings: Vec<(String, f32)> = series
-                            .iter()
-                            .filter_map(|s| s.history.last().map(|v| (s.label.to_string(), v)))
-                            .collect();
-                        let signal = ThermalSignal::from_readings(readings);
-                        ui.allocate_ui(egui::vec2(ui.available_width(), plot_h), |ui| {
-                            show_shader_panel(
-                                ui,
-                                style,
-                                t,
-                                signal,
-                                self.settings.shader_color_a,
-                                self.settings.shader_color_b,
-                            );
+
+                    if show_thermal && show_gpu {
+                        ui.columns(2, |cols| {
+                            cols[0].push_id("thermal_graph_col", |ui| {
+                                self.ui_thermal_graph_block(ui, &labels, row_h);
+                            });
+                            cols[1].push_id("gpu_detail_col", |ui| {
+                                egui::ScrollArea::vertical()
+                                    .id_salt("gpu_col_scroll")
+                                    .max_height(row_h)
+                                    .show(ui, |ui| {
+                                        show_gpu_panel(ui, &snap.gpus);
+                                    });
+                            });
+                        });
+                    } else if show_thermal {
+                        self.ui_thermal_graph_block(ui, &labels, row_h);
+                    } else if show_gpu {
+                        ui.allocate_ui(egui::vec2(ui.available_width(), row_h), |ui| {
+                            show_gpu_panel(ui, &snap.gpus);
                         });
                     }
                 }
 
                 if show_activity {
-                    if show_thermal {
+                    if top_viz {
                         ui.separator();
                     }
                     let act = activity_snap.as_ref().cloned().unwrap_or_default();
@@ -1258,6 +1246,70 @@ impl FanApp {
                     ui.add_space(6.0);
                 }
             });
+    }
+
+    /// Thermal multi-sensor graph (or shader style) for the top visualization row.
+    fn ui_thermal_graph_block(
+        &mut self,
+        ui: &mut egui::Ui,
+        labels: &HashMap<&str, &str>,
+        plot_h: f32,
+    ) {
+        self.ui_graph_controls(ui);
+        let (win, samp) = (
+            self.settings.graph_window_minutes,
+            self.settings.graph_sample_secs,
+        );
+        for id in &self.settings.graph_sensor_ids {
+            self.histories.entry(id.clone()).or_insert_with(|| {
+                let mut h = TempHistory::default();
+                h.configure(win, samp);
+                h
+            });
+        }
+        let series: Vec<GraphSeries> = self
+            .settings
+            .graph_sensor_ids
+            .iter()
+            .enumerate()
+            .filter_map(|(i, id)| {
+                self.histories.get(id).map(|h| GraphSeries {
+                    label: labels.get(id.as_str()).copied().unwrap_or(id.as_str()),
+                    palette_index: i,
+                    history: h,
+                })
+            })
+            .collect();
+        let style = self.settings.graph_style;
+        if style == GraphStyle::Classic || !self.shader_backend_available {
+            show_temp_graph(
+                ui,
+                &series,
+                self.settings.graph_window_minutes,
+                &mut self.graph_axis_max,
+                plot_h,
+            );
+            if style.is_shader() {
+                ui.small(t!("graph.shader_fallback_note").to_string());
+            }
+        } else {
+            let t = self.shader_clock.elapsed().as_secs_f32() * self.settings.shader_speed;
+            let readings: Vec<(String, f32)> = series
+                .iter()
+                .filter_map(|s| s.history.last().map(|v| (s.label.to_string(), v)))
+                .collect();
+            let signal = ThermalSignal::from_readings(readings);
+            ui.allocate_ui(egui::vec2(ui.available_width(), plot_h), |ui| {
+                show_shader_panel(
+                    ui,
+                    style,
+                    t,
+                    signal,
+                    self.settings.shader_color_a,
+                    self.settings.shader_color_b,
+                );
+            });
+        }
     }
 
     fn ui_graph_controls(&mut self, ui: &mut egui::Ui) {

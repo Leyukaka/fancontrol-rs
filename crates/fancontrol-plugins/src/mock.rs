@@ -29,6 +29,15 @@ impl MockProvider {
         let mut values = HashMap::new();
         values.insert("mock.cpu_temp".into(), 42.0);
         values.insert("mock.gpu_temp".into(), 38.0);
+        values.insert("mock.gpu_power".into(), 55.0);
+        values.insert("mock.gpu_power_limit".into(), 320.0);
+        values.insert("mock.gpu_load".into(), 12.0);
+        values.insert("mock.gpu_load_mem".into(), 8.0);
+        values.insert("mock.gpu_clock".into(), 1200.0);
+        values.insert("mock.gpu_clock_mem".into(), 7000.0);
+        values.insert("mock.gpu_fan".into(), 25.0);
+        values.insert("mock.gpu_mem_used".into(), 2048.0);
+        values.insert("mock.gpu_mem_total".into(), 12288.0);
         values.insert("mock.cpu_fan_rpm".into(), 900.0);
         values.insert("mock.case_fan_rpm".into(), 700.0);
 
@@ -87,6 +96,69 @@ impl SensorProvider for MockProvider {
                 kind: SensorKind::Temperature,
                 provider: self.name.clone(),
                 unit: Some("°C".into()),
+            },
+            SensorDescriptor {
+                id: SensorId::new("mock.gpu_power"),
+                name: "GPU Power".into(),
+                kind: SensorKind::Power,
+                provider: self.name.clone(),
+                unit: Some("W".into()),
+            },
+            SensorDescriptor {
+                id: SensorId::new("mock.gpu_power_limit"),
+                name: "GPU Power limit".into(),
+                kind: SensorKind::Power,
+                provider: self.name.clone(),
+                unit: Some("W".into()),
+            },
+            SensorDescriptor {
+                id: SensorId::new("mock.gpu_load"),
+                name: "GPU Utilization".into(),
+                kind: SensorKind::Load,
+                provider: self.name.clone(),
+                unit: Some("%".into()),
+            },
+            SensorDescriptor {
+                id: SensorId::new("mock.gpu_load_mem"),
+                name: "GPU Mem controller".into(),
+                kind: SensorKind::Load,
+                provider: self.name.clone(),
+                unit: Some("%".into()),
+            },
+            SensorDescriptor {
+                id: SensorId::new("mock.gpu_clock"),
+                name: "GPU Core clock".into(),
+                kind: SensorKind::Other,
+                provider: self.name.clone(),
+                unit: Some("MHz".into()),
+            },
+            SensorDescriptor {
+                id: SensorId::new("mock.gpu_clock_mem"),
+                name: "GPU Mem clock".into(),
+                kind: SensorKind::Other,
+                provider: self.name.clone(),
+                unit: Some("MHz".into()),
+            },
+            SensorDescriptor {
+                id: SensorId::new("mock.gpu_fan"),
+                name: "GPU Fan".into(),
+                kind: SensorKind::Load,
+                provider: self.name.clone(),
+                unit: Some("%".into()),
+            },
+            SensorDescriptor {
+                id: SensorId::new("mock.gpu_mem_used"),
+                name: "GPU VRAM used".into(),
+                kind: SensorKind::Other,
+                provider: self.name.clone(),
+                unit: Some("MiB".into()),
+            },
+            SensorDescriptor {
+                id: SensorId::new("mock.gpu_mem_total"),
+                name: "GPU VRAM total".into(),
+                kind: SensorKind::Other,
+                provider: self.name.clone(),
+                unit: Some("MiB".into()),
             },
             SensorDescriptor {
                 id: SensorId::new("mock.cpu_fan_rpm"),

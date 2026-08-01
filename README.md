@@ -42,7 +42,7 @@ Binaries are **unsigned** (SmartScreen may warn). PWM writes are on by default a
 - **Fan control**: curves, profiles, live duty sliders, multi-sensor temperature graph
 - **Activity deck**: CPU load history + top processes (CPU % and RAM), filter and sort (default on, can be turned off in Options)
 - **Security**: [PawnIO](https://pawnio.eu/) only for Super I/O / EC. Never ships WinRing0 or other known-vulnerable ring-0 drivers
-- **Host sensors**: NVIDIA GPU temp via fixed-path `nvidia-smi`, SSD/NVMe temps via DeviceIoControl (no PowerShell)
+- **Host sensors**: NVIDIA GPU multi-metric via fixed-path `nvidia-smi` (temp, power W, util, clocks, VRAM, fan %) + GPU detail panel; SSD/NVMe temps via DeviceIoControl (no PowerShell)
 - **UI**: egui desktop app, system tray, first-run write consent, 8 languages (en/fr/de/es/it/zh/ja/lb)
 - **CLI**: `sample`, `list-sensors`, `list-controls`, `test-duty`, `sample-storage`, …
 - **Optional fun**: shader graph styles (wgpu) in Options

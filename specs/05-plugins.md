@@ -38,7 +38,7 @@ pub trait ControlProvider {
 | Provider | Crate / module | Role |
 |----------|----------------|------|
 | Mock | `fancontrol-plugins::MockProvider` | Dev / `--no-hw` |
-| Host | `fancontrol-plugins::HostSensorProvider` | GPU + storage temps (read-only) |
+| Host | `fancontrol-plugins::HostSensorProvider` | GPU multi-metric + storage temps (read-only) |
 | PawnIO | `fancontrol-pawnio::PawnioProvider` | Super I/O / NCT668x HWM |
 
 ## Official plugins (future)

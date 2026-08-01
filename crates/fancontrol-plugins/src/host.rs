@@ -1,7 +1,10 @@
 //! Best-effort host sensors (GPU / storage) without privileged drivers.
 //!
-//! - NVIDIA GPU: fixed-path `nvidia-smi` (no PATH walk on Windows)
+//! - NVIDIA GPU: fixed-path `nvidia-smi` multi-metric query (no PATH walk on Windows)
 //! - Storage (Windows): `DeviceIoControl` temperature property — **no PowerShell**
+//!
+//! Hot Spot is **not** exposed by `nvidia-smi` / public NVML; LibreHardwareMonitor
+//! gets it via reverse-engineered NvAPI. We intentionally do not fake it here.
 
 use crate::traits::{PluginError, Result, SensorProvider};
 use fancontrol_core::{SensorDescriptor, SensorId, SensorKind};
@@ -18,9 +21,19 @@ use std::os::windows::process::CommandExt;
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
+/// One cached host sensor row (GPU metric or storage temp).
+#[derive(Debug, Clone)]
+struct SensorRow {
+    id: String,
+    name: String,
+    value: f64,
+    kind: SensorKind,
+    unit: Option<&'static str>,
+}
+
 #[derive(Clone)]
 struct Cached {
-    values: Arc<Vec<(String, String, f64)>>,
+    values: Arc<Vec<SensorRow>>,
 }
 
 pub struct HostSensorProvider {
@@ -106,7 +119,7 @@ impl HostSensorProvider {
                                 g.as_ref().map(|c| {
                                     c.values
                                         .iter()
-                                        .filter(|(id, _, _)| id.starts_with("host.ssd"))
+                                        .filter(|r| r.id.starts_with("host.ssd"))
                                         .cloned()
                                         .collect::<Vec<_>>()
                                 })
@@ -141,7 +154,7 @@ impl HostSensorProvider {
             .ok();
     }
 
-    fn snapshot(&self) -> Arc<Vec<(String, String, f64)>> {
+    fn snapshot(&self) -> Arc<Vec<SensorRow>> {
         if !self.is_enabled() {
             return Arc::new(Vec::new());
         }
@@ -165,12 +178,12 @@ impl SensorProvider for HostSensorProvider {
         }
         self.snapshot()
             .iter()
-            .map(|(id, name, _)| SensorDescriptor {
-                id: SensorId::new(id.clone()),
-                name: name.clone(),
-                kind: SensorKind::Temperature,
+            .map(|r| SensorDescriptor {
+                id: SensorId::new(r.id.clone()),
+                name: r.name.clone(),
+                kind: r.kind,
                 provider: "host".into(),
-                unit: Some("°C".into()),
+                unit: r.unit.map(|u| u.to_string()),
             })
             .collect()
     }
@@ -181,19 +194,21 @@ impl SensorProvider for HostSensorProvider {
         }
         self.snapshot()
             .iter()
-            .find(|(i, _, _)| i == id.as_str())
-            .map(|(_, _, v)| *v)
+            .find(|r| r.id == id.as_str())
+            .map(|r| r.value)
             .ok_or_else(|| PluginError::SensorNotFound(id.to_string()))
     }
 }
 
-fn probe_nvidia() -> Vec<(String, String, f64)> {
+fn probe_nvidia() -> Vec<SensorRow> {
     let Some(smi) = resolve_nvidia_smi() else {
         return Vec::new();
     };
     let mut cmd = Command::new(&smi);
+    // Multi-metric query inspired by LibreHardwareMonitor's NVIDIA surface area,
+    // but limited to fields exposed by nvidia-smi (documented / stable).
     cmd.args([
-        "--query-gpu=index,name,temperature.gpu",
+        "--query-gpu=index,name,temperature.gpu,temperature.memory,power.draw,power.limit,utilization.gpu,utilization.memory,clocks.current.graphics,clocks.current.memory,fan.speed,memory.used,memory.total",
         "--format=csv,noheader,nounits",
     ]);
     #[cfg(windows)]
@@ -206,24 +221,172 @@ fn probe_nvidia() -> Vec<(String, String, f64)> {
         return Vec::new();
     }
     let text = String::from_utf8_lossy(&out.stdout);
+    parse_nvidia_smi_csv(&text)
+}
+
+/// Parse nvidia-smi multi-metric CSV (`csv,noheader,nounits`).
+///
+/// Column order matches the query in [`probe_nvidia`].
+fn parse_nvidia_smi_csv(text: &str) -> Vec<SensorRow> {
     let mut rows = Vec::new();
     for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        // GPU names can contain commas rarely; nvidia-smi usually quotes nothing.
+        // Split on commas and trim; require at least index+name+temp.core.
         let parts: Vec<_> = line.split(',').map(|s| s.trim()).collect();
         if parts.len() < 3 {
             continue;
         }
         let idx = parts[0];
-        let name = parts[1];
-        let Ok(temp) = parts[2].parse::<f64>() else {
+        if idx.parse::<u32>().is_err() {
             continue;
+        }
+        let name = parts[1];
+        let label = format!("GPU {idx} ({name})");
+        let prefix = format!("host.gpu{idx}");
+
+        // Helpers to push optional numeric fields.
+        let mut push = |suffix: &str, display: &str, raw: Option<&str>, kind: SensorKind, unit: Option<&'static str>| {
+            let Some(raw) = raw else {
+                return;
+            };
+            let Some(v) = parse_smi_f64(raw) else {
+                return;
+            };
+            rows.push(SensorRow {
+                id: format!("{prefix}.{suffix}"),
+                name: format!("{label} · {display}"),
+                value: v,
+                kind,
+                unit,
+            });
         };
-        rows.push((
-            format!("host.gpu{idx}"),
-            format!("GPU {idx} ({name})"),
-            temp,
-        ));
+
+        let temp_core = parts.get(2).copied().and_then(parse_smi_f64);
+        if let Some(t) = temp_core {
+            // Compat alias used by graph seed / older channel maps.
+            rows.push(SensorRow {
+                id: prefix.clone(),
+                name: label.clone(),
+                value: t,
+                kind: SensorKind::Temperature,
+                unit: Some("°C"),
+            });
+            rows.push(SensorRow {
+                id: format!("{prefix}.temp.core"),
+                name: format!("{label} · Core"),
+                value: t,
+                kind: SensorKind::Temperature,
+                unit: Some("°C"),
+            });
+        }
+
+        push(
+            "temp.memory",
+            "Memory",
+            parts.get(3).copied(),
+            SensorKind::Temperature,
+            Some("°C"),
+        );
+        push(
+            "power.draw",
+            "Power",
+            parts.get(4).copied(),
+            SensorKind::Power,
+            Some("W"),
+        );
+        push(
+            "power.limit",
+            "Power limit",
+            parts.get(5).copied(),
+            SensorKind::Power,
+            Some("W"),
+        );
+        push(
+            "load.gpu",
+            "Utilization",
+            parts.get(6).copied(),
+            SensorKind::Load,
+            Some("%"),
+        );
+        push(
+            "load.mem",
+            "Mem controller",
+            parts.get(7).copied(),
+            SensorKind::Load,
+            Some("%"),
+        );
+        push(
+            "clock.graphics",
+            "Core clock",
+            parts.get(8).copied(),
+            SensorKind::Other,
+            Some("MHz"),
+        );
+        push(
+            "clock.memory",
+            "Mem clock",
+            parts.get(9).copied(),
+            SensorKind::Other,
+            Some("MHz"),
+        );
+        push(
+            "fan",
+            "Fan",
+            parts.get(10).copied(),
+            SensorKind::Load,
+            Some("%"),
+        );
+        push(
+            "mem.used",
+            "VRAM used",
+            parts.get(11).copied(),
+            SensorKind::Other,
+            Some("MiB"),
+        );
+        push(
+            "mem.total",
+            "VRAM total",
+            parts.get(12).copied(),
+            SensorKind::Other,
+            Some("MiB"),
+        );
     }
     rows
+}
+
+/// Parse a single nvidia-smi CSV cell (`nounits`). Returns `None` for N/A / empty / garbage.
+fn parse_smi_f64(raw: &str) -> Option<f64> {
+    let s = raw.trim();
+    if s.is_empty() {
+        return None;
+    }
+    let lower = s.to_ascii_lowercase();
+    if lower == "n/a"
+        || lower == "[n/a]"
+        || lower == "na"
+        || lower.contains("not support")
+        || lower.contains("deprecated")
+        || lower.contains("error")
+    {
+        return None;
+    }
+    // Tolerate leftover units if a future call drops `nounits`.
+    let cleaned = s
+        .trim_end_matches('%')
+        .trim()
+        .trim_end_matches("W")
+        .trim()
+        .trim_end_matches("MiB")
+        .trim()
+        .trim_end_matches("MHz")
+        .trim()
+        .trim_end_matches('C')
+        .trim();
+    cleaned.parse::<f64>().ok().filter(|v| v.is_finite())
 }
 
 /// Prefer absolute NVIDIA install paths so we do **not** walk a polluted `PATH`.
@@ -283,13 +446,78 @@ fn which_on_path(name: &str) -> Option<std::path::PathBuf> {
     None
 }
 
-fn probe_storage_temps() -> Vec<(String, String, f64)> {
+fn probe_storage_temps() -> Vec<SensorRow> {
     #[cfg(windows)]
     {
         crate::storage_win::probe_storage_temps()
+            .into_iter()
+            .map(|(id, name, value)| SensorRow {
+                id,
+                name,
+                value,
+                kind: SensorKind::Temperature,
+                unit: Some("°C"),
+            })
+            .collect()
     }
     #[cfg(not(windows))]
     {
         Vec::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_smi_skips_na_and_emits_typed_rows() {
+        let csv = "0, NVIDIA GeForce RTX 5080, 43, [N/A], 40.23, 360.00, 5, 6, 502, 7001, 0, 2174, 16303\n";
+        let rows = parse_nvidia_smi_csv(csv);
+        let by_id: std::collections::HashMap<_, _> =
+            rows.iter().map(|r| (r.id.as_str(), r)).collect();
+
+        assert!(by_id.contains_key("host.gpu0"));
+        assert!((by_id["host.gpu0"].value - 43.0).abs() < 0.01);
+        assert_eq!(by_id["host.gpu0"].kind, SensorKind::Temperature);
+
+        assert!(by_id.contains_key("host.gpu0.temp.core"));
+        assert!(!by_id.contains_key("host.gpu0.temp.memory")); // N/A
+
+        assert!((by_id["host.gpu0.power.draw"].value - 40.23).abs() < 0.01);
+        assert_eq!(by_id["host.gpu0.power.draw"].kind, SensorKind::Power);
+        assert_eq!(by_id["host.gpu0.power.draw"].unit, Some("W"));
+
+        assert!((by_id["host.gpu0.load.gpu"].value - 5.0).abs() < 0.01);
+        assert_eq!(by_id["host.gpu0.load.gpu"].kind, SensorKind::Load);
+
+        assert!((by_id["host.gpu0.clock.graphics"].value - 502.0).abs() < 0.01);
+        assert!((by_id["host.gpu0.mem.used"].value - 2174.0).abs() < 0.01);
+        assert!((by_id["host.gpu0.mem.total"].value - 16303.0).abs() < 0.01);
+        assert!((by_id["host.gpu0.fan"].value - 0.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn parse_smi_multi_gpu() {
+        let csv = "\
+0, Card A, 40, 50, 100, 300, 10, 20, 1000, 8000, 30, 1000, 8000
+1, Card B, 55, N/A, 80, 250, 40, 15, 1500, 9000, 45, 2000, 12000
+";
+        let rows = parse_nvidia_smi_csv(csv);
+        assert!(rows.iter().any(|r| r.id == "host.gpu0.power.draw"));
+        assert!(rows.iter().any(|r| r.id == "host.gpu1.temp.core"));
+        assert!(!rows.iter().any(|r| r.id == "host.gpu1.temp.memory"));
+        let g1 = rows.iter().find(|r| r.id == "host.gpu1").unwrap();
+        assert!((g1.value - 55.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn parse_smi_empty_and_garbage() {
+        assert!(parse_nvidia_smi_csv("").is_empty());
+        assert!(parse_nvidia_smi_csv("not,a,gpu,line\n").is_empty());
+        assert!(parse_smi_f64("N/A").is_none());
+        assert!(parse_smi_f64("").is_none());
+        assert!((parse_smi_f64("42.5").unwrap() - 42.5).abs() < 0.01);
+        assert!((parse_smi_f64("42.5 %").unwrap() - 42.5).abs() < 0.01);
     }
 }
