@@ -11,6 +11,7 @@ publish = false
 fancontrol-core = { workspace = true }
 fancontrol-plugins = { workspace = true }
 fancontrol-pawnio = { workspace = true }
+fancontrol-metrics = { workspace = true }
 egui = { workspace = true }
 eframe = { workspace = true }
 egui_plot = { workspace = true }

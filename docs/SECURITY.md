@@ -85,7 +85,9 @@ Unsigned Windows tools that touch **kernel I/O (PawnIO)** and spawn **host helpe
 | Behavior | Why (legitimate) |
 |----------|------------------|
 | Load PawnIO / talk to Super I/O | Fan/temp hardware access (not WinRing0) |
-| Spawn `nvidia-smi` | Optional GPU temperature (read-only) |
+| Spawn `nvidia-smi` | Optional GPU multi-metric (read-only) |
+| Write local SQLite metrics DB | Opt-in metrics store under `%APPDATA%` (v0.4) |
+| HTTP to user OTEL endpoint | Opt-in metrics export only; no project cloud (v0.4) |
 | Open `\\.\PhysicalDriveN` + `DeviceIoControl` | Optional SSD/HDD temperature (**no PowerShell**; Win10+ storage stack) |
 | Run elevated | Required for `pawnio_open` on many systems |
 

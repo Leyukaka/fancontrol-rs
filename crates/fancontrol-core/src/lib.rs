@@ -18,7 +18,7 @@ pub use control_loop::{default_interval, evaluate_profile_step, ControlStepResul
 pub use curve::{evaluate_curve, CurveEvalState};
 pub use error::{CoreError, Result};
 pub use models::{
-    ControlDescriptor, ControlId, CurveId, CurvePoint, FanCurve, Profile, ProfileId,
+    ControlDescriptor, ControlId, CurveId, CurvePoint, FanCurve, MetricSample, Profile, ProfileId,
     SensorDescriptor, SensorId, SensorKind,
 };
 pub use profile::{delete_profile, list_profiles, load_profile, save_profile};

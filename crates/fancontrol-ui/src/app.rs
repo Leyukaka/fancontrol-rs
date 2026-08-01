@@ -3,7 +3,7 @@
 use crate::activity::{show_activity_deck, ActivityDeckView, ActivityMode};
 use crate::curve_editor::show_curve_editor;
 use crate::gpu_panel::show_gpu_panel;
-use crate::graph::{show_temp_graph, GraphSeries, TempHistory, ThermalSignal};
+use crate::graph::{show_metric_graph, GraphSeries, TempHistory, ThermalSignal};
 use crate::i18n::{display_name_for, resolve_startup_locale, SUPPORTED};
 use crate::poll::{spawn_poller, SharedMap, SharedSnapshot};
 use crate::registry::{backend_status, build_registry, BackendStatus};
@@ -16,7 +16,10 @@ use crate::UiError;
 use eframe::egui;
 use fancontrol_core::{
     evaluate_profile_step, is_cpu_temp_candidate, list_profiles, load_profile, save_profile,
-    ChannelMap, CurveEvalState, FanCurve, Profile,
+    ChannelMap, CurveEvalState, FanCurve, MetricSample, Profile, SensorKind,
+};
+use fancontrol_metrics::{
+    default_metrics_db_path, MetricSink, SqliteMetricsStore, SqliteStoreConfig,
 };
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -141,6 +144,18 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         rename_is_control: false,
         histories: HashMap::new(),
         graph_axis_max: None,
+        graph_axis_max_secondary: None,
+        metrics_sink: if settings.metrics_store_enabled {
+            SqliteMetricsStore::spawn(SqliteStoreConfig {
+                path: default_metrics_db_path()
+                    .unwrap_or_else(|| std::path::PathBuf::from("metrics.sqlite")),
+                retention_days: u32::from(settings.metrics_retention_days.max(1)),
+                flush_ms: 500,
+            })
+        } else {
+            None
+        },
+        last_metrics_record: Instant::now() - Duration::from_secs(60),
         load_history,
         activity_filter: String::new(),
         show_settings: false,
@@ -257,6 +272,11 @@ struct FanApp {
     /// sample). Lives on `FanApp`, not `TempHistory`, since the axis is
     /// shared across every plotted series.
     graph_axis_max: Option<f32>,
+    /// Secondary Y-axis (second unit group: W, %, …).
+    graph_axis_max_secondary: Option<f32>,
+    /// Optional local SQLite metrics store (background writer).
+    metrics_sink: Option<SqliteMetricsStore>,
+    last_metrics_record: Instant,
     /// CPU load % history for the Activity deck.
     load_history: TempHistory,
     /// Process name filter (Activity deck).
@@ -378,17 +398,17 @@ impl eframe::App for FanApp {
             self.settings.save();
         }
 
-        let live_temps: HashMap<&str, f64> = snap
-            .temps
+        let live_plot: HashMap<&str, f64> = snap
+            .plottable
             .iter()
-            .map(|(id, _, v)| (id.as_str(), *v))
+            .map(|p| (p.id.as_str(), p.value))
             .collect();
         let (win, samp) = (
             self.settings.graph_window_minutes,
             self.settings.graph_sample_secs,
         );
         for id in &self.settings.graph_sensor_ids {
-            if let Some(&v) = live_temps.get(id.as_str()) {
+            if let Some(&v) = live_plot.get(id.as_str()) {
                 self.histories
                     .entry(id.clone())
                     .or_insert_with(|| {
@@ -397,6 +417,37 @@ impl eframe::App for FanApp {
                         h
                     })
                     .push_if_due(v as f32, Instant::now());
+            }
+        }
+
+        // Metrics store (best-effort, separate cadence).
+        if self.settings.metrics_store_enabled {
+            let every = Duration::from_secs(u64::from(self.settings.metrics_sample_secs.max(1)));
+            if self.last_metrics_record.elapsed() >= every {
+                if let Some(store) = self.metrics_sink.as_mut() {
+                    let ts_ms = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_millis() as i64)
+                        .unwrap_or(0);
+                    let batch: Vec<MetricSample> = snap
+                        .plottable
+                        .iter()
+                        .map(|p| {
+                            MetricSample::new(
+                                p.id.clone(),
+                                p.label.clone(),
+                                p.kind,
+                                p.unit.clone(),
+                                p.value,
+                                ts_ms,
+                            )
+                        })
+                        .collect();
+                    if !batch.is_empty() {
+                        store.record(&batch);
+                    }
+                }
+                self.last_metrics_record = Instant::now();
             }
         }
         // Activity: one snapshot per frame; history configure only when window settings change
@@ -837,24 +888,173 @@ impl eframe::App for FanApp {
                     ui.separator();
                     ui.label(t!("options.graph_sensors_heading").to_string());
                     ui.small(t!("options.graph_sensors_note").to_string());
-                    if snap.temps.is_empty() {
+                    if snap.plottable.is_empty() {
                         ui.small(t!("dashboard.none").to_string());
                     } else {
-                        for (id, label, _) in &snap.temps {
-                            let mut checked =
-                                self.settings.graph_sensor_ids.iter().any(|s| s == id);
-                            if ui.checkbox(&mut checked, label.as_str()).changed() {
-                                if checked {
-                                    self.settings.graph_sensor_ids.push(id.clone());
-                                } else {
-                                    self.settings.graph_sensor_ids.retain(|s| s != id);
+                        let temps: Vec<_> = snap
+                            .plottable
+                            .iter()
+                            .filter(|p| p.kind == SensorKind::Temperature)
+                            .collect();
+                        let other: Vec<_> = snap
+                            .plottable
+                            .iter()
+                            .filter(|p| p.kind != SensorKind::Temperature)
+                            .collect();
+                        if !temps.is_empty() {
+                            ui.small(t!("options.graph_section_temps").to_string());
+                            for p in &temps {
+                                let mut checked =
+                                    self.settings.graph_sensor_ids.iter().any(|s| s == &p.id);
+                                if ui.checkbox(&mut checked, p.label.as_str()).changed() {
+                                    if checked {
+                                        self.settings.graph_sensor_ids.push(p.id.clone());
+                                    } else {
+                                        self.settings.graph_sensor_ids.retain(|s| s != &p.id);
+                                    }
+                                    self.settings.save();
                                 }
-                                self.settings.save();
+                            }
+                        }
+                        if !other.is_empty() {
+                            ui.small(t!("options.graph_section_gpu").to_string());
+                            for p in &other {
+                                let unit = p.unit.as_deref().unwrap_or("");
+                                let text = if unit.is_empty() {
+                                    p.label.clone()
+                                } else {
+                                    format!("{} ({unit})", p.label)
+                                };
+                                let mut checked =
+                                    self.settings.graph_sensor_ids.iter().any(|s| s == &p.id);
+                                if ui.checkbox(&mut checked, text).changed() {
+                                    if checked {
+                                        self.settings.graph_sensor_ids.push(p.id.clone());
+                                    } else {
+                                        self.settings.graph_sensor_ids.retain(|s| s != &p.id);
+                                    }
+                                    self.settings.save();
+                                }
                             }
                         }
                     }
                     if self.settings.graph_sensor_ids.len() > 6 {
                         ui.small(t!("options.graph_sensors_many_note").to_string());
+                    }
+                    ui.separator();
+                    ui.label(t!("options.metrics_heading").to_string());
+                    ui.small(t!("options.metrics_note").to_string());
+                    if ui
+                        .checkbox(
+                            &mut self.settings.metrics_store_enabled,
+                            t!("options.metrics_store_enabled").to_string(),
+                        )
+                        .changed()
+                    {
+                        dirty = true;
+                        if self.settings.metrics_store_enabled {
+                            self.metrics_sink = SqliteMetricsStore::spawn(SqliteStoreConfig {
+                                path: default_metrics_db_path().unwrap_or_else(|| {
+                                    std::path::PathBuf::from("metrics.sqlite")
+                                }),
+                                retention_days: u32::from(
+                                    self.settings.metrics_retention_days.max(1),
+                                ),
+                                flush_ms: 500,
+                            });
+                        } else {
+                            self.metrics_sink = None;
+                        }
+                    }
+                    if self.settings.metrics_store_enabled {
+                        ui.horizontal(|ui| {
+                            ui.label(t!("options.metrics_sample_secs").to_string());
+                            for s in [2_u16, 5, 10, 30] {
+                                if ui
+                                    .selectable_value(
+                                        &mut self.settings.metrics_sample_secs,
+                                        s,
+                                        format!("{s}s"),
+                                    )
+                                    .changed()
+                                {
+                                    dirty = true;
+                                }
+                            }
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label(t!("options.metrics_retention_days").to_string());
+                            for d in [1_u16, 7, 30, 90] {
+                                if ui
+                                    .selectable_value(
+                                        &mut self.settings.metrics_retention_days,
+                                        d,
+                                        format!("{d}d"),
+                                    )
+                                    .changed()
+                                {
+                                    dirty = true;
+                                    if let Some(store) = &self.metrics_sink {
+                                        store.request_purge();
+                                    }
+                                }
+                            }
+                        });
+                        if let Some(path) = default_metrics_db_path() {
+                            ui.small(format!("{} {}", t!("options.metrics_path"), path.display()));
+                        }
+                        if ui
+                            .button(t!("options.metrics_export_csv").to_string())
+                            .clicked()
+                        {
+                            if let Some(store) = &self.metrics_sink {
+                                if let Some(dir) = fancontrol_core::config_dir().ok() {
+                                    let exports = dir.join("exports");
+                                    let _ = std::fs::create_dir_all(&exports);
+                                    let name = format!(
+                                        "metrics-{}.csv",
+                                        std::time::SystemTime::now()
+                                            .duration_since(std::time::UNIX_EPOCH)
+                                            .map(|d| d.as_secs())
+                                            .unwrap_or(0)
+                                    );
+                                    let path = exports.join(name);
+                                    match store.request_export_csv(&path) {
+                                        Ok(n) => {
+                                            self.profile_status = Some(format!(
+                                                "{} ({n} rows) → {}",
+                                                t!("options.metrics_export_ok"),
+                                                path.display()
+                                            ));
+                                        }
+                                        Err(e) => {
+                                            self.profile_status = Some(format!(
+                                                "{}: {e}",
+                                                t!("options.metrics_export_err")
+                                            ));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if ui
+                        .checkbox(
+                            &mut self.settings.otel_enabled,
+                            t!("options.otel_enabled").to_string(),
+                        )
+                        .changed()
+                    {
+                        dirty = true;
+                    }
+                    if self.settings.otel_enabled {
+                        ui.horizontal(|ui| {
+                            ui.label(t!("options.otel_endpoint").to_string());
+                            dirty |= ui
+                                .text_edit_singleline(&mut self.settings.otel_endpoint)
+                                .changed();
+                        });
+                        ui.small(t!("options.otel_deferred_note").to_string());
                     }
                     if dirty {
                         self.settings.clamp_graph_options();
@@ -882,9 +1082,14 @@ impl eframe::App for FanApp {
         let dashboard_open = self.show_temps || self.show_fans || self.show_controls;
         if show_thermal || show_activity || show_gpu {
             let labels: HashMap<&str, &str> = snap
-                .temps
+                .plottable
                 .iter()
-                .map(|(id, label, _)| (id.as_str(), label.as_str()))
+                .map(|p| (p.id.as_str(), p.label.as_str()))
+                .collect();
+            let units: HashMap<&str, Option<&str>> = snap
+                .plottable
+                .iter()
+                .map(|p| (p.id.as_str(), p.unit.as_deref()))
                 .collect();
 
             // Compact defaults when the dashboard lists are visible; when they are
@@ -932,7 +1137,7 @@ impl eframe::App for FanApp {
                     if show_thermal && show_gpu {
                         ui.columns(2, |cols| {
                             cols[0].push_id("thermal_graph_col", |ui| {
-                                self.ui_thermal_graph_block(ui, &labels, row_h);
+                                self.ui_thermal_graph_block(ui, &labels, &units, row_h);
                             });
                             cols[1].push_id("gpu_detail_col", |ui| {
                                 egui::ScrollArea::vertical()
@@ -944,7 +1149,7 @@ impl eframe::App for FanApp {
                             });
                         });
                     } else if show_thermal {
-                        self.ui_thermal_graph_block(ui, &labels, row_h);
+                        self.ui_thermal_graph_block(ui, &labels, &units, row_h);
                     } else if show_gpu {
                         ui.allocate_ui(egui::vec2(ui.available_width(), row_h), |ui| {
                             show_gpu_panel(ui, &snap.gpus);
@@ -1248,11 +1453,12 @@ impl FanApp {
             });
     }
 
-    /// Thermal multi-sensor graph (or shader style) for the top visualization row.
+    /// Thermal / multi-metric graph (or shader style) for the top visualization row.
     fn ui_thermal_graph_block(
         &mut self,
         ui: &mut egui::Ui,
         labels: &HashMap<&str, &str>,
+        units: &HashMap<&str, Option<&str>>,
         plot_h: f32,
     ) {
         self.ui_graph_controls(ui);
@@ -1277,19 +1483,27 @@ impl FanApp {
                     label: labels.get(id.as_str()).copied().unwrap_or(id.as_str()),
                     palette_index: i,
                     history: h,
+                    unit: units.get(id.as_str()).copied().flatten(),
                 })
             })
             .collect();
         let style = self.settings.graph_style;
-        if style == GraphStyle::Classic || !self.shader_backend_available {
-            show_temp_graph(
+        // Shaders only use temperature series for heat signal.
+        let only_temps = series.iter().all(|s| {
+            s.unit.is_none() || s.unit == Some("°C") || s.unit == Some("C")
+        });
+        if style == GraphStyle::Classic || !self.shader_backend_available || !only_temps {
+            show_metric_graph(
                 ui,
                 &series,
                 self.settings.graph_window_minutes,
                 &mut self.graph_axis_max,
+                &mut self.graph_axis_max_secondary,
                 plot_h,
             );
-            if style.is_shader() {
+            if style.is_shader() && !only_temps {
+                ui.small(t!("graph.shader_temps_only_note").to_string());
+            } else if style.is_shader() && !self.shader_backend_available {
                 ui.small(t!("graph.shader_fallback_note").to_string());
             }
         } else {

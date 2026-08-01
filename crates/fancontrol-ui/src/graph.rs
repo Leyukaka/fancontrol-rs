@@ -120,7 +120,7 @@ pub fn ease_toward(current: f32, target: f32, dt_secs: f32, half_life_secs: f32)
 /// window prunes away a hot sample, instead of snapping instantly.
 const AXIS_MAX_HALF_LIFE_SECS: f32 = 1.5;
 
-/// One plotted line on the temperature graph.
+/// One plotted line on the multi-sensor graph.
 pub struct GraphSeries<'a> {
     pub label: &'a str,
     /// Position in the user's ordered sensor selection — used both as the
@@ -128,6 +128,14 @@ pub struct GraphSeries<'a> {
     /// series (index 0) that gets the full glow/fill/head-pulse treatment.
     pub palette_index: usize,
     pub history: &'a TempHistory,
+    /// Unit for dual-axis grouping (`°C`, `W`, `%`, …). Defaults to °C when None.
+    pub unit: Option<&'a str>,
+}
+
+impl GraphSeries<'_> {
+    fn unit_key(&self) -> &str {
+        self.unit.unwrap_or("°C")
+    }
 }
 
 /// Categorical palette for identifying series by color once ≥2 sensors are
@@ -150,16 +158,13 @@ pub fn series_color(palette_index: usize) -> Color32 {
     SERIES_PALETTE[palette_index % SERIES_PALETTE.len()]
 }
 
-/// Draw the temperature graph for 0..N selected sensors in `ui`.
+/// Draw the multi-sensor graph for 0..N selected sensors in `ui`.
 ///
-/// `window_minutes` is used for the X-axis labels (`-Nm` … `now`). `axis_max`
-/// is Y-axis smoothing state owned by the caller (shared across all plotted
-/// series, since they share one axis) so it eases toward a new max instead of
-/// jumping in a single frame. With exactly one series this renders identically
-/// to the original single-CPU-line graph (temp-colored line, full glow, no
-/// legend); with ≥2 series, color instead encodes *which* sensor (a legend
-/// row appears, and only the first/primary series keeps the full glow
-/// treatment so overlapping lines stay legible).
+/// Series are grouped by **unit**. If two units are present (e.g. °C and W),
+/// two stacked plots share the X window (dual-axis style without a third axis).
+/// More than two units: first two unit groups only + a small note.
+///
+/// `axis_max` / `axis_max_secondary` ease Y bounds for primary/secondary groups.
 pub fn show_temp_graph(
     ui: &mut egui::Ui,
     series: &[GraphSeries<'_>],
@@ -167,6 +172,18 @@ pub fn show_temp_graph(
     axis_max: &mut Option<f32>,
     // Explicit plot canvas height (caller sizes the panel; avoid relying on
     // unbounded `available_height()` which can collapse egui_plot to nothing).
+    plot_height: f32,
+) {
+    show_metric_graph(ui, series, window_minutes, axis_max, &mut None, plot_height);
+}
+
+/// Like [`show_temp_graph`] but with optional secondary Y-axis state for dual units.
+pub fn show_metric_graph(
+    ui: &mut egui::Ui,
+    series: &[GraphSeries<'_>],
+    window_minutes: u16,
+    axis_max_primary: &mut Option<f32>,
+    axis_max_secondary: &mut Option<f32>,
     plot_height: f32,
 ) {
     ui.group(|ui| {
@@ -178,12 +195,39 @@ pub fn show_temp_graph(
             ui.colored_label(Color32::GRAY, t!("graph.no_sensors_selected").to_string());
             return;
         }
+
+        // Unit order: prefer °C first, then appearance order.
+        let mut unit_order: Vec<&str> = Vec::new();
+        for s in series {
+            let u = s.unit_key();
+            if !unit_order.iter().any(|x| *x == u) {
+                unit_order.push(u);
+            }
+        }
+        unit_order.sort_by(|a, b| {
+            let rank = |u: &str| if u == "°C" || u.eq_ignore_ascii_case("c") { 0 } else { 1 };
+            rank(a).cmp(&rank(b)).then_with(|| a.cmp(b))
+        });
+        let too_many_units = unit_order.len() > 2;
+        if too_many_units {
+            unit_order.truncate(2);
+            ui.small(t!("graph.too_many_units").to_string());
+        }
+
         if series.len() <= 1 {
             ui.horizontal(|ui| {
                 ui.heading(series.first().map(|s| s.label).unwrap_or(""));
                 ui.weak(format!("({window_minutes}m)"));
-                if let Some(t) = series.first().and_then(|s| s.history.last()) {
-                    ui.colored_label(temp_color(t), format!("{t:.1} °C"));
+                if let Some(s) = series.first() {
+                    if let Some(t) = s.history.last() {
+                        let u = s.unit_key();
+                        let color = if u == "°C" {
+                            temp_color(t)
+                        } else {
+                            series_color(0)
+                        };
+                        ui.colored_label(color, format!("{t:.1} {u}"));
+                    }
                 }
             });
         } else {
@@ -193,11 +237,15 @@ pub fn show_temp_graph(
             });
             ui.horizontal_wrapped(|ui| {
                 for s in series {
+                    if !unit_order.iter().any(|u| *u == s.unit_key()) {
+                        continue;
+                    }
                     let color = series_color(s.palette_index);
+                    let u = s.unit_key();
                     let val = s
                         .history
                         .last()
-                        .map(|t| format!("{t:.1}°"))
+                        .map(|t| format!("{t:.1} {u}"))
                         .unwrap_or_else(|| "—".to_string());
                     ui.label(egui::RichText::new("●").color(color));
                     ui.label(egui::RichText::new(format!("{} {val}", s.label)).weak());
@@ -209,11 +257,12 @@ pub fn show_temp_graph(
             }
         }
 
-        // Header ate some of the budget; keep a usable canvas.
-        let height = (plot_height - 36.0).clamp(80.0, plot_height.max(80.0));
+        let n_plots = unit_order.len().max(1);
+        let header = 40.0;
+        let height_each = ((plot_height - header) / n_plots as f32).clamp(70.0, plot_height.max(70.0));
 
         if series.iter().all(|s| s.history.is_empty()) {
-            ui.allocate_ui(egui::vec2(ui.available_width(), height), |ui| {
+            ui.allocate_ui(egui::vec2(ui.available_width(), height_each), |ui| {
                 ui.centered_and_justified(|ui| {
                     ui.colored_label(Color32::GRAY, t!("graph.loading").to_string());
                 });
@@ -221,74 +270,129 @@ pub fn show_temp_graph(
             return;
         }
 
-        let min_t = 20.0_f32;
-        let target_max = series
-            .iter()
-            .flat_map(|s| s.history.samples.iter().map(|(_, t)| *t))
-            .fold(80.0_f32, f32::max)
-            .max(50.0)
-            + 5.0;
-        let dt = ui.input(|i| i.stable_dt).clamp(0.0, 0.5);
-        let max_t = ease_toward(
-            *axis_max.get_or_insert(target_max),
-            target_max,
-            dt,
-            AXIS_MAX_HALF_LIFE_SECS,
-        );
-        *axis_max = Some(max_t);
-
-        // Shared X epoch = newest sample across all series (not wall-clock paint time).
         let epoch = series
             .iter()
             .filter_map(|s| s.history.last_ts())
             .max()
             .unwrap_or_else(Instant::now);
         let window_mins = f64::from(window_minutes.max(1));
+        let dt = ui.input(|i| i.stable_dt).clamp(0.0, 0.5);
 
-        Plot::new("temp_graph")
-            .height(height)
-            .allow_drag(false)
-            .allow_zoom(false)
-            .allow_scroll(false)
-            .allow_boxed_zoom(false)
-            .include_x(-window_mins)
-            .include_x(0.0)
-            .include_y(f64::from(min_t))
-            .include_y(f64::from(max_t))
-            .x_axis_formatter(|mark, _range| format!("{:.0}m", mark.value))
-            .y_axis_formatter(|mark, _range| format!("{:.0}°C", mark.value))
-            .label_formatter(|hover| match hover {
+        for (plot_i, unit) in unit_order.iter().enumerate() {
+            let group: Vec<&GraphSeries<'_>> = series
+                .iter()
+                .filter(|s| s.unit_key() == *unit)
+                .collect();
+            if group.is_empty() {
+                continue;
+            }
+            let axis_state = if plot_i == 0 {
+                &mut *axis_max_primary
+            } else {
+                &mut *axis_max_secondary
+            };
+            draw_unit_plot(
+                ui,
+                &group,
+                unit,
+                window_mins,
+                height_each,
+                epoch,
+                dt,
+                axis_state,
+                plot_i,
+                series.len() <= 1,
+            );
+        }
+    });
+}
+
+fn draw_unit_plot(
+    ui: &mut egui::Ui,
+    group: &[&GraphSeries<'_>],
+    unit: &str,
+    window_mins: f64,
+    height: f32,
+    epoch: Instant,
+    dt: f32,
+    axis_max: &mut Option<f32>,
+    plot_index: usize,
+    single_series_mode: bool,
+) {
+    let is_temp = unit == "°C" || unit.eq_ignore_ascii_case("c");
+    let (min_y, default_max) = if is_temp {
+        (20.0_f32, 80.0_f32)
+    } else if unit == "%" {
+        (0.0, 100.0)
+    } else {
+        (0.0, 10.0)
+    };
+    let data_max = group
+        .iter()
+        .flat_map(|s| s.history.samples.iter().map(|(_, t)| *t))
+        .fold(default_max * 0.5, f32::max);
+    let target_max = if is_temp {
+        data_max.max(50.0) + 5.0
+    } else if unit == "%" {
+        100.0
+    } else {
+        (data_max * 1.1).max(1.0)
+    };
+    let max_y = ease_toward(
+        *axis_max.get_or_insert(target_max),
+        target_max,
+        dt,
+        AXIS_MAX_HALF_LIFE_SECS,
+    );
+    *axis_max = Some(max_y);
+
+    let unit_owned = unit.to_string();
+    let plot_id = format!("metric_graph_{plot_index}_{unit}");
+    Plot::new(plot_id)
+        .height(height)
+        .allow_drag(false)
+        .allow_zoom(false)
+        .allow_scroll(false)
+        .allow_boxed_zoom(false)
+        .include_x(-window_mins)
+        .include_x(0.0)
+        .include_y(f64::from(min_y))
+        .include_y(f64::from(max_y))
+        .x_axis_formatter(|mark, _range| format!("{:.0}m", mark.value))
+        .y_axis_formatter({
+            let u = unit_owned.clone();
+            move |mark, _range| format!("{:.0}{u}", mark.value)
+        })
+        .label_formatter({
+            let u = unit_owned.clone();
+            move |hover| match hover {
                 egui_plot::HoverPosition::NearDataPoint {
                     plot_name,
                     position,
                     ..
-                } => Some(format!("{plot_name}\n{:.1}°C", position.y)),
+                } => Some(format!("{plot_name}\n{:.1} {u}", position.y)),
                 egui_plot::HoverPosition::Elsewhere { .. } => None,
-            })
-            .show(ui, |plot_ui| {
-                for s in series {
-                    if s.history.is_empty() {
-                        continue;
-                    }
-                    // Single-series keeps today's temp-status coloring; multi-series
-                    // colors by identity instead (reusing temp_color per-series would
-                    // make every hot sensor render identically red, defeating the
-                    // point of picking several).
-                    let color = if series.len() <= 1 {
-                        temp_color(s.history.last().unwrap_or(40.0))
-                    } else {
-                        series_color(s.palette_index)
-                    };
-                    let mut line = Line::new(s.label, s.history.plot_points_since(epoch))
-                        .color(color)
-                        .width(2.0_f32);
-                    if s.palette_index == 0 {
-                        line = line.fill(min_t);
-                    }
-                    plot_ui.line(line);
+            }
+        })
+        .show(ui, |plot_ui| {
+            for s in group {
+                if s.history.is_empty() {
+                    continue;
                 }
-            });
-    });
+                let color = if single_series_mode && is_temp {
+                    temp_color(s.history.last().unwrap_or(40.0))
+                } else {
+                    series_color(s.palette_index)
+                };
+                let mut line = Line::new(s.label, s.history.plot_points_since(epoch))
+                    .color(color)
+                    .width(2.0_f32);
+                if s.palette_index == 0 && is_temp {
+                    line = line.fill(min_y);
+                }
+                plot_ui.line(line);
+            }
+        });
 }
 
 pub fn temp_color(t: f32) -> Color32 {

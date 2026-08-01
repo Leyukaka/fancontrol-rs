@@ -41,7 +41,7 @@ Replace FanControl with a modern, secure, open-source alternative written in Rus
 |------------|--------|
 | Overview sensors + controls | **Done** |
 | Visual curve editor | **Done** (MVP; polish ongoing) |
-| Live temp graph | **Done** (CPU; windows 10/20/30/60 min + sample rate) |
+| Live multi-sensor graph | **Done** (temps; windows 10/20/30/60 min + sample rate); **v0.4** extends to GPU metrics |
 | Dark theme default | **Done** |
 | System tray | **Done** |
 | Rename channels | **Done** (`channel-map.json`) |
@@ -57,13 +57,23 @@ Replace FanControl with a modern, secure, open-source alternative written in Rus
 | Clear unsupported / admin messaging | **Done** / polish ongoing |
 | No silent PWM writes | **Done** (writes on by default with clear UI banner + startup log warning; `--read-only` opts out) |
 
+### Metrics (v0.4.0 — in progress)
+
+| Capability | Status |
+|------------|--------|
+| Graph non-temp series (GPU power/util/clocks/…) | **In progress** |
+| Local SQLite metrics store + CSV export (Options) | **In progress** |
+| OpenTelemetry metrics export (opt-in) | **In progress** (protocol after store) |
+
+See `specs/07-metrics-telemetry.md`.
+
 ## Nice-to-have (v1.x / v2)
 
 - Multi-sensor curves (e.g. max of CPU + GPU)
 - External sensor sources (HWInfo shared memory, more plugins)
 - Scheduling / time-based profiles
 - **In-app auto-update**: download + SHA256 verify + install (manual "check for updates" already shipped — see UI table above)
-- Remote monitoring (optional)
+- Remote monitoring beyond opt-in OTEL (optional)
 - Linux support
 - Authenticode **code signing** (docs ready; not wired)
 

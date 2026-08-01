@@ -27,13 +27,14 @@
 
 | Crate | Responsibility |
 |-------|----------------|
-| `fancontrol-core` | Domain models (Sensor, Control, Curve, Profile), curve eval, channel map, config paths |
+| `fancontrol-core` | Domain models (Sensor, Control, Curve, Profile), curve eval, channel map, config paths, `MetricSample` |
 | `fancontrol-plugins` | Traits (`SensorProvider` / `ControlProvider`), registry, mock, host sensors |
 | `fancontrol-pawnio` | PawnIOLib FFI, LpcIO modules, Super I/O detect, NCT668x EC HWM |
+| `fancontrol-metrics` | Metric sinks: MultiSink, SQLite store, CSV export, OTEL (v0.4) |
 | `fancontrol-ui` | Desktop UI (egui + eframe **0.35**): live view, sliders, curves, graph, options |
 | `fancontrol-rs` | Binary: CLI harness + `ui` subcommand |
 
-Workspace version: **0.1.5** (see root `Cargo.toml`).
+Workspace version: **0.3.5** → **0.4.0** for metrics release (see root `Cargo.toml`).
 
 ## Key design decisions
 
@@ -69,12 +70,15 @@ Hardware (PawnIO) + Host (nvidia-smi / storage IOCTL) + Mock
         ↓
    Sensor / Control values
         ↓
-   Core (curve evaluation, profiles)
+   Core (curve evaluation, profiles) + MetricSample batch
         ↓
    UI (display + user input) / CLI
+   MultiSink → SQLite / OTEL (opt-in, background)
         ↓
    Write queue → ControlProvider::set_duty  (only if allow_hw_write)
 ```
+
+Metrics details: `specs/07-metrics-telemetry.md`.
 
 ## Configuration (Windows)
 

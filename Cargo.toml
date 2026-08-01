@@ -4,13 +4,14 @@ members = [
     "crates/fancontrol-core",
     "crates/fancontrol-plugins",
     "crates/fancontrol-pawnio",
+    "crates/fancontrol-metrics",
     "crates/fancontrol-ui",
     ".",
 ]
 default-members = ["."]
 
 [workspace.package]
-version = "0.3.5"
+version = "0.4.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Leyukaka/fancontrol-rs"
@@ -21,6 +22,7 @@ fancontrol-core = { path = "crates/fancontrol-core" }
 fancontrol-plugins = { path = "crates/fancontrol-plugins" }
 fancontrol-pawnio = { path = "crates/fancontrol-pawnio" }
 fancontrol-ui = { path = "crates/fancontrol-ui" }
+fancontrol-metrics = { path = "crates/fancontrol-metrics" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -86,6 +86,18 @@ pub struct UiSettings {
     /// **Default on** — empty/placeholder when no host GPU is present.
     #[serde(default = "default_true")]
     pub show_gpu_panel: bool,
+    /// Persist metrics to SQLite under the config dir (opt-in).
+    #[serde(default)]
+    pub metrics_store_enabled: bool,
+    #[serde(default = "default_metrics_sample_secs")]
+    pub metrics_sample_secs: u16,
+    #[serde(default = "default_metrics_retention_days")]
+    pub metrics_retention_days: u16,
+    /// OpenTelemetry metrics export (opt-in). Protocol/details in v0.4.
+    #[serde(default)]
+    pub otel_enabled: bool,
+    #[serde(default = "default_otel_endpoint")]
+    pub otel_endpoint: String,
     #[serde(default)]
     pub activity_mode: ActivityMode,
     #[serde(default)]
@@ -104,6 +116,18 @@ fn default_activity_top_n() -> u8 {
 
 fn default_activity_window_minutes() -> u16 {
     10
+}
+
+fn default_metrics_sample_secs() -> u16 {
+    5
+}
+
+fn default_metrics_retention_days() -> u16 {
+    7
+}
+
+fn default_otel_endpoint() -> String {
+    "http://127.0.0.1:4318".into()
 }
 
 fn default_true() -> bool {
@@ -161,6 +185,11 @@ impl Default for UiSettings {
             graph_sensor_ids_seeded: false,
             show_activity_deck: true,
             show_gpu_panel: true,
+            metrics_store_enabled: false,
+            metrics_sample_secs: default_metrics_sample_secs(),
+            metrics_retention_days: default_metrics_retention_days(),
+            otel_enabled: false,
+            otel_endpoint: default_otel_endpoint(),
             activity_mode: ActivityMode::default(),
             activity_sort: ProcessSort::default(),
             activity_top_n: default_activity_top_n(),

@@ -44,7 +44,7 @@ impl std::fmt::Display for ControlId {
 }
 
 /// Kind of sensor reading.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SensorKind {
     Temperature,
@@ -54,6 +54,52 @@ pub enum SensorKind {
     /// Utilization / load percentage (e.g. host CPU load 0–100).
     Load,
     Other,
+}
+
+impl SensorKind {
+    /// Stable string for SQLite / OTEL attributes.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Temperature => "temperature",
+            Self::FanRpm => "fan_rpm",
+            Self::Voltage => "voltage",
+            Self::Power => "power",
+            Self::Load => "load",
+            Self::Other => "other",
+        }
+    }
+}
+
+/// One timestamped sensor reading for graphing, local store, or OTEL export.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetricSample {
+    pub sensor_id: String,
+    pub label: String,
+    pub kind: SensorKind,
+    pub unit: Option<String>,
+    pub value: f64,
+    /// Unix epoch milliseconds.
+    pub ts_ms: i64,
+}
+
+impl MetricSample {
+    pub fn new(
+        sensor_id: impl Into<String>,
+        label: impl Into<String>,
+        kind: SensorKind,
+        unit: Option<String>,
+        value: f64,
+        ts_ms: i64,
+    ) -> Self {
+        Self {
+            sensor_id: sensor_id.into(),
+            label: label.into(),
+            kind,
+            unit,
+            value,
+            ts_ms,
+        }
+    }
 }
 
 /// Static description of a sensor (does not hold live values).

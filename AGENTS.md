@@ -34,9 +34,10 @@ Optional maintainer-only preferences may live in an untracked `AGENTS.local.md` 
 
 | Crate | Role |
 |-------|------|
-| `fancontrol-core` | Domain: Sensor/Control/Curve/Profile, curve eval, profile JSON |
+| `fancontrol-core` | Domain: Sensor/Control/Curve/Profile, curve eval, profile JSON, `MetricSample` |
 | `fancontrol-plugins` | `SensorProvider` / `ControlProvider` traits, mock + host sensors |
 | `fancontrol-pawnio` | PawnIO backend (FFI + LpcIO + NCT668x EC) |
+| `fancontrol-metrics` | Metric sinks: MultiSink, SQLite, CSV export, OTEL (v0.4) |
 | `fancontrol-ui` | Desktop UI **egui + eframe** (live, sliders, curve editor, graph) |
 | `fancontrol-rs` | Binary: CLI + `ui` |
 
@@ -44,7 +45,7 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 
 ## Status (keep updated)
 
-- Product line: **v0.3.5** (NVIDIA multi-metric host GPU + GPU detail panel shared with graph; B550 banked NCT + CPU-like curves; Activity deck).
+- Product line: **v0.4.0** (in progress): metrics pipeline (graph multi-kind, SQLite+CSV, OTEL opt-in) on top of v0.3.5 GPU multi-metric + panel.
 - Phase 0 foundation: **done**.
 - Phase 1: PawnIOLib FFI + LpcIO + **NCT668x EC HWM** (validated class id `0xD5` rev `0x92` @ `0x0A20`) + **banked NCT** (ROG B550-A `0xD4` validated reads+writes) + control loop + CLI.
 - Elevation required for `pawnio_open` (Administrator). **PawnIO is a prerequisite** (not bundled) — UI shows a startup dialog if missing / not openable.
@@ -61,13 +62,14 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 
 ## Next priorities (order)
 
-1. Broader chip validation (ITE IT87 still experimental; more banked NCT boards).
-2. Code signing (SmartScreen) — see `docs/SIGNING_AND_DISTRIBUTION.md`.
-3. Auto-update: download + SHA256 verify + install (manual check already done) — see `docs/SECURITY.md`.
-4. AMD/Intel GPU sensors — blocked on hardware; see `docs/GPU_VENDOR_APIS.md`. Optional later: NVML in-process, experimental NvAPI Hot Spot.
-5. RGB (future — not Super I/O).
-6. SSD/NVMe temps: validated under load on owner hardware (device_prop live); EVO SATA may report no temp.
-7. Mock is **opt-in** (`--mock`); product default is hardware/host only.
+1. **v0.4.0 metrics** — graph multi-kind (GPU power/util/…), SQLite+CSV store, OTEL export; see `specs/07-metrics-telemetry.md`.
+2. Broader chip validation (ITE IT87 still experimental; more banked NCT boards).
+3. Code signing (SmartScreen) — see `docs/SIGNING_AND_DISTRIBUTION.md`.
+4. Auto-update: download + SHA256 verify + install (manual check already done) — see `docs/SECURITY.md`.
+5. AMD/Intel GPU sensors — blocked on hardware; see `docs/GPU_VENDOR_APIS.md`. Optional later: NVML in-process, experimental NvAPI Hot Spot.
+6. RGB (future — not Super I/O).
+7. SSD/NVMe temps: validated under load on owner hardware (device_prop live); EVO SATA may report no temp.
+8. Mock is **opt-in** (`--mock`); product default is hardware/host only.
 
 ## Safety product rules
 
@@ -98,5 +100,6 @@ cargo run -- --no-hw ui
 | `specs/04-ui.md` | UI (egui) |
 | `specs/05-plugins.md` | Plugin traits |
 | `specs/06-roadmap.md` | Phases |
+| `specs/07-metrics-telemetry.md` | Metrics store, graph multi-kind, OTEL |
 
 Also read: `CONTRIBUTING.md`, `docs/SUPPORTED_HARDWARE.md`.

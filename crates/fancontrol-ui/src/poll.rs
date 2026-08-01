@@ -15,6 +15,8 @@ pub struct Snapshot {
     pub controls: Vec<ControlSnap>,
     /// Aggregated host GPU metrics for the GPU detail panel (nvidia-smi multi-metric).
     pub gpus: Vec<GpuSnap>,
+    /// All series eligible for the multi-sensor graph (temps + GPU power/util/…).
+    pub plottable: Vec<PlottableSensor>,
     pub cpu_temp: Option<f64>,
     /// Sensor id behind `cpu_temp`, so the UI can seed a sensor picker with it.
     pub cpu_temp_id: Option<String>,
@@ -24,6 +26,16 @@ pub struct Snapshot {
     pub gpu_temp_id: Option<String>,
     pub error: Option<String>,
     pub tick: u64,
+}
+
+/// One live value that can be selected on the graph (any unit).
+#[derive(Debug, Clone)]
+pub struct PlottableSensor {
+    pub id: String,
+    pub label: String,
+    pub value: f64,
+    pub kind: SensorKind,
+    pub unit: Option<String>,
 }
 
 /// One discrete GPU as assembled from host sensor ids (`host.gpu{N}.*`).
@@ -114,6 +126,7 @@ fn take_snapshot(
     // id → value for host GPU metrics (also mock.gpu* for UI demos).
     let mut host_gpu_vals: HashMap<String, f64> = HashMap::new();
     let mut host_gpu_names: HashMap<u32, String> = HashMap::new();
+    let mut plottable: Vec<PlottableSensor> = Vec::new();
 
     // Fast path: one HWM bus transaction for all pawnio channels.
     // Fan/duty maps keyed by (device_index, slot) so multi-chip boards don't clobber.
@@ -160,7 +173,14 @@ fn take_snapshot(
                                 cpu_temp = Some(t);
                                 cpu_temp_id = Some(id.to_string());
                             }
-                            temps.push((id.to_string(), label, t));
+                            temps.push((id.to_string(), label.clone(), t));
+                            plottable.push(PlottableSensor {
+                                id: id.to_string(),
+                                label,
+                                value: t,
+                                kind: SensorKind::Temperature,
+                                unit: Some("°C".into()),
+                            });
                             continue;
                         }
                     }
@@ -201,21 +221,41 @@ fn take_snapshot(
                             }
                         }
                         // Skip `.temp.core` duplicate of the short alias in Temps/graph picker.
-                        if id.ends_with(".temp.core") {
-                            // still in host_gpu_vals; not listed separately
-                        } else {
-                            temps.push((id.to_string(), label, v));
+                        if !id.ends_with(".temp.core") {
+                            temps.push((id.to_string(), label.clone(), v));
+                            plottable.push(PlottableSensor {
+                                id: id.to_string(),
+                                label,
+                                value: v,
+                                kind: SensorKind::Temperature,
+                                unit: s.unit.clone().or_else(|| Some("°C".into())),
+                            });
                         }
                     }
                     SensorKind::FanRpm if v >= 0.0 && !v.is_nan() => {
                         let label = map.sensor_name(id, &s.name).to_string();
                         fans.push((id.to_string(), label, v));
                     }
-                    // Power / Load / Other: GPU panel only (not Temps/Fans columns).
+                    // Power / Load / Other: plottable for graph + GPU panel assembly.
                     SensorKind::Power
                     | SensorKind::Load
                     | SensorKind::Voltage
-                    | SensorKind::Other => {}
+                    | SensorKind::Other => {
+                        if v.is_finite()
+                            && (id.starts_with("host.gpu")
+                                || id.starts_with("mock.gpu")
+                                || s.kind == SensorKind::Power)
+                        {
+                            let label = map.sensor_name(id, &s.name).to_string();
+                            plottable.push(PlottableSensor {
+                                id: id.to_string(),
+                                label,
+                                value: v,
+                                kind: s.kind,
+                                unit: s.unit.clone(),
+                            });
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -270,12 +310,14 @@ fn take_snapshot(
     fans.sort_by(|a, b| a.0.cmp(&b.0));
     ctrl_snaps.sort_by(|a, b| a.id.cmp(&b.id));
     temps.sort_by(|a, b| a.1.cmp(&b.1));
+    plottable.sort_by(|a, b| a.label.cmp(&b.label));
 
     Snapshot {
         temps,
         fans,
         controls: ctrl_snaps,
         gpus,
+        plottable,
         cpu_temp,
         cpu_temp_id,
         gpu_temp_id,

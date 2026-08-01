@@ -1,6 +1,6 @@
 # Roadmap
 
-Last aligned with product reality: **v0.3.3** (2026-07): banked NCT B550-A validated, curve CPU-like only, clamp-safe dashboard, Activity deck, collapsible columns.
+Last aligned with product reality: **v0.3.5** shipped (GPU multi-metric + panel); **v0.4.0** target = metrics pipeline (graph multi-kind, SQLite+CSV, OTEL). See `specs/07-metrics-telemetry.md`.
 
 ## Phase 0 — Foundation
 
@@ -62,19 +62,31 @@ Last aligned with product reality: **v0.3.3** (2026-07): banked NCT B550-A valid
 - [ ] AMD/Intel GPU sensors — see `docs/GPU_VENDOR_APIS.md`
 - [ ] Optional: NVML in-process; experimental NvAPI Hot Spot
 
+## Phase 5 — Metrics & telemetry (v0.4.0)
+
+Spec: `specs/07-metrics-telemetry.md`.
+
+- [ ] `MetricSample` + `MetricSink` / MultiSink (`fancontrol-metrics`)
+- [ ] Graph multi-kind (GPU power/util/clocks/VRAM/fan) + dual Y axis
+- [ ] Local SQLite store (opt-in Options, retention, sample interval)
+- [ ] Manual CSV export from store
+- [ ] OpenTelemetry metrics export (opt-in; protocol after store; prefer OTLP/HTTP)
+- [ ] Docs `docs/METRICS_AND_OTEL.md` + Options i18n
+
 ## Next priorities (order)
 
-1. Broader chip validation (community logs + experimental paths)
-2. SSD/NVMe temp validation on real hardware
-3. Code signing when ready for wider audience
-4. Auto-update download + SHA256
-5. Mock opt-in for shipped product defaults (if desired)
-6. RGB remains **future / out of Super I/O fan HWM scope**
+1. **v0.4.0 metrics** (graph GPU series, SQLite+CSV, OTEL) — current focus
+2. Broader chip validation (community logs + experimental paths)
+3. SSD/NVMe temp validation on real hardware
+4. Code signing when ready for wider audience
+5. Auto-update download + SHA256
+6. Multi-sensor curves (max CPU+GPU)
+7. RGB remains **future / out of Super I/O fan HWM scope**
 
 ## Out of scope for v1
 
 - Linux support
 - RGB as part of Super I/O fan control
-- Cloud / remote control
+- Cloud / remote control (OTEL to *user* collector is opt-in, not project cloud)
 - Bundling PawnIO inside the app binary
 - Claiming signed binaries before signing is wired
