@@ -7,7 +7,9 @@ mod multi;
 mod sqlite;
 
 pub use multi::{MultiSink, NullSink};
-pub use sqlite::{default_metrics_db_path, CsvExportOptions, SqliteMetricsStore, SqliteStoreConfig};
+pub use sqlite::{
+    default_metrics_db_path, CsvExportOptions, SqliteMetricsStore, SqliteStoreConfig,
+};
 
 use fancontrol_core::MetricSample;
 

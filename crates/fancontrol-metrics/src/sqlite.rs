@@ -233,7 +233,9 @@ fn export_csv(conn: &Connection, path: &Path) -> Result<usize, String> {
     writeln!(file, "ts_ms,sensor_id,value,kind,unit").map_err(|e| e.to_string())?;
 
     let mut stmt = conn
-        .prepare("SELECT ts_ms, sensor_id, value, kind, unit FROM samples ORDER BY ts_ms, sensor_id")
+        .prepare(
+            "SELECT ts_ms, sensor_id, value, kind, unit FROM samples ORDER BY ts_ms, sensor_id",
+        )
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map([], |row| {

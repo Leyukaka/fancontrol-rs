@@ -954,9 +954,8 @@ impl eframe::App for FanApp {
                         dirty = true;
                         if self.settings.metrics_store_enabled {
                             self.metrics_sink = SqliteMetricsStore::spawn(SqliteStoreConfig {
-                                path: default_metrics_db_path().unwrap_or_else(|| {
-                                    std::path::PathBuf::from("metrics.sqlite")
-                                }),
+                                path: default_metrics_db_path()
+                                    .unwrap_or_else(|| std::path::PathBuf::from("metrics.sqlite")),
                                 retention_days: u32::from(
                                     self.settings.metrics_retention_days.max(1),
                                 ),
@@ -1489,9 +1488,9 @@ impl FanApp {
             .collect();
         let style = self.settings.graph_style;
         // Shaders only use temperature series for heat signal.
-        let only_temps = series.iter().all(|s| {
-            s.unit.is_none() || s.unit == Some("°C") || s.unit == Some("C")
-        });
+        let only_temps = series
+            .iter()
+            .all(|s| s.unit.is_none() || s.unit == Some("°C") || s.unit == Some("C"));
         if style == GraphStyle::Classic || !self.shader_backend_available || !only_temps {
             show_metric_graph(
                 ui,

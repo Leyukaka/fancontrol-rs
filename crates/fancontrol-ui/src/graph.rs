@@ -205,7 +205,13 @@ pub fn show_metric_graph(
             }
         }
         unit_order.sort_by(|a, b| {
-            let rank = |u: &str| if u == "°C" || u.eq_ignore_ascii_case("c") { 0 } else { 1 };
+            let rank = |u: &str| {
+                if u == "°C" || u.eq_ignore_ascii_case("c") {
+                    0
+                } else {
+                    1
+                }
+            };
             rank(a).cmp(&rank(b)).then_with(|| a.cmp(b))
         });
         let too_many_units = unit_order.len() > 2;
@@ -259,7 +265,8 @@ pub fn show_metric_graph(
 
         let n_plots = unit_order.len().max(1);
         let header = 40.0;
-        let height_each = ((plot_height - header) / n_plots as f32).clamp(70.0, plot_height.max(70.0));
+        let height_each =
+            ((plot_height - header) / n_plots as f32).clamp(70.0, plot_height.max(70.0));
 
         if series.iter().all(|s| s.history.is_empty()) {
             ui.allocate_ui(egui::vec2(ui.available_width(), height_each), |ui| {
@@ -279,10 +286,8 @@ pub fn show_metric_graph(
         let dt = ui.input(|i| i.stable_dt).clamp(0.0, 0.5);
 
         for (plot_i, unit) in unit_order.iter().enumerate() {
-            let group: Vec<&GraphSeries<'_>> = series
-                .iter()
-                .filter(|s| s.unit_key() == *unit)
-                .collect();
+            let group: Vec<&GraphSeries<'_>> =
+                series.iter().filter(|s| s.unit_key() == *unit).collect();
             if group.is_empty() {
                 continue;
             }
