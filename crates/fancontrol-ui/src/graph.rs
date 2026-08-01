@@ -515,7 +515,7 @@ mod tests {
     fn power_y_max_uses_gpu_limit_not_huge_empty_scale() {
         // Idle ~40 W on a 360 W card → axis near limit, not 1000.
         let y = power_y_max(40.0, Some(360.0));
-        assert!(y >= 360.0 && y <= 400.0, "got {y}");
+        assert!((360.0..=400.0).contains(&y), "got {y}");
         // No limit: data-driven.
         let y2 = power_y_max(40.0, None);
         assert!((y2 - 42.0).abs() < 1.0, "got {y2}");
