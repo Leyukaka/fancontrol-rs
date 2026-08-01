@@ -31,3 +31,12 @@ jobs:
         run: cargo test --workspace
       - name: Build release
         run: cargo build --workspace --release
+      # So maintainers can download a Windows exe from the Actions run when
+      # local cargo is blocked (e.g. AppLocker) — not a published release.
+      - name: Upload Windows exe
+        uses: actions/upload-artifact@v7
+        with:
+          name: fancontrol-rs-windows-ci
+          path: target/release/fancontrol-rs.exe
+          if-no-files-found: error
+          retention-days: 14
