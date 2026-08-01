@@ -39,24 +39,9 @@ fn show_gpu_card(ui: &mut egui::Ui, gpu: &GpuSnap) {
     // Temperature row: Core | Hot Spot | Memory
     ui.add_space(4.0);
     ui.horizontal(|ui| {
-        temp_chip(
-            ui,
-            t!("gpu.core").to_string(),
-            gpu.temp_core,
-            true,
-        );
-        temp_chip(
-            ui,
-            t!("gpu.hotspot").to_string(),
-            gpu.temp_hotspot,
-            false,
-        );
-        temp_chip(
-            ui,
-            t!("gpu.memory_temp").to_string(),
-            gpu.temp_memory,
-            true,
-        );
+        temp_chip(ui, t!("gpu.core").to_string(), gpu.temp_core, true);
+        temp_chip(ui, t!("gpu.hotspot").to_string(), gpu.temp_hotspot, false);
+        temp_chip(ui, t!("gpu.memory_temp").to_string(), gpu.temp_memory, true);
     });
     if gpu.temp_hotspot.is_none() {
         ui.small(t!("gpu.hotspot_unavailable").to_string())
@@ -150,7 +135,11 @@ fn show_gpu_card(ui: &mut egui::Ui, gpu: &GpuSnap) {
             ui.label(t!("gpu.fan").to_string());
             ui.label(RichText::new(format!("{f:.0}%")).monospace());
         });
-        metric_bar(ui, (f / 100.0).clamp(0.0, 1.0) as f32, Color32::from_rgb(100, 180, 220));
+        metric_bar(
+            ui,
+            (f / 100.0).clamp(0.0, 1.0) as f32,
+            Color32::from_rgb(100, 180, 220),
+        );
     }
 }
 

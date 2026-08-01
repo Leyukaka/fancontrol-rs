@@ -249,7 +249,11 @@ fn parse_nvidia_smi_csv(text: &str) -> Vec<SensorRow> {
         let prefix = format!("host.gpu{idx}");
 
         // Helpers to push optional numeric fields.
-        let mut push = |suffix: &str, display: &str, raw: Option<&str>, kind: SensorKind, unit: Option<&'static str>| {
+        let mut push = |suffix: &str,
+                        display: &str,
+                        raw: Option<&str>,
+                        kind: SensorKind,
+                        unit: Option<&'static str>| {
             let Some(raw) = raw else {
                 return;
             };

@@ -187,12 +187,9 @@ fn take_snapshot(
                     SensorKind::Temperature if v != 0.0 || id.starts_with("host.gpu") => {
                         let label = map.sensor_name(id, &s.name).to_string();
                         // Prefer the short alias `host.gpu{N}` for graph seed.
-                        let is_alias = id
-                            .strip_prefix("host.gpu")
-                            .is_some_and(|rest| {
-                                !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit())
-                            })
-                            || id == "mock.gpu_temp";
+                        let is_alias = id.strip_prefix("host.gpu").is_some_and(|rest| {
+                            !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit())
+                        }) || id == "mock.gpu_temp";
                         if gpu_temp_id.is_none() && is_alias {
                             gpu_temp_id = Some(id.to_string());
                             if let Some(rest) = id.strip_prefix("host.gpu") {
@@ -286,10 +283,7 @@ fn take_snapshot(
 }
 
 /// Build [`GpuSnap`] entries from flat host/mock sensor values.
-fn assemble_gpu_snaps(
-    vals: &HashMap<String, f64>,
-    names: &HashMap<u32, String>,
-) -> Vec<GpuSnap> {
+fn assemble_gpu_snaps(vals: &HashMap<String, f64>, names: &HashMap<u32, String>) -> Vec<GpuSnap> {
     // Discover GPU indices from any host.gpu{N}… id.
     let mut indices: Vec<u32> = vals
         .keys()
@@ -310,10 +304,7 @@ fn assemble_gpu_snaps(
             let name = names
                 .get(&index)
                 .cloned()
-                .or_else(|| {
-                    vals.get(&prefix)
-                        .map(|_| format!("GPU {index}"))
-                })
+                .or_else(|| vals.get(&prefix).map(|_| format!("GPU {index}")))
                 .unwrap_or_else(|| format!("GPU {index}"));
             GpuSnap {
                 index,
