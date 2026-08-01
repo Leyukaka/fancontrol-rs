@@ -1009,7 +1009,7 @@ impl eframe::App for FanApp {
                             .clicked()
                         {
                             if let Some(store) = &self.metrics_sink {
-                                if let Some(dir) = fancontrol_core::config_dir().ok() {
+                                if let Ok(dir) = fancontrol_core::config_dir() {
                                     let exports = dir.join("exports");
                                     let _ = std::fs::create_dir_all(&exports);
                                     let name = format!(

@@ -240,21 +240,20 @@ fn take_snapshot(
                     SensorKind::Power
                     | SensorKind::Load
                     | SensorKind::Voltage
-                    | SensorKind::Other => {
+                    | SensorKind::Other
                         if v.is_finite()
                             && (id.starts_with("host.gpu")
                                 || id.starts_with("mock.gpu")
-                                || s.kind == SensorKind::Power)
-                        {
-                            let label = map.sensor_name(id, &s.name).to_string();
-                            plottable.push(PlottableSensor {
-                                id: id.to_string(),
-                                label,
-                                value: v,
-                                kind: s.kind,
-                                unit: s.unit.clone(),
-                            });
-                        }
+                                || s.kind == SensorKind::Power) =>
+                    {
+                        let label = map.sensor_name(id, &s.name).to_string();
+                        plottable.push(PlottableSensor {
+                            id: id.to_string(),
+                            label,
+                            value: v,
+                            kind: s.kind,
+                            unit: s.unit.clone(),
+                        });
                     }
                     _ => {}
                 }

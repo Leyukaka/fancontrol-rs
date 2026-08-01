@@ -164,20 +164,7 @@ pub fn series_color(palette_index: usize) -> Color32 {
 /// two stacked plots share the X window (dual-axis style without a third axis).
 /// More than two units: first two unit groups only + a small note.
 ///
-/// `axis_max` / `axis_max_secondary` ease Y bounds for primary/secondary groups.
-pub fn show_temp_graph(
-    ui: &mut egui::Ui,
-    series: &[GraphSeries<'_>],
-    window_minutes: u16,
-    axis_max: &mut Option<f32>,
-    // Explicit plot canvas height (caller sizes the panel; avoid relying on
-    // unbounded `available_height()` which can collapse egui_plot to nothing).
-    plot_height: f32,
-) {
-    show_metric_graph(ui, series, window_minutes, axis_max, &mut None, plot_height);
-}
-
-/// Like [`show_temp_graph`] but with optional secondary Y-axis state for dual units.
+/// `axis_max_primary` / `axis_max_secondary` ease Y bounds for the two unit groups.
 pub fn show_metric_graph(
     ui: &mut egui::Ui,
     series: &[GraphSeries<'_>],
@@ -200,7 +187,7 @@ pub fn show_metric_graph(
         let mut unit_order: Vec<&str> = Vec::new();
         for s in series {
             let u = s.unit_key();
-            if !unit_order.iter().any(|x| *x == u) {
+            if !unit_order.contains(&u) {
                 unit_order.push(u);
             }
         }
@@ -296,34 +283,48 @@ pub fn show_metric_graph(
             } else {
                 &mut *axis_max_secondary
             };
-            draw_unit_plot(
+            draw_unit_plot(UnitPlotArgs {
                 ui,
-                &group,
+                group: &group,
                 unit,
                 window_mins,
-                height_each,
+                height: height_each,
                 epoch,
                 dt,
-                axis_state,
-                plot_i,
-                series.len() <= 1,
-            );
+                axis_max: axis_state,
+                plot_index: plot_i,
+                single_series_mode: series.len() <= 1,
+            });
         }
     });
 }
 
-fn draw_unit_plot(
-    ui: &mut egui::Ui,
-    group: &[&GraphSeries<'_>],
-    unit: &str,
+struct UnitPlotArgs<'a, 'b> {
+    ui: &'a mut egui::Ui,
+    group: &'a [&'b GraphSeries<'b>],
+    unit: &'a str,
     window_mins: f64,
     height: f32,
     epoch: Instant,
     dt: f32,
-    axis_max: &mut Option<f32>,
+    axis_max: &'a mut Option<f32>,
     plot_index: usize,
     single_series_mode: bool,
-) {
+}
+
+fn draw_unit_plot(args: UnitPlotArgs<'_, '_>) {
+    let UnitPlotArgs {
+        ui,
+        group,
+        unit,
+        window_mins,
+        height,
+        epoch,
+        dt,
+        axis_max,
+        plot_index,
+        single_series_mode,
+    } = args;
     let is_temp = unit == "°C" || unit.eq_ignore_ascii_case("c");
     let (min_y, default_max) = if is_temp {
         (20.0_f32, 80.0_f32)
