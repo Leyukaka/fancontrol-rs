@@ -128,6 +128,17 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
     let mut load_history = TempHistory::default();
     load_history.configure(settings.activity_window_minutes, 1);
 
+    let metrics_sink = if settings.metrics_store_enabled {
+        SqliteMetricsStore::spawn(SqliteStoreConfig {
+            path: default_metrics_db_path()
+                .unwrap_or_else(|| std::path::PathBuf::from("metrics.sqlite")),
+            retention_days: u32::from(settings.metrics_retention_days.max(1)),
+            flush_ms: 500,
+        })
+    } else {
+        None
+    };
+
     let app = FanApp {
         options,
         map,
@@ -145,16 +156,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         histories: HashMap::new(),
         graph_axis_max: None,
         graph_axis_max_secondary: None,
-        metrics_sink: if settings.metrics_store_enabled {
-            SqliteMetricsStore::spawn(SqliteStoreConfig {
-                path: default_metrics_db_path()
-                    .unwrap_or_else(|| std::path::PathBuf::from("metrics.sqlite")),
-                retention_days: u32::from(settings.metrics_retention_days.max(1)),
-                flush_ms: 500,
-            })
-        } else {
-            None
-        },
+        metrics_sink,
         last_metrics_record: Instant::now() - Duration::from_secs(60),
         load_history,
         activity_filter: String::new(),
