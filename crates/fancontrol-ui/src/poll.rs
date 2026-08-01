@@ -29,6 +29,8 @@ pub struct Snapshot {
 /// One discrete GPU as assembled from host sensor ids (`host.gpu{N}.*`).
 #[derive(Debug, Clone, Default)]
 pub struct GpuSnap {
+    /// Adapter index from nvidia-smi (for multi-GPU labels / future UI).
+    #[allow(dead_code)]
     pub index: u32,
     /// Friendly name from the alias sensor (`GPU 0 (RTX …)`).
     pub name: String,

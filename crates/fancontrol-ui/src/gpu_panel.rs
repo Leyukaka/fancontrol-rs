@@ -179,7 +179,7 @@ fn temp_chip(ui: &mut egui::Ui, label: String, value: Option<f64>, colorize: boo
 
 fn metric_bar(ui: &mut egui::Ui, frac: f32, color: Color32) {
     let frac = frac.clamp(0.0, 1.0);
-    let desired = egui::vec2(ui.available_width().min(280.0).max(80.0), 8.0);
+    let desired = egui::vec2(ui.available_width().clamp(80.0, 280.0), 8.0);
     let (rect, _) = ui.allocate_exact_size(desired, egui::Sense::hover());
     let painter = ui.painter();
     painter.rect_filled(rect, 2.0, Color32::from_gray(40));
