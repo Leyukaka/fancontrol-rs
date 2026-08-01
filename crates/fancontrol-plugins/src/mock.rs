@@ -241,10 +241,13 @@ mod tests {
     #[test]
     fn mock_lists_and_reads() {
         let m = MockProvider::new();
-        assert_eq!(m.sensors().len(), 4);
+        // 2 temps (CPU/GPU) + 9 GPU metrics + 2 fan RPM
+        assert_eq!(m.sensors().len(), 13);
         assert_eq!(m.controls().len(), 2);
         let t = m.read(&SensorId::new("mock.cpu_temp")).unwrap();
         assert!((t - 42.0).abs() < f64::EPSILON);
+        let p = m.read(&SensorId::new("mock.gpu_power")).unwrap();
+        assert!((p - 55.0).abs() < f64::EPSILON);
     }
 
     #[test]
