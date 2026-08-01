@@ -23,3 +23,9 @@ ureq = "3.3.0"
 rust-i18n = "4"
 sys-locale = "0.3"
 bytemuck = { version = "1", features = ["derive"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_Registry",
+] }

@@ -88,6 +88,7 @@ Unsigned Windows tools that touch **kernel I/O (PawnIO)** and spawn **host helpe
 | Spawn `nvidia-smi` | Optional GPU multi-metric (read-only) |
 | Write local SQLite metrics DB | Opt-in metrics store under `%APPDATA%` (v0.4) |
 | HTTP to user OTEL endpoint | Opt-in metrics export only; no project cloud (v0.4) |
+| Write HKCU Run value | Opt-in "Start with Windows" (current user only; no admin) |
 | Open `\\.\PhysicalDriveN` + `DeviceIoControl` | Optional SSD/HDD temperature (**no PowerShell**; Win10+ storage stack) |
 | Run elevated | Required for `pawnio_open` on many systems |
 

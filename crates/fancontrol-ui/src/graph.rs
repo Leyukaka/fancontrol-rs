@@ -158,6 +158,26 @@ pub fn series_color(palette_index: usize) -> Color32 {
     SERIES_PALETTE[palette_index % SERIES_PALETTE.len()]
 }
 
+/// Y-axis target max for power series (watts).
+///
+/// Prefers the GPU package **power limit** when known so the scale matches the
+/// card (e.g. ~360 W on RTX 5080) instead of a huge empty range.
+pub fn power_y_max(data_max: f32, power_limit_ceiling: Option<f32>) -> f32 {
+    let data_driven = (data_max * 1.05).max(10.0);
+    match power_limit_ceiling.filter(|c| c.is_finite() && *c > 1.0) {
+        Some(limit) => {
+            // Keep limit as the soft ceiling; if samples overshoot slightly, grow a little.
+            let overshoot = if data_max > limit {
+                data_max * 1.02
+            } else {
+                0.0
+            };
+            limit.max(overshoot).max(data_driven.min(limit * 1.05))
+        }
+        None => data_driven,
+    }
+}
+
 /// Draw the multi-sensor graph for 0..N selected sensors in `ui`.
 ///
 /// Series are grouped by **unit**. If two units are present (e.g. °C and W),
@@ -165,6 +185,7 @@ pub fn series_color(palette_index: usize) -> Color32 {
 /// More than two units: first two unit groups only + a small note.
 ///
 /// `axis_max_primary` / `axis_max_secondary` ease Y bounds for the two unit groups.
+/// `power_axis_ceiling` (watts) is typically the GPU `power.limit` when available.
 pub fn show_metric_graph(
     ui: &mut egui::Ui,
     series: &[GraphSeries<'_>],
@@ -172,6 +193,7 @@ pub fn show_metric_graph(
     axis_max_primary: &mut Option<f32>,
     axis_max_secondary: &mut Option<f32>,
     plot_height: f32,
+    power_axis_ceiling: Option<f32>,
 ) {
     ui.group(|ui| {
         if series.is_empty() {
@@ -294,6 +316,7 @@ pub fn show_metric_graph(
                 axis_max: axis_state,
                 plot_index: plot_i,
                 single_series_mode: series.len() <= 1,
+                power_axis_ceiling,
             });
         }
     });
@@ -310,6 +333,7 @@ struct UnitPlotArgs<'a, 'b> {
     axis_max: &'a mut Option<f32>,
     plot_index: usize,
     single_series_mode: bool,
+    power_axis_ceiling: Option<f32>,
 }
 
 fn draw_unit_plot(args: UnitPlotArgs<'_, '_>) {
@@ -324,12 +348,16 @@ fn draw_unit_plot(args: UnitPlotArgs<'_, '_>) {
         axis_max,
         plot_index,
         single_series_mode,
+        power_axis_ceiling,
     } = args;
     let is_temp = unit == "°C" || unit.eq_ignore_ascii_case("c");
+    let is_power = unit == "W" || unit.eq_ignore_ascii_case("w");
     let (min_y, default_max) = if is_temp {
         (20.0_f32, 80.0_f32)
     } else if unit == "%" {
         (0.0, 100.0)
+    } else if is_power {
+        (0.0, 50.0)
     } else {
         (0.0, 10.0)
     };
@@ -341,6 +369,8 @@ fn draw_unit_plot(args: UnitPlotArgs<'_, '_>) {
         data_max.max(50.0) + 5.0
     } else if unit == "%" {
         100.0
+    } else if is_power {
+        power_y_max(data_max, power_axis_ceiling)
     } else {
         (data_max * 1.1).max(1.0)
     };
@@ -479,6 +509,19 @@ mod tests {
         assert!(up > 50.0 && up < 90.0);
         let down = ease_toward(90.0, 50.0, 0.1, 1.5);
         assert!(down < 90.0 && down > 50.0);
+    }
+
+    #[test]
+    fn power_y_max_uses_gpu_limit_not_huge_empty_scale() {
+        // Idle ~40 W on a 360 W card → axis near limit, not 1000.
+        let y = power_y_max(40.0, Some(360.0));
+        assert!(y >= 360.0 && y <= 400.0, "got {y}");
+        // No limit: data-driven.
+        let y2 = power_y_max(40.0, None);
+        assert!((y2 - 42.0).abs() < 1.0, "got {y2}");
+        // Limit ignored when garbage.
+        let y3 = power_y_max(50.0, Some(0.0));
+        assert!(y3 < 100.0, "got {y3}");
     }
 
     #[test]

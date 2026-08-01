@@ -98,6 +98,12 @@ pub struct UiSettings {
     pub otel_enabled: bool,
     #[serde(default = "default_otel_endpoint")]
     pub otel_endpoint: String,
+    /// Launch at Windows user logon (HKCU Run). Opt-in; also set from first-run dialog.
+    #[serde(default)]
+    pub launch_on_startup: bool,
+    /// First-run "Start with Windows?" dialog already shown (Yes/No/Later all set true).
+    #[serde(default)]
+    pub startup_prompt_shown: bool,
     #[serde(default)]
     pub activity_mode: ActivityMode,
     #[serde(default)]
@@ -190,6 +196,8 @@ impl Default for UiSettings {
             metrics_retention_days: default_metrics_retention_days(),
             otel_enabled: false,
             otel_endpoint: default_otel_endpoint(),
+            launch_on_startup: false,
+            startup_prompt_shown: false,
             activity_mode: ActivityMode::default(),
             activity_sort: ProcessSort::default(),
             activity_top_n: default_activity_top_n(),

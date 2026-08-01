@@ -139,6 +139,22 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         None
     };
 
+    // Keep HKCU Run path in sync if the user already opted in.
+    if settings.launch_on_startup {
+        crate::autostart::refresh_if_enabled();
+        if !crate::autostart::is_enabled() {
+            // Setting says on but registry missing (e.g. cleaned by OS) — re-apply.
+            if let Err(e) = crate::autostart::set_enabled(true) {
+                tracing::warn!(error = %e, "failed to restore autostart registry entry");
+            }
+        }
+    } else if crate::autostart::is_enabled() {
+        // Registry has us but settings say off — reflect OS state into settings once.
+        settings.launch_on_startup = true;
+        settings.save();
+    }
+    let show_startup_prompt = !settings.startup_prompt_shown;
+
     let app = FanApp {
         options,
         map,
@@ -175,6 +191,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         new_profile_name: "default".into(),
         pawnio_dialog,
         show_writes_consent,
+        show_startup_prompt,
         tray: None,
         really_exit: false,
         updates: UpdateChecker::new(),
@@ -300,6 +317,8 @@ struct FanApp {
     pawnio_dialog: Option<PawnioDialogKind>,
     /// First-run modal: user must acknowledge PWM control risk.
     show_writes_consent: bool,
+    /// First-run (or first after upgrade) "Start with Windows?" prompt.
+    show_startup_prompt: bool,
     tray: Option<AppTray>,
     /// Set when the tray "Exit" item fires, so the close-request handler lets it through
     /// instead of minimizing to tray.
@@ -676,6 +695,24 @@ impl eframe::App for FanApp {
                                 && !matches!(self.settings.activity_mode, ActivityMode::LoadOnly),
                         );
                         dirty = true;
+                    }
+                    let mut launch = self.settings.launch_on_startup;
+                    if ui
+                        .checkbox(&mut launch, t!("options.launch_on_startup").to_string())
+                        .on_hover_text(t!("options.launch_on_startup_tooltip").to_string())
+                        .changed()
+                    {
+                        match crate::autostart::set_enabled(launch) {
+                            Ok(()) => {
+                                self.settings.launch_on_startup = launch;
+                                self.settings.startup_prompt_shown = true;
+                                dirty = true;
+                            }
+                            Err(e) => {
+                                self.profile_status =
+                                    Some(format!("{}: {e}", t!("options.launch_on_startup_err")));
+                            }
+                        }
                     }
                     if self.settings.show_activity_deck {
                         ui.indent("activity_opts", |ui| {
@@ -1135,10 +1172,26 @@ impl eframe::App for FanApp {
                         clamp_ui_height(room, 140.0_f32.min(room), room)
                     };
 
+                    let power_ceiling = snap
+                        .gpus
+                        .iter()
+                        .filter_map(|g| g.power_limit_w)
+                        .filter(|w| w.is_finite() && *w > 1.0)
+                        .fold(None, |acc: Option<f64>, w| {
+                            Some(acc.map(|a| a.max(w)).unwrap_or(w))
+                        })
+                        .map(|w| w as f32);
+
                     if show_thermal && show_gpu {
                         ui.columns(2, |cols| {
                             cols[0].push_id("thermal_graph_col", |ui| {
-                                self.ui_thermal_graph_block(ui, &labels, &units, row_h);
+                                self.ui_thermal_graph_block(
+                                    ui,
+                                    &labels,
+                                    &units,
+                                    row_h,
+                                    power_ceiling,
+                                );
                             });
                             cols[1].push_id("gpu_detail_col", |ui| {
                                 egui::ScrollArea::vertical()
@@ -1150,7 +1203,7 @@ impl eframe::App for FanApp {
                             });
                         });
                     } else if show_thermal {
-                        self.ui_thermal_graph_block(ui, &labels, &units, row_h);
+                        self.ui_thermal_graph_block(ui, &labels, &units, row_h, power_ceiling);
                     } else if show_gpu {
                         ui.allocate_ui(egui::vec2(ui.available_width(), row_h), |ui| {
                             show_gpu_panel(ui, &snap.gpus);
@@ -1218,6 +1271,8 @@ impl eframe::App for FanApp {
         self.show_writes_consent_dialog(&ctx);
         if !self.show_writes_consent {
             self.show_pawnio_dialog(&ctx);
+            // After critical hardware dialogs, offer start-with-Windows once.
+            self.show_startup_prompt_dialog(&ctx);
         }
     }
 }
@@ -1461,6 +1516,7 @@ impl FanApp {
         labels: &HashMap<&str, &str>,
         units: &HashMap<&str, Option<&str>>,
         plot_h: f32,
+        power_axis_ceiling: Option<f32>,
     ) {
         self.ui_graph_controls(ui);
         let (win, samp) = (
@@ -1501,6 +1557,7 @@ impl FanApp {
                 &mut self.graph_axis_max,
                 &mut self.graph_axis_max_secondary,
                 plot_h,
+                power_axis_ceiling,
             );
             if style.is_shader() && !only_temps {
                 ui.small(t!("graph.shader_temps_only_note").to_string());
@@ -1592,6 +1649,50 @@ impl FanApp {
                         self.options.allow_hw_write = false;
                         self.settings.auto_apply_curves = false;
                         self.show_writes_consent = false;
+                    }
+                });
+            });
+    }
+
+    fn show_startup_prompt_dialog(&mut self, ctx: &egui::Context) {
+        if !self.show_startup_prompt {
+            return;
+        }
+        egui::Window::new(t!("startup_prompt.title").to_string())
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.set_max_width(460.0);
+                ui.label(t!("startup_prompt.body").to_string());
+                ui.add_space(8.0);
+                ui.small(t!("startup_prompt.hint").to_string());
+                ui.add_space(12.0);
+                ui.horizontal(|ui| {
+                    if ui.button(t!("startup_prompt.yes").to_string()).clicked() {
+                        match crate::autostart::set_enabled(true) {
+                            Ok(()) => {
+                                self.settings.launch_on_startup = true;
+                            }
+                            Err(e) => {
+                                self.profile_status =
+                                    Some(format!("{}: {e}", t!("options.launch_on_startup_err")));
+                            }
+                        }
+                        self.settings.startup_prompt_shown = true;
+                        self.settings.save();
+                        self.show_startup_prompt = false;
+                    }
+                    if ui.button(t!("startup_prompt.no").to_string()).clicked() {
+                        let _ = crate::autostart::set_enabled(false);
+                        self.settings.launch_on_startup = false;
+                        self.settings.startup_prompt_shown = true;
+                        self.settings.save();
+                        self.show_startup_prompt = false;
+                    }
+                    if ui.button(t!("startup_prompt.later").to_string()).clicked() {
+                        // Ask again next launch (do not set startup_prompt_shown).
+                        self.show_startup_prompt = false;
                     }
                 });
             });

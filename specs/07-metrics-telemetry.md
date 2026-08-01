@@ -58,6 +58,7 @@ trait MetricSink: Send {
   - Two units → dual Y (left primary, right secondary).
   - More than two units selected → keep first two unit groups; warn in UI (no third axis).
 - Shader graph styles stay **temperature-driven** (non-temp series do not drive heat uniforms).
+- **Power (W) Y-axis**: ceiling from live GPU `power.limit` when available (readable scale at idle), not a fixed ~1000 W range.
 
 ## Local SQLite store
 
