@@ -57,21 +57,17 @@ mod win {
     const RUN_SUBKEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 
     fn wide(s: &str) -> Vec<u16> {
-        OsStr::new(s).encode_wide().chain(std::iter::once(0)).collect()
+        OsStr::new(s)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect()
     }
 
     fn open_run_key(access: u32) -> Result<HKEY, String> {
         let sub = wide(RUN_SUBKEY);
         let mut hkey: HKEY = std::ptr::null_mut();
-        let status = unsafe {
-            RegOpenKeyExW(
-                HKEY_CURRENT_USER,
-                sub.as_ptr(),
-                0,
-                access,
-                &mut hkey,
-            )
-        };
+        let status =
+            unsafe { RegOpenKeyExW(HKEY_CURRENT_USER, sub.as_ptr(), 0, access, &mut hkey) };
         if status != ERROR_SUCCESS {
             return Err(format!("RegOpenKeyExW failed: {status}"));
         }
