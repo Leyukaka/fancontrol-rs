@@ -78,14 +78,13 @@ mod win {
         GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY,
     };
     use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
-    use windows_sys::Win32::UI::Shell::{ShellExecuteExW, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW};
+    use windows_sys::Win32::UI::Shell::{
+        ShellExecuteExW, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW,
+    };
     use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
     fn wide(s: impl AsRef<OsStr>) -> Vec<u16> {
-        s.as_ref()
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect()
+        s.as_ref().encode_wide().chain(std::iter::once(0)).collect()
     }
 
     /// Quote a single argument the way CreateProcess / Shell expects (spaces).
@@ -115,9 +114,7 @@ mod win {
             if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) == 0 {
                 return false;
             }
-            let mut elevation = TOKEN_ELEVATION {
-                TokenIsElevated: 0,
-            };
+            let mut elevation = TOKEN_ELEVATION { TokenIsElevated: 0 };
             let mut ret_len: u32 = 0;
             let ok = GetTokenInformation(
                 token,
