@@ -1,6 +1,6 @@
 # Roadmap
 
-Last aligned with product reality: **v0.3.5** shipped (GPU multi-metric + panel); **v0.4.0** target = metrics pipeline (graph multi-kind, SQLite+CSV, OTEL). See `specs/07-metrics-telemetry.md`.
+Last aligned with product reality: **v0.4.0** shipped (graph multi-kind, SQLite+CSV, Start with Windows, W-axis from power.limit; OTEL export deferred). See `specs/07-metrics-telemetry.md`.
 
 ## Phase 0 — Foundation
 
@@ -66,16 +66,18 @@ Last aligned with product reality: **v0.3.5** shipped (GPU multi-metric + panel)
 
 Spec: `specs/07-metrics-telemetry.md`.
 
-- [ ] `MetricSample` + `MetricSink` / MultiSink (`fancontrol-metrics`)
-- [ ] Graph multi-kind (GPU power/util/clocks/VRAM/fan) + dual Y axis
-- [ ] Local SQLite store (opt-in Options, retention, sample interval)
-- [ ] Manual CSV export from store
-- [ ] OpenTelemetry metrics export (opt-in; protocol after store; prefer OTLP/HTTP)
-- [ ] Docs `docs/METRICS_AND_OTEL.md` + Options i18n
+- [x] `MetricSample` + `MetricSink` / MultiSink (`fancontrol-metrics`)
+- [x] Graph multi-kind (GPU power/util/clocks/VRAM/fan) + dual unit plots
+- [x] Power (W) Y-axis ceiling from GPU `power.limit`
+- [x] Local SQLite store (opt-in Options, retention, sample interval)
+- [x] Manual CSV export from store
+- [x] Start with Windows (Options + first-run prompt; HKCU Run)
+- [x] Docs `docs/METRICS_AND_OTEL.md` + Options i18n
+- [ ] OpenTelemetry OTLP metrics export (endpoint settings present; export not wired)
 
 ## Next priorities (order)
 
-1. **v0.4.0 metrics** (graph GPU series, SQLite+CSV, OTEL) — current focus
+1. OTEL OTLP/HTTP metrics export
 2. Broader chip validation (community logs + experimental paths)
 3. SSD/NVMe temp validation on real hardware
 4. Code signing when ready for wider audience

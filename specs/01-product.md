@@ -57,13 +57,14 @@ Replace FanControl with a modern, secure, open-source alternative written in Rus
 | Clear unsupported / admin messaging | **Done** / polish ongoing |
 | No silent PWM writes | **Done** (writes on by default with clear UI banner + startup log warning; `--read-only` opts out) |
 
-### Metrics (v0.4.0 — in progress)
+### Metrics & startup (v0.4.0)
 
 | Capability | Status |
 |------------|--------|
-| Graph non-temp series (GPU power/util/clocks/…) | **In progress** |
-| Local SQLite metrics store + CSV export (Options) | **In progress** |
-| OpenTelemetry metrics export (opt-in) | **In progress** (protocol after store) |
+| Graph non-temp series (GPU power/util/clocks/…) | **Done** (dual unit plots; W axis uses GPU power.limit) |
+| Local SQLite metrics store + CSV export (Options) | **Done** (opt-in) |
+| Start with Windows | **Done** (Options + first-run prompt; HKCU Run) |
+| OpenTelemetry metrics export (opt-in) | **Partial** (endpoint/settings saved; OTLP export next) |
 
 See `specs/07-metrics-telemetry.md`.
 

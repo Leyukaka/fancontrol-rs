@@ -115,7 +115,9 @@ Document smoke setup in `docs/METRICS_AND_OTEL.md` (collector → Prometheus/Gra
 
 ## Acceptance (v0.4.0)
 
-- [ ] Graph can plot GPU power / util with dual-axis vs temps.
-- [ ] Store off by default; enable → SQLite grows; retention purges; CSV export works.
-- [ ] OTEL off by default; enable + local collector → metrics visible (doc).
-- [ ] CI green; no regression on PWM / GPU panel.
+- [x] Graph can plot GPU power / util with dual unit plots vs temps.
+- [x] Power (W) axis uses GPU power.limit when available.
+- [x] Store off by default; enable → SQLite grows; retention purges; CSV export works.
+- [x] Start with Windows opt-in (Options + first-run prompt).
+- [ ] OTEL off by default; enable + local collector → metrics visible (export still TODO).
+- [x] CI green; no regression on PWM / GPU panel.

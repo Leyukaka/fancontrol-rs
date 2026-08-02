@@ -22,10 +22,10 @@ Options → Graph sensors lists:
 
 If you select two different units (for example °C and W), the UI stacks two plots (shared time window). More than two units: only the first two unit groups are drawn.
 
-## OpenTelemetry
+## OpenTelemetry (v0.4.0: settings only)
 
 - Options can save **endpoint** and an enable flag.
-- Full OTLP export is wired after the local store path is proven stable; prefer **OTLP/HTTP** to a collector you run (e.g. Grafana Alloy or OpenTelemetry Collector on `http://127.0.0.1:4318`).
+- **OTLP export is not wired yet** in v0.4.0; prefer **OTLP/HTTP** to a collector you run when it lands (e.g. Grafana Alloy or OpenTelemetry Collector on `http://127.0.0.1:4318`).
 - No project-operated cloud. Metrics leave the machine only if you enable export and point at an endpoint you control.
 
 ### Suggested local collector (when OTEL export ships)
