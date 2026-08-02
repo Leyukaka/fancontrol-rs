@@ -190,6 +190,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         profile_status: None,
         new_profile_name: "default".into(),
         pawnio_dialog,
+        elevate_status: None,
         show_writes_consent,
         show_startup_prompt,
         tray: None,
@@ -315,6 +316,8 @@ struct FanApp {
     profile_status: Option<String>,
     new_profile_name: String,
     pawnio_dialog: Option<PawnioDialogKind>,
+    /// Last elevation relaunch error (UAC cancel / ShellExecute failure).
+    elevate_status: Option<String>,
     /// First-run modal: user must acknowledge PWM control risk.
     show_writes_consent: bool,
     /// First-run (or first after upgrade) "Start with Windows?" prompt.
@@ -529,6 +532,19 @@ impl eframe::App for FanApp {
                     if let Some(hint) = hint {
                         resp.on_hover_text(hint);
                     }
+                    // One-click UAC relaunch when PawnIO is installed but not openable.
+                    if matches!(self.status, BackendStatus::NeedsAdmin)
+                        && !crate::elevation::is_elevated()
+                        && ui
+                            .button(t!("pawnio.restart_as_admin").to_string())
+                            .on_hover_text(t!("top_bar.write_disabled_admin_hint").to_string())
+                            .clicked()
+                    {
+                        self.try_relaunch_elevated();
+                    }
+                }
+                if let Some(msg) = &self.elevate_status {
+                    ui.colored_label(egui::Color32::LIGHT_RED, msg);
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui
@@ -1730,8 +1746,20 @@ impl FanApp {
                     ui.label(t!("pawnio.site_label").to_string());
                     ui.hyperlink_to("pawnio.eu", PAWNIO_URL);
                 });
+                if let Some(msg) = &self.elevate_status {
+                    ui.add_space(6.0);
+                    ui.colored_label(egui::Color32::LIGHT_RED, msg);
+                }
                 ui.add_space(10.0);
                 ui.horizontal(|ui| {
+                    if matches!(kind, PawnioDialogKind::NeedsAdmin)
+                        && !crate::elevation::is_elevated()
+                        && ui
+                            .button(t!("pawnio.restart_as_admin").to_string())
+                            .clicked()
+                    {
+                        self.try_relaunch_elevated();
+                    }
                     if ui.button(t!("pawnio.open_button").to_string()).clicked() {
                         ui.ctx().open_url(egui::OpenUrl::new_tab(PAWNIO_URL));
                     }
@@ -1749,6 +1777,26 @@ impl FanApp {
             });
         if !open {
             self.pawnio_dialog = None;
+        }
+    }
+
+    /// Ask Windows for an elevated relaunch (UAC). On success, exit this process.
+    fn try_relaunch_elevated(&mut self) {
+        match crate::elevation::relaunch_elevated() {
+            Ok(()) => {
+                // Elevated child is running — leave the non-elevated process.
+                std::process::exit(0);
+            }
+            Err(crate::elevation::ElevateError::Cancelled) => {
+                self.elevate_status = Some(t!("pawnio.elevate_cancelled").to_string());
+            }
+            Err(crate::elevation::ElevateError::AlreadyElevated) => {
+                self.elevate_status = None;
+            }
+            Err(e) => {
+                self.elevate_status =
+                    Some(t!("pawnio.elevate_failed", error = e.to_string()).to_string());
+            }
         }
     }
 

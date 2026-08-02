@@ -9,6 +9,7 @@ mod activity;
 mod app;
 mod autostart;
 mod curve_editor;
+mod elevation;
 mod gpu_panel;
 mod graph;
 mod i18n;

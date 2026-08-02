@@ -48,7 +48,7 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 - Product line: **v0.4.0** — multi-kind graph (GPU power/util/…; W axis from power.limit), SQLite metrics store + CSV export, Start with Windows (HKCU Run + first-run prompt); OTEL endpoint in Options (export wiring later).
 - Phase 0 foundation: **done**.
 - Phase 1: PawnIOLib FFI + LpcIO + **NCT668x EC HWM** (validated class id `0xD5` rev `0x92` @ `0x0A20`) + **banked NCT** (ROG B550-A `0xD4` validated reads+writes) + control loop + CLI.
-- Elevation required for `pawnio_open` (Administrator). **PawnIO is a prerequisite** (not bundled) — UI shows a startup dialog if missing / not openable.
+- Elevation required for `pawnio_open` (Administrator). **PawnIO is a prerequisite** (not bundled) — UI shows a startup dialog if missing / not openable, with a **Restart as Administrator** button (`ShellExecute` `runas` → UAC; no silent elevation).
 - Validated paths: **NCT6687D-class** (`0xD5`) and **banked NCT** on ROG STRIX B550-A (`0xD4`); higher NCT668x controls = DR/experimental. See `docs/SUPPORTED_HARDWARE.md`.
 - Host sensors: fixed-path `nvidia-smi` **multi-metric** (temp core/memory, power W, util %, clocks, fan %, VRAM; NVIDIA-only; Hot Spot **not** via smi — needs NvAPI, not shipped) + storage via `DeviceIoControl` (NVMe health-log fallback; read-only, no PowerShell, no PATH walk). AMD/Intel GPU research in `docs/GPU_VENDOR_APIS.md`.
 - Vendored modules: `crates/fancontrol-pawnio/modules/` (PawnIO.Modules).

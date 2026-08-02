@@ -91,6 +91,7 @@ Unsigned Windows tools that touch **kernel I/O (PawnIO)** and spawn **host helpe
 | Write HKCU Run value | Opt-in "Start with Windows" (current user only; no admin) |
 | Open `\\.\PhysicalDriveN` + `DeviceIoControl` | Optional SSD/HDD temperature (**no PowerShell**; Win10+ storage stack) |
 | Run elevated | Required for `pawnio_open` on many systems |
+| `ShellExecuteEx` with verb `runas` | Opt-in **Restart as Administrator** button (user-triggered UAC only; no silent elevation) |
 
 ### Rules you may see (and why they fire)
 

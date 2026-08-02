@@ -130,7 +130,7 @@ Binaries are **not code-signed yet**. Expect SmartScreen and occasional Defender
 ## Prerequisites (hardware)
 
 1. **[PawnIO](https://pawnio.eu/)** is required for Super I/O / EC access. Not bundled: install the official package first. Without it the app still starts (mock / config / host sensors); the UI explains if the backend cannot open.
-2. **Administrator**: live HWM / `pawnio_open` needs elevation.
+2. **Administrator**: live HWM / `pawnio_open` needs elevation. In the UI, use **Restart as Administrator** (UAC prompt) when the Needs-admin dialog appears, or right-click the exe → Run as administrator.
 3. Compatible board: **NCT668x EC** is the validated path; see [docs/SUPPORTED_HARDWARE.md](./docs/SUPPORTED_HARDWARE.md).
 
 ## Building

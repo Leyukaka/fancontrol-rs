@@ -19,7 +19,7 @@ fancontrol-rs controls PC fans on **Windows** through **[PawnIO](https://pawnio.
 |-------------|--------|
 | **Windows** | Primary and only target OS for hardware access. |
 | **[PawnIO](https://pawnio.eu/)** | **Prerequisite - not bundled** with fancontrol-rs. Install the official PawnIO package first. If missing, the app still starts (mock / config / host sensors); the UI surfaces a clear message / popup when hardware backend is unavailable. |
-| **Administrator** | `pawnio_open` needs elevation. Run an elevated terminal or launch the UI as admin for live Super I/O. |
+| **Administrator** | `pawnio_open` needs elevation. In the UI use **Restart as Administrator** (UAC), or right-click the exe / use an elevated terminal for CLI. |
 | **Defender awareness** | Unsigned binaries that talk to PawnIO may false-positive. Prefer a folder exclusion for `target\` (see README) - do not disable AV entirely. |
 
 Vendored PawnIO modules (e.g. `LpcIO.bin`) ship under `crates/fancontrol-pawnio/modules/` for the user-mode loader; the **PawnIO service/driver** itself must already be installed on the machine.

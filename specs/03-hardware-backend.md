@@ -44,6 +44,7 @@ Fan curves use **CPU-like** Super I/O temps only (`CPU`, `PECI` / `PECI_0`, `CPU
 If PawnIO is missing or not openable:
 
 - UI shows a **startup dialog** (install vs admin) with link to pawnio.eu
+- Needs-admin dialog / top bar: **Restart as Administrator** button → UAC via `ShellExecute` `runas` (no silent elevation)
 - App still starts: mock / config / host sensors as enabled
 - No silent hardware writes
 
