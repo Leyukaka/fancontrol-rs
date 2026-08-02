@@ -54,7 +54,7 @@ Replace FanControl with a modern, secure, open-source alternative written in Rus
 | Capability | Status |
 |------------|--------|
 | Graceful degrade without PawnIO | **Done** (mock/config/host; UI dialog) |
-| Clear unsupported / admin messaging | **Done** / polish ongoing |
+| Clear unsupported / admin messaging | **Done** (Needs-admin dialog + **Restart as Administrator** UAC button, v0.4.1) |
 | No silent PWM writes | **Done** (writes on by default with clear UI banner + startup log warning; `--read-only` opts out) |
 
 ### Metrics & startup (v0.4.0)

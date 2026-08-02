@@ -1,6 +1,6 @@
 # Roadmap
 
-Last aligned with product reality: **v0.4.0** shipped (graph multi-kind, SQLite+CSV, Start with Windows, W-axis from power.limit; OTEL export deferred). See `specs/07-metrics-telemetry.md`.
+Last aligned with product reality: **v0.4.1** shipped (v0.4 metrics/graph/autostart + **Restart as Administrator** UAC button; OTEL export deferred). See `specs/07-metrics-telemetry.md`, `specs/04-ui.md`.
 
 ## Phase 0 — Foundation
 
@@ -36,6 +36,7 @@ Last aligned with product reality: **v0.4.0** shipped (graph multi-kind, SQLite+
 - [x] Shader / gallery graph styles (`shaders/`)
 - [x] Activity deck (CPU load + top processes CPU/RAM, filter; opt-in Options) — v0.3.0
 - [x] PawnIO install/admin dialog
+- [x] Restart as Administrator (UAC `runas` button) — v0.4.1
 - [x] Profile UX (switch / last-used / startup)
 - [x] System tray
 - [x] i18n (8 languages)
