@@ -27,7 +27,9 @@ pub fn relaunch_elevated() -> Result<(), ElevateError> {
     }
     #[cfg(not(windows))]
     {
-        Err(ElevateError::Unsupported)
+        Err(ElevateError::Failed(
+            "elevation not supported on this platform".into(),
+        ))
     }
 }
 
@@ -38,8 +40,6 @@ pub enum ElevateError {
     AlreadyElevated,
     /// User dismissed the UAC consent dialog.
     Cancelled,
-    /// Platform does not support elevation (non-Windows).
-    Unsupported,
     /// ShellExecute / token API failure with a detail string.
     Failed(String),
 }
@@ -49,7 +49,6 @@ impl std::fmt::Display for ElevateError {
         match self {
             ElevateError::AlreadyElevated => write!(f, "already elevated"),
             ElevateError::Cancelled => write!(f, "UAC cancelled"),
-            ElevateError::Unsupported => write!(f, "elevation not supported on this platform"),
             ElevateError::Failed(s) => write!(f, "{s}"),
         }
     }
