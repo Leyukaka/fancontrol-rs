@@ -23,20 +23,6 @@
   <img src="assets/screenshot.jpg" alt="fancontrol-rs UI: temps, fans, Activity deck, curves" width="920">
 </p>
 
-## Motherboard support
-
-**Every desktop motherboard with a Super I/O / EC HWM path should be able to work** - we aim for broad chip coverage (Nuvoton NCT668x, banked NCT679x, ITE IT87, and friends) via [PawnIO](https://pawnio.eu/).
-
-What we still need from the community is **logs so we can certify** each model (read sensors, fan RPM, and optional PWM write). Without a report, we will not mark a board as certified even if the code path exists.
-
-| | |
-|--|--|
-| **Certified so far** | NCT6687D-class EC HWM · **ASUS ROG STRIX B550-A GAMING** (banked NCT / NCT6798-class) - full read + PWM write on maintainer hardware |
-| **Help wanted** | Any other board (ASUS / MSI / Gigabyte / ASRock / …). Paste `detect` + `list-sensors` + `list-controls` and open a [Hardware report](https://github.com/Leyukaka/fancontrol-rs/issues/new?template=hardware_report.yml) |
-| **How** | Install [PawnIO](https://pawnio.eu/), run **as Administrator**, follow [docs/SUPPORTED_HARDWARE.md](./docs/SUPPORTED_HARDWARE.md#contributing-a-chip--board-report) |
-
-Binaries are **unsigned** (SmartScreen may warn). PWM writes are on by default after first-run consent - use `--read-only` if you only want sensors.
-
 ## Features
 
 - **Fan control**: curves, profiles, live duty sliders, multi-sensor temperature graph
@@ -51,6 +37,20 @@ Binaries are **unsigned** (SmartScreen may warn). PWM writes are on by default a
 - **CLI**: `sample`, `list-sensors`, `list-controls`, `test-duty`, `sample-storage`, …
 - **Optional fun**: shader graph styles (wgpu) in Options
 - Spec-driven design: decisions live under [`specs/`](./specs)
+
+## Motherboard support
+
+**Every desktop motherboard with a Super I/O / EC HWM path should be able to work** - we aim for broad chip coverage (Nuvoton NCT668x, banked NCT679x, ITE IT87, and friends) via [PawnIO](https://pawnio.eu/).
+
+What we still need from the community is **logs so we can certify** each model (read sensors, fan RPM, and optional PWM write). Without a report, we will not mark a board as certified even if the code path exists.
+
+| | |
+|--|--|
+| **Certified so far** | NCT6687D-class EC HWM · **ASUS ROG STRIX B550-A GAMING** (banked NCT / NCT6798-class) - full read + PWM write on maintainer hardware |
+| **Help wanted** | Any other board (ASUS / MSI / Gigabyte / ASRock / …). Paste `detect` + `list-sensors` + `list-controls` and open a [Hardware report](https://github.com/Leyukaka/fancontrol-rs/issues/new?template=hardware_report.yml) |
+| **How** | Install [PawnIO](https://pawnio.eu/), run **as Administrator**, follow [docs/SUPPORTED_HARDWARE.md](./docs/SUPPORTED_HARDWARE.md#contributing-a-chip--board-report) |
+
+Binaries are **unsigned** (SmartScreen may warn). PWM writes are on by default after first-run consent - use `--read-only` if you only want sensors.
 
 ## Compared to other tools
 
