@@ -122,20 +122,20 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
         .data(|d| d.get_temp::<Option<usize>>(id))
         .unwrap_or(None);
 
-    if resp.drag_started() {
-        if let Some(pos) = pointer {
-            let mut best = None;
-            let mut best_d = 18.0_f32;
-            for (i, p) in curve.points.iter().enumerate() {
-                let hp = to_pos(p.temperature as f32, f32::from(p.duty));
-                let d = hp.distance(pos);
-                if d < best_d {
-                    best_d = d;
-                    best = Some(i);
-                }
+    if resp.drag_started()
+        && let Some(pos) = pointer
+    {
+        let mut best = None;
+        let mut best_d = 18.0_f32;
+        for (i, p) in curve.points.iter().enumerate() {
+            let hp = to_pos(p.temperature as f32, f32::from(p.duty));
+            let d = hp.distance(pos);
+            if d < best_d {
+                best_d = d;
+                best = Some(i);
             }
-            state = best;
         }
+        state = best;
     }
     if resp.dragged() {
         drag_idx = state;
@@ -147,13 +147,13 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
     }
     ui.ctx().data_mut(|d| d.insert_temp(id, state));
 
-    if let (Some(i), Some(pos)) = (drag_idx, pointer) {
-        if let Some(p) = curve.points.get_mut(i) {
-            let (t, d) = from_pos(pos);
-            p.temperature = f64::from(t);
-            p.duty = d;
-            changed = true;
-        }
+    if let (Some(i), Some(pos)) = (drag_idx, pointer)
+        && let Some(p) = curve.points.get_mut(i)
+    {
+        let (t, d) = from_pos(pos);
+        p.temperature = f64::from(t);
+        p.duty = d;
+        changed = true;
     }
 
     for (i, p) in curve.points.iter().enumerate() {

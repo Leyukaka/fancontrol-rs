@@ -65,10 +65,10 @@ pub fn list_profiles() -> Result<Vec<String>> {
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) == Some("json") {
-            if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                ids.push(stem.to_string());
-            }
+        if path.extension().and_then(|e| e.to_str()) == Some("json")
+            && let Some(stem) = path.file_stem().and_then(|s| s.to_str())
+        {
+            ids.push(stem.to_string());
         }
     }
     ids.sort();

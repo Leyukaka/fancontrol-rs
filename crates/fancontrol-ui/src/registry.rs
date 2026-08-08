@@ -5,8 +5,8 @@ use fancontrol_pawnio::PawnioProvider;
 use fancontrol_plugins::{
     ControlProvider, HostSensorProvider, MockProvider, ProviderRegistry, Result, SensorProvider,
 };
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 pub struct BuiltProviders {
     pub reg: ProviderRegistry,

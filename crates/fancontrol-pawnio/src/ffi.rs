@@ -75,11 +75,7 @@ impl PawnIoApi {
     pub fn version(&self) -> Result<u32, HRESULT> {
         let mut v = 0u32;
         let hr = unsafe { (self.version)(&mut v) };
-        if hr == S_OK {
-            Ok(v)
-        } else {
-            Err(hr)
-        }
+        if hr == S_OK { Ok(v) } else { Err(hr) }
     }
 
     pub fn open(&self) -> Result<HANDLE, HRESULT> {
@@ -94,11 +90,7 @@ impl PawnIoApi {
 
     pub fn load_blob(&self, handle: HANDLE, blob: &[u8]) -> Result<(), HRESULT> {
         let hr = unsafe { (self.load)(handle, blob.as_ptr(), blob.len()) };
-        if hr == S_OK {
-            Ok(())
-        } else {
-            Err(hr)
-        }
+        if hr == S_OK { Ok(()) } else { Err(hr) }
     }
 
     pub fn execute(
@@ -153,10 +145,10 @@ pub fn dll_candidates() -> Vec<PathBuf> {
     v.push(PathBuf::from(
         r"C:\Program Files (x86)\PawnIO\PawnIOLib.dll",
     ));
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            v.push(dir.join("PawnIOLib.dll"));
-        }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent()
+    {
+        v.push(dir.join("PawnIOLib.dll"));
     }
     v
 }

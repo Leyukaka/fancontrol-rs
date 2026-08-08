@@ -114,19 +114,19 @@ fn show_gpu_card(ui: &mut egui::Ui, gpu: &GpuSnap) {
     }
 
     // VRAM
-    if let (Some(used), Some(total)) = (gpu.mem_used_mib, gpu.mem_total_mib) {
-        if total > 0.0 {
-            let frac = (used / total).clamp(0.0, 1.0) as f32;
-            ui.horizontal(|ui| {
-                ui.label(t!("gpu.vram").to_string());
-                ui.label(
-                    RichText::new(format!("{used:.0} / {total:.0} MiB"))
-                        .monospace()
-                        .color(load_color(frac)),
-                );
-            });
-            metric_bar(ui, frac, load_color(frac));
-        }
+    if let (Some(used), Some(total)) = (gpu.mem_used_mib, gpu.mem_total_mib)
+        && total > 0.0
+    {
+        let frac = (used / total).clamp(0.0, 1.0) as f32;
+        ui.horizontal(|ui| {
+            ui.label(t!("gpu.vram").to_string());
+            ui.label(
+                RichText::new(format!("{used:.0} / {total:.0} MiB"))
+                    .monospace()
+                    .color(load_color(frac)),
+            );
+        });
+        metric_bar(ui, frac, load_color(frac));
     }
 
     // Fan %

@@ -124,10 +124,10 @@ pub fn detect_chips() -> Result<Vec<DetectedChip>, String> {
                 let _ = lpc.find_bars();
                 let _ = lpc.select_ldn(WINBOND_NUVOTON_HWM_LDN);
                 // Disable IO space lock on NCT679x
-                if let Ok(options) = lpc.superio_inb(NUVOTON_IO_SPACE_LOCK) {
-                    if options & 0x10 != 0 {
-                        let _ = lpc.superio_outb(NUVOTON_IO_SPACE_LOCK, options & !0x10);
-                    }
+                if let Ok(options) = lpc.superio_inb(NUVOTON_IO_SPACE_LOCK)
+                    && options & 0x10 != 0
+                {
+                    let _ = lpc.superio_outb(NUVOTON_IO_SPACE_LOCK, options & !0x10);
                 }
                 let addr = lpc.superio_inw(BASE_ADDRESS_REGISTER)?;
                 thread::sleep(Duration::from_millis(1));

@@ -14,8 +14,8 @@ pub mod temp_source;
 
 pub use channel_map::ChannelMap;
 pub use config::{config_dir, ensure_config_dirs, profiles_dir};
-pub use control_loop::{default_interval, evaluate_profile_step, ControlStepResult};
-pub use curve::{evaluate_curve, CurveEvalState};
+pub use control_loop::{ControlStepResult, default_interval, evaluate_profile_step};
+pub use curve::{CurveEvalState, evaluate_curve};
 pub use error::{CoreError, Result};
 pub use models::{
     ControlDescriptor, ControlId, CurveId, CurvePoint, FanCurve, MetricSample, Profile, ProfileId,

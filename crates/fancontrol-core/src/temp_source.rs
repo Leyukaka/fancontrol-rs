@@ -28,10 +28,10 @@ fn cpu_name_priority(name: &str) -> Option<u8> {
 
 /// Extract the short name from a sensor id (`pawnio.0.temp.CPUTIN` → `CPUTIN`).
 pub fn temp_sensor_short_name(id: &str) -> &str {
-    if let Some((_, name)) = id.rsplit_once("temp.") {
-        if !name.is_empty() {
-            return name;
-        }
+    if let Some((_, name)) = id.rsplit_once("temp.")
+        && !name.is_empty()
+    {
+        return name;
     }
     id.rsplit('.').next().unwrap_or(id)
 }
@@ -70,10 +70,11 @@ pub fn resolve_curve_temp_sensor(
     bound: Option<&str>,
     temps: &HashMap<String, f64>,
 ) -> Option<String> {
-    if let Some(b) = bound {
-        if temps.contains_key(b) && is_cpu_temp_candidate(b) {
-            return Some(b.to_string());
-        }
+    if let Some(b) = bound
+        && temps.contains_key(b)
+        && is_cpu_temp_candidate(b)
+    {
+        return Some(b.to_string());
     }
     pick_cpu_temp_id(temps)
 }

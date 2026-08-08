@@ -264,10 +264,10 @@ impl Nct668Device {
 
         {
             let _g = IsaBusGuard::acquire(Duration::from_millis(100));
-            if let Ok(data) = dev.read_byte(INIT_REG) {
-                if data & 0x80 == 0 {
-                    let _ = dev.write_byte(INIT_REG, data | 0x80);
-                }
+            if let Ok(data) = dev.read_byte(INIT_REG)
+                && data & 0x80 == 0
+            {
+                let _ = dev.write_byte(INIT_REG, data | 0x80);
             }
             for (a, v) in [
                 (0x1BB, 0x61),
@@ -306,10 +306,10 @@ impl Nct668Device {
             if ch.out == 0xFFFF {
                 continue;
             }
-            if let Ok(v) = self.read_byte(ch.out) {
-                if (5..=250).contains(&v) {
-                    return true;
-                }
+            if let Ok(v) = self.read_byte(ch.out)
+                && (5..=250).contains(&v)
+            {
+                return true;
             }
         }
         false
@@ -344,7 +344,7 @@ impl Nct668Device {
         self.control_out
             .iter()
             .enumerate()
-            .filter(|(_, &r)| r != 0xFFFF)
+            .filter(|&(_, &r)| r != 0xFFFF)
             .map(|(i, &r)| (i, r))
             .collect()
     }
@@ -500,10 +500,10 @@ impl Nct668Device {
             Layout::Dr => self.set_duty_dr(control_slot, pwm)?,
         }
 
-        if let Ok(mut d) = self.duties.lock() {
-            if control_slot < d.len() {
-                d[control_slot] = percent;
-            }
+        if let Ok(mut d) = self.duties.lock()
+            && control_slot < d.len()
+        {
+            d[control_slot] = percent;
         }
 
         // Verify EC accepted (read OUT). BIOS may still reclaim later.

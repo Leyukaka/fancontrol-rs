@@ -43,6 +43,8 @@ Optional maintainer-only preferences may live in an untracked `AGENTS.local.md` 
 
 Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles/*.json`, `channel-map.json`, `ui-settings.json`).
 
+Rust edition 2024, stable toolchain pinned via `rust-toolchain.toml` (rustfmt + clippy components).
+
 ## Status (keep updated)
 
 - Product line: **v0.4.2** — AMD CPU package power (`host.cpu.power.package` via PawnIO `AMDFamily17`, graph seed + CLI sample Power section) + v0.4.1 UAC restart. OTEL export still deferred. Intel RAPL / DRAM power next.

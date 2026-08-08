@@ -72,13 +72,13 @@ mod win {
     use super::ElevateError;
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, ERROR_CANCELLED, HANDLE};
+    use windows_sys::Win32::Foundation::{CloseHandle, ERROR_CANCELLED, GetLastError, HANDLE};
     use windows_sys::Win32::Security::{
-        GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY,
+        GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation,
     };
     use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
     use windows_sys::Win32::UI::Shell::{
-        ShellExecuteExW, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW,
+        SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW, ShellExecuteExW,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 

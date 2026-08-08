@@ -38,14 +38,15 @@ impl WriteQueue {
                     match cmd {
                         WriteCmd::Set { id, percent } => {
                             // Coalesce: skip if same duty sent recently
-                            if let Some((p, t)) = last_sent.get(&id) {
-                                if *p == percent && t.elapsed() < Duration::from_millis(400) {
-                                    // Still count as applied for UI skip-map (already on hardware)
-                                    if let Ok(mut s) = ok_log.lock() {
-                                        s.push((id.clone(), percent));
-                                    }
-                                    continue;
+                            if let Some((p, t)) = last_sent.get(&id)
+                                && *p == percent
+                                && t.elapsed() < Duration::from_millis(400)
+                            {
+                                // Still count as applied for UI skip-map (already on hardware)
+                                if let Ok(mut s) = ok_log.lock() {
+                                    s.push((id.clone(), percent));
                                 }
+                                continue;
                             }
                             match reg.set_duty(&ControlId::new(id.clone()), percent) {
                                 Ok(()) => {

@@ -10,8 +10,8 @@
 
 use clap::{Parser, Subcommand};
 use fancontrol_core::{
-    evaluate_curve, evaluate_profile_step, load_profile, save_profile, ChannelMap, ControlId,
-    CurveEvalState, FanCurve, Profile, SensorId, SensorKind,
+    ChannelMap, ControlId, CurveEvalState, FanCurve, Profile, SensorId, SensorKind, evaluate_curve,
+    evaluate_profile_step, load_profile, save_profile,
 };
 use fancontrol_plugins::{HostSensorProvider, MockProvider, ProviderRegistry};
 use std::collections::HashMap;
@@ -446,10 +446,10 @@ fn main() -> anyhow::Result<()> {
             for i in 0..steps {
                 let mut temps = HashMap::new();
                 for s in reg.all_sensors() {
-                    if s.kind == SensorKind::Temperature {
-                        if let Ok(v) = reg.read_sensor(&s.id) {
-                            temps.insert(s.id.as_str().to_string(), v);
-                        }
+                    if s.kind == SensorKind::Temperature
+                        && let Ok(v) = reg.read_sensor(&s.id)
+                    {
+                        temps.insert(s.id.as_str().to_string(), v);
                     }
                 }
                 let step = evaluate_profile_step(&profile, &temps, &mut states);
@@ -563,7 +563,7 @@ fn main() -> anyhow::Result<()> {
 #[cfg(windows)]
 fn attach_parent_console_for_cli() {
     use windows_sys::Win32::System::Console::{
-        AttachConsole, ATTACH_PARENT_PROCESS, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+        ATTACH_PARENT_PROCESS, AttachConsole, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
     };
 
     // SAFETY: documented Win32 API; failure (no parent console) is a normal, expected

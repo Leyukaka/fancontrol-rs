@@ -1,8 +1,8 @@
 //! SQLite metrics store + CSV export (background writer).
 
 use crate::MetricSink;
-use fancontrol_core::{config::config_dir, MetricSample, SensorKind};
-use rusqlite::{params, Connection};
+use fancontrol_core::{MetricSample, SensorKind, config::config_dir};
+use rusqlite::{Connection, params};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::thread;

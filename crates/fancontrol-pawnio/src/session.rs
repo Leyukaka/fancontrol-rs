@@ -1,6 +1,6 @@
 //! One loaded PawnIO module session (open + load blob + execute).
 
-use crate::ffi::{self, format_hr, HANDLE};
+use crate::ffi::{self, HANDLE, format_hr};
 
 pub struct PawnSession {
     handle: HANDLE,

@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/rust-edition%202021-orange?logo=rust&logoColor=white" alt="Rust">
+  <img src="https://img.shields.io/badge/rust-edition%202024-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue" alt="License">
   <img src="https://img.shields.io/badge/version-0.4.2-informational" alt="Version">
   <img src="https://img.shields.io/badge/backend-PawnIO-success" alt="PawnIO">

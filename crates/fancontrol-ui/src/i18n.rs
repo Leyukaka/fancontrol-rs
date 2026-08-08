@@ -21,10 +21,10 @@ pub fn display_name_for(code: &str) -> &'static str {
 
 /// Pick the startup locale: persisted choice if valid, else OS locale, else English.
 pub fn resolve_startup_locale(settings: &UiSettings) -> String {
-    if let Some(lang) = &settings.language {
-        if SUPPORTED.contains(&lang.as_str()) {
-            return lang.clone();
-        }
+    if let Some(lang) = &settings.language
+        && SUPPORTED.contains(&lang.as_str())
+    {
+        return lang.clone();
     }
     sys_locale::get_locale()
         .and_then(|os_locale| {

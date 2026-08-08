@@ -19,11 +19,7 @@ pub fn is_enabled() -> bool {
 pub fn set_enabled(on: bool) -> Result<(), String> {
     #[cfg(windows)]
     {
-        if on {
-            win::enable()
-        } else {
-            win::disable()
-        }
+        if on { win::enable() } else { win::disable() }
     }
     #[cfg(not(windows))]
     {
@@ -50,8 +46,8 @@ mod win {
     use std::path::PathBuf;
     use windows_sys::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS};
     use windows_sys::Win32::System::Registry::{
-        RegCloseKey, RegDeleteValueW, RegOpenKeyExW, RegQueryValueExW, RegSetValueExW, HKEY,
-        HKEY_CURRENT_USER, KEY_QUERY_VALUE, KEY_SET_VALUE, REG_SZ,
+        HKEY, HKEY_CURRENT_USER, KEY_QUERY_VALUE, KEY_SET_VALUE, REG_SZ, RegCloseKey,
+        RegDeleteValueW, RegOpenKeyExW, RegQueryValueExW, RegSetValueExW,
     };
 
     const RUN_SUBKEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";

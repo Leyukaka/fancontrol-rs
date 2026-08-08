@@ -60,10 +60,8 @@ pub fn set_enabled(on: bool) {
 /// Whether to enumerate processes (false = load % only — much cheaper).
 pub fn set_sample_processes(on: bool) {
     shared().sample_processes.store(on, Ordering::Relaxed);
-    if !on {
-        if let Ok(mut g) = shared().snap.lock() {
-            g.processes.clear();
-        }
+    if !on && let Ok(mut g) = shared().snap.lock() {
+        g.processes.clear();
     }
 }
 
@@ -113,7 +111,7 @@ mod windows_impl {
     use std::time::Instant;
     use windows_sys::Win32::Foundation::{CloseHandle, FILETIME, HANDLE, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::System::Diagnostics::ToolHelp::{
-        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW,
         TH32CS_SNAPPROCESS,
     };
     use windows_sys::Win32::System::ProcessStatus::{
@@ -230,17 +228,17 @@ mod windows_impl {
                 if Process32FirstW(snap, &mut entry) != 0 {
                     loop {
                         let pid = entry.th32ProcessID;
-                        if pid > 0 {
-                            if let Some((row, cpu_abs)) = probe_process(
+                        if pid > 0
+                            && let Some((row, cpu_abs)) = probe_process(
                                 pid,
                                 &entry,
                                 &self.prev_proc_cpu,
                                 wall_secs,
                                 self.ncpus,
-                            ) {
-                                current_cpu.insert(pid, cpu_abs);
-                                rows.push(row);
-                            }
+                            )
+                        {
+                            current_cpu.insert(pid, cpu_abs);
+                            rows.push(row);
                         }
                         if Process32NextW(snap, &mut entry) == 0 {
                             break;

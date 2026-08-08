@@ -1,6 +1,6 @@
 //! Periodic fan control loop: read temps → evaluate curves → set duties.
 
-use crate::curve::{evaluate_curve, CurveEvalState};
+use crate::curve::{CurveEvalState, evaluate_curve};
 use crate::models::Profile;
 use crate::temp_source::resolve_curve_temp_sensor;
 use std::collections::HashMap;

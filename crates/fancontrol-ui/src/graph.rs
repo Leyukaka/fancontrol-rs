@@ -47,10 +47,10 @@ impl TempHistory {
 
     /// Push only if `sample_secs` elapsed since last push; then prune by window.
     pub fn push_if_due(&mut self, temp: f32, now: Instant) {
-        if let Some(last) = self.last_push {
-            if now.duration_since(last) < self.sample_interval {
-                return;
-            }
+        if let Some(last) = self.last_push
+            && now.duration_since(last) < self.sample_interval
+        {
+            return;
         }
         self.samples.push_back((now, temp));
         self.last_push = Some(now);
@@ -233,16 +233,16 @@ pub fn show_metric_graph(
             ui.horizontal(|ui| {
                 ui.heading(series.first().map(|s| s.label).unwrap_or(""));
                 ui.weak(format!("({window_minutes}m)"));
-                if let Some(s) = series.first() {
-                    if let Some(t) = s.history.last() {
-                        let u = s.unit_key();
-                        let color = if u == "°C" {
-                            temp_color(t)
-                        } else {
-                            series_color(0)
-                        };
-                        ui.colored_label(color, format!("{t:.1} {u}"));
-                    }
+                if let Some(s) = series.first()
+                    && let Some(t) = s.history.last()
+                {
+                    let u = s.unit_key();
+                    let color = if u == "°C" {
+                        temp_color(t)
+                    } else {
+                        series_color(0)
+                    };
+                    ui.colored_label(color, format!("{t:.1} {u}"));
                 }
             });
         } else {

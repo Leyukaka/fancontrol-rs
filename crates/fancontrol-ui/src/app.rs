@@ -1,25 +1,25 @@
 //! egui application: live sensors, sliders, graph, rename, options.
 
-use crate::activity::{show_activity_deck, ActivityDeckView, ActivityMode};
+use crate::UiError;
+use crate::activity::{ActivityDeckView, ActivityMode, show_activity_deck};
 use crate::curve_editor::show_curve_editor;
 use crate::gpu_panel::show_gpu_panel;
-use crate::graph::{show_metric_graph, GraphSeries, TempHistory, ThermalSignal};
-use crate::i18n::{display_name_for, resolve_startup_locale, SUPPORTED};
-use crate::poll::{spawn_poller, SharedMap, SharedSnapshot};
-use crate::registry::{backend_status, build_registry, BackendStatus};
-use crate::settings::{UiSettings, SHADER_FPS_ALLOWED};
-use crate::shaders::{show_shader_panel, GraphStyle, ShaderGallery};
+use crate::graph::{GraphSeries, TempHistory, ThermalSignal, show_metric_graph};
+use crate::i18n::{SUPPORTED, display_name_for, resolve_startup_locale};
+use crate::poll::{SharedMap, SharedSnapshot, spawn_poller};
+use crate::registry::{BackendStatus, backend_status, build_registry};
+use crate::settings::{SHADER_FPS_ALLOWED, UiSettings};
+use crate::shaders::{GraphStyle, ShaderGallery, show_shader_panel};
 use crate::tray::{AppTray, TrayCommand, TrayState};
 use crate::update_check::{UpdateChecker, UpdateStatus};
 use crate::write_queue::WriteQueue;
-use crate::UiError;
 use eframe::egui;
 use fancontrol_core::{
-    evaluate_profile_step, is_cpu_temp_candidate, list_profiles, load_profile, save_profile,
-    ChannelMap, CurveEvalState, FanCurve, MetricSample, Profile, SensorKind,
+    ChannelMap, CurveEvalState, FanCurve, MetricSample, Profile, SensorKind, evaluate_profile_step,
+    is_cpu_temp_candidate, list_profiles, load_profile, save_profile,
 };
 use fancontrol_metrics::{
-    default_metrics_db_path, MetricSink, SqliteMetricsStore, SqliteStoreConfig,
+    MetricSink, SqliteMetricsStore, SqliteStoreConfig, default_metrics_db_path,
 };
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -335,10 +335,10 @@ struct FanApp {
 }
 
 fn load_or_create_default_profile(preferred: Option<&str>) -> Profile {
-    if let Some(id) = preferred {
-        if let Ok(p) = load_profile(id) {
-            return p;
-        }
+    if let Some(id) = preferred
+        && let Ok(p) = load_profile(id)
+    {
+        return p;
     }
     if let Ok(p) = load_profile("default") {
         return p;
@@ -415,10 +415,10 @@ impl eframe::App for FanApp {
                 seed.push(id.clone());
             }
             // Fallback: first available temp if CPU id not yet labeled
-            if seed.is_empty() {
-                if let Some((id, _, _)) = snap.temps.first() {
-                    seed.push(id.clone());
-                }
+            if seed.is_empty()
+                && let Some((id, _, _)) = snap.temps.first()
+            {
+                seed.push(id.clone());
             }
             self.settings.graph_sensor_ids = seed;
             self.settings.graph_sensor_ids_seeded = true;
@@ -484,10 +484,10 @@ impl eframe::App for FanApp {
         } else {
             None
         };
-        if let Some(act) = &activity_snap {
-            if let Some(load) = act.load_pct {
-                self.load_history.push_if_due(load as f32, Instant::now());
-            }
+        if let Some(act) = &activity_snap
+            && let Some(load) = act.load_pct
+        {
+            self.load_history.push_if_due(load as f32, Instant::now());
         }
         self.histories
             .retain(|id, _| self.settings.graph_sensor_ids.contains(id));
@@ -1063,34 +1063,30 @@ impl eframe::App for FanApp {
                         if ui
                             .button(t!("options.metrics_export_csv").to_string())
                             .clicked()
+                            && let Some(store) = &self.metrics_sink
+                            && let Ok(dir) = fancontrol_core::config_dir()
                         {
-                            if let Some(store) = &self.metrics_sink {
-                                if let Ok(dir) = fancontrol_core::config_dir() {
-                                    let exports = dir.join("exports");
-                                    let _ = std::fs::create_dir_all(&exports);
-                                    let name = format!(
-                                        "metrics-{}.csv",
-                                        std::time::SystemTime::now()
-                                            .duration_since(std::time::UNIX_EPOCH)
-                                            .map(|d| d.as_secs())
-                                            .unwrap_or(0)
-                                    );
-                                    let path = exports.join(name);
-                                    match store.request_export_csv(&path) {
-                                        Ok(n) => {
-                                            self.profile_status = Some(format!(
-                                                "{} ({n} rows) → {}",
-                                                t!("options.metrics_export_ok"),
-                                                path.display()
-                                            ));
-                                        }
-                                        Err(e) => {
-                                            self.profile_status = Some(format!(
-                                                "{}: {e}",
-                                                t!("options.metrics_export_err")
-                                            ));
-                                        }
-                                    }
+                            let exports = dir.join("exports");
+                            let _ = std::fs::create_dir_all(&exports);
+                            let name = format!(
+                                "metrics-{}.csv",
+                                std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .map(|d| d.as_secs())
+                                    .unwrap_or(0)
+                            );
+                            let path = exports.join(name);
+                            match store.request_export_csv(&path) {
+                                Ok(n) => {
+                                    self.profile_status = Some(format!(
+                                        "{} ({n} rows) → {}",
+                                        t!("options.metrics_export_ok"),
+                                        path.display()
+                                    ));
+                                }
+                                Err(e) => {
+                                    self.profile_status =
+                                        Some(format!("{}: {e}", t!("options.metrics_export_err")));
                                 }
                             }
                         }
@@ -1489,10 +1485,8 @@ impl FanApp {
 
                         let locked = self.is_user_locked(&c.id);
                         let hw_duty = c.duty.unwrap_or(0);
-                        if !locked {
-                            if let Some(d) = c.duty {
-                                self.slider_state.insert(c.id.clone(), f32::from(d));
-                            }
+                        if !locked && let Some(d) = c.duty {
+                            self.slider_state.insert(c.id.clone(), f32::from(d));
                         }
                         let mut value =
                             *self.slider_state.get(&c.id).unwrap_or(&f32::from(hw_duty));
@@ -1825,16 +1819,15 @@ impl FanApp {
                         if ui
                             .selectable_label(self.profile.id.as_str() == id, &id)
                             .clicked()
+                            && let Ok(p) = load_profile(&id)
                         {
-                            if let Ok(p) = load_profile(&id) {
-                                self.profile = p;
-                                self.selected_curve = 0;
-                                self.curve_states.clear();
-                                self.profile_status =
-                                    Some(t!("curves_panel.loaded_status", id = id).to_string());
-                                self.settings.last_profile_id = Some(id.clone());
-                                self.settings.save();
-                            }
+                            self.profile = p;
+                            self.selected_curve = 0;
+                            self.curve_states.clear();
+                            self.profile_status =
+                                Some(t!("curves_panel.loaded_status", id = id).to_string());
+                            self.settings.last_profile_id = Some(id.clone());
+                            self.settings.save();
                         }
                     }
                 });
@@ -2035,15 +2028,15 @@ impl FanApp {
                 ui.horizontal(|ui| {
                     if ui.button(t!("common.save").to_string()).clicked() {
                         let name = self.rename_buf.trim().to_string();
-                        if !name.is_empty() {
-                            if let Ok(mut map) = self.map.lock() {
-                                if self.rename_is_control {
-                                    map.set_control_name(&id, &name);
-                                } else {
-                                    map.set_sensor_name(&id, &name);
-                                }
-                                let _ = map.save();
+                        if !name.is_empty()
+                            && let Ok(mut map) = self.map.lock()
+                        {
+                            if self.rename_is_control {
+                                map.set_control_name(&id, &name);
+                            } else {
+                                map.set_sensor_name(&id, &name);
                             }
+                            let _ = map.save();
                         }
                         self.rename_id = None;
                     }

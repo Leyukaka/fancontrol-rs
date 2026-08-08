@@ -42,10 +42,10 @@ impl LpcIo {
             .map_err(|e| format!("find_bars failed (HWM ports will be denied): {e}"))?;
         // Select HWM logical device + clear IO lock (best effort)
         let _ = self.select_ldn(0x0B);
-        if let Ok(options) = self.superio_inb(0x28) {
-            if options & 0x10 != 0 {
-                let _ = self.superio_outb(0x28, options & !0x10);
-            }
+        if let Ok(options) = self.superio_inb(0x28)
+            && options & 0x10 != 0
+        {
+            let _ = self.superio_outb(0x28, options & !0x10);
         }
         // Exit config — BARs stay in module memory
         let _ = self.write_port(register_port, 0xAA);

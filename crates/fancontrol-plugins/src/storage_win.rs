@@ -16,13 +16,13 @@ use windows_sys::Win32::Foundation::{CloseHandle, GENERIC_READ, HANDLE, INVALID_
 use windows_sys::Win32::Storage::FileSystem::{
     CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
 };
-use windows_sys::Win32::System::Ioctl::{
-    PropertyStandardQuery, StorageAdapterTemperatureProperty, StorageDeviceProperty,
-    StorageDeviceTemperatureProperty, IOCTL_STORAGE_QUERY_PROPERTY, STORAGE_PROPERTY_QUERY,
-    STORAGE_TEMPERATURE_DATA_DESCRIPTOR, STORAGE_TEMPERATURE_INFO,
-    STORAGE_TEMPERATURE_VALUE_NOT_REPORTED,
-};
 use windows_sys::Win32::System::IO::DeviceIoControl;
+use windows_sys::Win32::System::Ioctl::{
+    IOCTL_STORAGE_QUERY_PROPERTY, PropertyStandardQuery, STORAGE_PROPERTY_QUERY,
+    STORAGE_TEMPERATURE_DATA_DESCRIPTOR, STORAGE_TEMPERATURE_INFO,
+    STORAGE_TEMPERATURE_VALUE_NOT_REPORTED, StorageAdapterTemperatureProperty,
+    StorageDeviceProperty, StorageDeviceTemperatureProperty,
+};
 
 /// Probe `\\.\PhysicalDrive0` … for temperatures reported by the storage stack.
 /// Returns `(id, display_name, temp_c, source_label)` for diagnostics via tracing.
@@ -127,17 +127,17 @@ fn probe_one_drive(path: &str, index: u32) -> Option<(String, f64, &'static str)
 fn pick_best_temp(candidates: &[(&str, Option<f64>)]) -> Option<(f64, &'static str)> {
     // Stable preference order as listed
     for (src, t) in candidates {
-        if let Some(v) = t {
-            if (1.0..=100.0).contains(v) {
-                // SAFETY: src is static str from our array
-                let label: &'static str = match *src {
-                    "nvme_health" => "nvme_health",
-                    "device_temp_prop" => "device_temp_prop",
-                    "adapter_temp_prop" => "adapter_temp_prop",
-                    _ => "unknown",
-                };
-                return Some((*v, label));
-            }
+        if let Some(v) = t
+            && (1.0..=100.0).contains(v)
+        {
+            // SAFETY: src is static str from our array
+            let label: &'static str = match *src {
+                "nvme_health" => "nvme_health",
+                "device_temp_prop" => "device_temp_prop",
+                "adapter_temp_prop" => "adapter_temp_prop",
+                _ => "unknown",
+            };
+            return Some((*v, label));
         }
     }
     None
@@ -233,8 +233,8 @@ fn query_temperature_property(handle: HANDLE, property_id: i32) -> Option<f64> {
 fn query_temperature_nvme(handle: HANDLE) -> Option<f64> {
     use windows_sys::Win32::Storage::Nvme::NVME_HEALTH_INFO_LOG;
     use windows_sys::Win32::System::Ioctl::{
-        NVMeDataTypeLogPage, ProtocolTypeNvme, StorageDeviceProtocolSpecificProperty,
-        STORAGE_PROTOCOL_DATA_DESCRIPTOR, STORAGE_PROTOCOL_SPECIFIC_DATA,
+        NVMeDataTypeLogPage, ProtocolTypeNvme, STORAGE_PROTOCOL_DATA_DESCRIPTOR,
+        STORAGE_PROTOCOL_SPECIFIC_DATA, StorageDeviceProtocolSpecificProperty,
     };
 
     const NVME_LOG_PAGE_HEALTH_INFO: u32 = 0x02;
@@ -370,9 +370,5 @@ fn query_product_name(handle: HANDLE) -> Option<String> {
     let slice = &buf[product_offset..returned as usize];
     let end = slice.iter().position(|&b| b == 0).unwrap_or(slice.len());
     let s = String::from_utf8_lossy(&slice[..end]).trim().to_string();
-    if s.is_empty() {
-        None
-    } else {
-        Some(s)
-    }
+    if s.is_empty() { None } else { Some(s) }
 }

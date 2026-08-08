@@ -16,7 +16,7 @@ mod superio;
 
 pub use nct668::HwmSample;
 pub use provider::PawnioProvider;
-pub use superio::{detect_chips, DetectedChip, SuperIoChip};
+pub use superio::{DetectedChip, SuperIoChip, detect_chips};
 
 /// Installation present (DLL/sys on disk). Does **not** guarantee open rights.
 pub fn is_installed() -> bool {

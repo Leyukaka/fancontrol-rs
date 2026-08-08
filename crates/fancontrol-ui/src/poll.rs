@@ -1,6 +1,6 @@
 //! Background hardware polling → UI snapshot.
 
-use fancontrol_core::{cpu_temp_seed_priority, ChannelMap, SensorKind};
+use fancontrol_core::{ChannelMap, SensorKind, cpu_temp_seed_priority};
 use fancontrol_pawnio::PawnioProvider;
 use fancontrol_plugins::ProviderRegistry;
 use std::collections::HashMap;
@@ -163,44 +163,43 @@ fn take_snapshot(
     for s in sensors {
         let id = s.id.as_str();
         // Prefer batch values for pawnio
-        if let Some(rest) = id.strip_prefix("pawnio.") {
-            if let Some((di_s, tail)) = rest.split_once('.') {
-                if di_s.parse::<usize>().is_ok() {
-                    if let Some(name) = tail.strip_prefix("temp.") {
-                        let key = format!("pawnio.{di_s}.temp.{name}");
-                        if let Some(&t) = pawnio_temp.get(&key) {
-                            let label = map.sensor_name(id, &s.name).to_string();
-                            // Prefer CPU / PECI_0 / CPUTIN over "first temp" (banked NCT).
-                            let prio = cpu_temp_seed_priority(name)
-                                .min(cpu_temp_seed_priority(label.as_str()));
-                            if prio < cpu_prio {
-                                cpu_prio = prio;
-                                cpu_temp = Some(t);
-                                cpu_temp_id = Some(id.to_string());
-                            }
-                            temps.push((id.to_string(), label.clone(), t));
-                            plottable.push(PlottableSensor {
-                                id: id.to_string(),
-                                label,
-                                value: t,
-                                kind: SensorKind::Temperature,
-                                unit: Some("°C".into()),
-                            });
-                            continue;
-                        }
+        if let Some(rest) = id.strip_prefix("pawnio.")
+            && let Some((di_s, tail)) = rest.split_once('.')
+            && di_s.parse::<usize>().is_ok()
+        {
+            if let Some(name) = tail.strip_prefix("temp.") {
+                let key = format!("pawnio.{di_s}.temp.{name}");
+                if let Some(&t) = pawnio_temp.get(&key) {
+                    let label = map.sensor_name(id, &s.name).to_string();
+                    // Prefer CPU / PECI_0 / CPUTIN over "first temp" (banked NCT).
+                    let prio =
+                        cpu_temp_seed_priority(name).min(cpu_temp_seed_priority(label.as_str()));
+                    if prio < cpu_prio {
+                        cpu_prio = prio;
+                        cpu_temp = Some(t);
+                        cpu_temp_id = Some(id.to_string());
                     }
-                    if let Some(idx) = tail.strip_prefix("fan") {
-                        if let (Ok(di), Ok(fi)) = (di_s.parse::<usize>(), idx.parse::<usize>()) {
-                            if let Some(&rpm) = pawnio_fan.get(&(di, fi)) {
-                                let label = map.sensor_name(id, &s.name).to_string();
-                                fans.push((id.to_string(), label, rpm));
-                                continue;
-                            }
-                            // absent fan — skip without error
-                            continue;
-                        }
-                    }
+                    temps.push((id.to_string(), label.clone(), t));
+                    plottable.push(PlottableSensor {
+                        id: id.to_string(),
+                        label,
+                        value: t,
+                        kind: SensorKind::Temperature,
+                        unit: Some("°C".into()),
+                    });
+                    continue;
                 }
+            }
+            if let Some(idx) = tail.strip_prefix("fan")
+                && let (Ok(di), Ok(fi)) = (di_s.parse::<usize>(), idx.parse::<usize>())
+            {
+                if let Some(&rpm) = pawnio_fan.get(&(di, fi)) {
+                    let label = map.sensor_name(id, &s.name).to_string();
+                    fans.push((id.to_string(), label, rpm));
+                    continue;
+                }
+                // absent fan — skip without error
+                continue;
             }
         }
 
@@ -219,10 +218,10 @@ fn take_snapshot(
                         }) || id == "mock.gpu_temp";
                         if gpu_temp_id.is_none() && is_alias {
                             gpu_temp_id = Some(id.to_string());
-                            if let Some(rest) = id.strip_prefix("host.gpu") {
-                                if let Ok(idx) = rest.parse::<u32>() {
-                                    host_gpu_names.insert(idx, label.clone());
-                                }
+                            if let Some(rest) = id.strip_prefix("host.gpu")
+                                && let Ok(idx) = rest.parse::<u32>()
+                            {
+                                host_gpu_names.insert(idx, label.clone());
                             }
                         }
                         // Skip `.temp.core` duplicate of the short alias in Temps/graph picker.
@@ -380,25 +379,25 @@ fn assemble_gpu_snaps(vals: &HashMap<String, f64>, names: &HashMap<u32, String>)
         .collect();
 
     // Mock path: single synthetic GPU when no host NVIDIA metrics.
-    if out.is_empty() {
-        if let Some(&core) = vals.get("mock.gpu_temp") {
-            out.push(GpuSnap {
-                index: 0,
-                name: "GPU (mock)".into(),
-                temp_core: Some(core),
-                temp_memory: vals.get("mock.gpu_temp_memory").copied(),
-                temp_hotspot: None,
-                power_w: vals.get("mock.gpu_power").copied(),
-                power_limit_w: vals.get("mock.gpu_power_limit").copied(),
-                util_gpu: vals.get("mock.gpu_load").copied(),
-                util_mem: vals.get("mock.gpu_load_mem").copied(),
-                clock_graphics_mhz: vals.get("mock.gpu_clock").copied(),
-                clock_memory_mhz: vals.get("mock.gpu_clock_mem").copied(),
-                fan_percent: vals.get("mock.gpu_fan").copied(),
-                mem_used_mib: vals.get("mock.gpu_mem_used").copied(),
-                mem_total_mib: vals.get("mock.gpu_mem_total").copied(),
-            });
-        }
+    if out.is_empty()
+        && let Some(&core) = vals.get("mock.gpu_temp")
+    {
+        out.push(GpuSnap {
+            index: 0,
+            name: "GPU (mock)".into(),
+            temp_core: Some(core),
+            temp_memory: vals.get("mock.gpu_temp_memory").copied(),
+            temp_hotspot: None,
+            power_w: vals.get("mock.gpu_power").copied(),
+            power_limit_w: vals.get("mock.gpu_power_limit").copied(),
+            util_gpu: vals.get("mock.gpu_load").copied(),
+            util_mem: vals.get("mock.gpu_load_mem").copied(),
+            clock_graphics_mhz: vals.get("mock.gpu_clock").copied(),
+            clock_memory_mhz: vals.get("mock.gpu_clock_mem").copied(),
+            fan_percent: vals.get("mock.gpu_fan").copied(),
+            mem_used_mib: vals.get("mock.gpu_mem_used").copied(),
+            mem_total_mib: vals.get("mock.gpu_mem_total").copied(),
+        });
     }
 
     out

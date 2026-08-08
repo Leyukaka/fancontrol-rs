@@ -3,7 +3,7 @@
 
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::Duration;
-use windows_sys::Win32::Foundation::{GetLastError, FALSE, HANDLE, WAIT_OBJECT_0};
+use windows_sys::Win32::Foundation::{FALSE, GetLastError, HANDLE, WAIT_OBJECT_0};
 use windows_sys::Win32::System::Threading::{CreateMutexW, ReleaseMutex, WaitForSingleObject};
 
 const ISA_MUTEX_NAME: &str = "Global\\Access_ISABUS.HTP.Method";
@@ -61,11 +61,11 @@ impl IsaBusGuard {
 
 impl Drop for IsaBusGuard {
     fn drop(&mut self) {
-        if self.held_isa {
-            if let Some(h) = isa_mutex_handle() {
-                unsafe {
-                    let _ = ReleaseMutex(h);
-                }
+        if self.held_isa
+            && let Some(h) = isa_mutex_handle()
+        {
+            unsafe {
+                let _ = ReleaseMutex(h);
             }
         }
     }
