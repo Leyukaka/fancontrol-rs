@@ -1,8 +1,9 @@
-# DIMM (RAM) temperature — experimental
+# DIMM (RAM) temperature — experimental (owner-validated path)
 
-**Status: Experimental.** Code path exists, exercised on the owner's AMD +
-NCT668x + DDR5 machine only. Expect gaps on other chipsets/DIMMs. This is a
-sensor-only, read-only feature — it never writes to SPD.
+**Status: Experimental** for general hardware; **owner-validated** on AMD
+(SmbusPIIX4) + NCT668x (`0xD5`) + 4× DDR5 SPD hubs (`host.dimm0..3.temp`,
+idle ~35–38 °C). Other chipsets/DIMMs remain unproven. Sensor-only,
+read-only — never writes to SPD.
 
 ## What it does
 
