@@ -214,13 +214,13 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
     let native = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1200.0, 860.0])
-            .with_title("fancontrol-rs")
+            .with_title("Fancontrol-RS")
             .with_icon(icon),
         ..Default::default()
     };
 
     eframe::run_native(
-        "fancontrol-rs",
+        "Fancontrol-RS",
         native,
         Box::new(move |cc| {
             cc.egui_ctx.set_visuals(egui::Visuals::dark());
@@ -522,7 +522,7 @@ impl eframe::App for FanApp {
 
         egui::Panel::top("top").show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.heading("fancontrol-rs");
+                self.ui_graph_controls(ui);
                 ui.separator();
                 let write_capable =
                     self.options.allow_hw_write && matches!(self.status, BackendStatus::Ok(_));
@@ -1778,7 +1778,6 @@ impl FanApp {
         plot_h: f32,
         power_axis_ceiling: Option<f32>,
     ) {
-        self.ui_graph_controls(ui);
         let (win, samp) = (
             self.settings.graph_window_minutes,
             self.settings.graph_sample_secs,

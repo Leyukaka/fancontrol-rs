@@ -47,7 +47,7 @@ Rust edition 2024, stable toolchain pinned via `rust-toolchain.toml` (rustfmt + 
 
 ## Status (keep updated)
 
-- Product line: **v0.4.2** (+ main WIP) — CPU package power AMD + **Intel RAPL** via PawnIO MSR; graph seed; manual update check only (no auto-update). OTEL export deferred.
+- Product line: **v0.4.3** (+ main WIP) — CPU package power AMD + **Intel RAPL** via PawnIO MSR; graph seed; domain panels (Sensors/GPU/CPU) with top-bar window/sampling controls; manual update check only (no auto-update). OTEL export deferred.
 - Phase 0 foundation: **done**.
 - Phase 1: PawnIOLib FFI + LpcIO + **NCT668x EC HWM** (validated class id `0xD5` rev `0x92` @ `0x0A20`) + **banked NCT** (ROG B550-A `0xD4` validated reads+writes) + control loop + CLI.
 - Elevation required for `pawnio_open` (Administrator). **PawnIO is a prerequisite** (not bundled) — UI shows a startup dialog if missing / not openable, with a **Restart as Administrator** button (`ShellExecute` `runas` → UAC; no silent elevation).

@@ -2,7 +2,7 @@
   <img src="assets/logo.svg" alt="fancontrol-rs logo" width="160">
 </p>
 
-<h1 align="center">fancontrol-rs</h1>
+<h1 align="center">Fancontrol-RS</h1>
 
 <p align="center">
   <strong>Windows fan control and system activity (CPU / RAM) in Rust.</strong><br>
@@ -14,7 +14,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/rust-edition%202024-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue" alt="License">
-  <img src="https://img.shields.io/badge/version-0.4.2-informational" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.4.3-informational" alt="Version">
   <img src="https://img.shields.io/badge/backend-PawnIO-success" alt="PawnIO">
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-blue" alt="Windows">
 </p>
@@ -105,7 +105,7 @@ Rough map of the Windows landscape. Support always depends on your board and EC.
 
 ## Status
 
-**v0.4.2**. NCT668x + banked NCT (ROG B550-A) **certified**; other boards should work - **send logs to certify**. Curves on **CPU-like temps only**, multi-kind graph (GPU metrics + **AMD CPU package power W**), Activity deck, optional metrics store, Start with Windows, **Restart as Administrator** (UAC).  
+**v0.4.3**. NCT668x + banked NCT (ROG B550-A) **certified**; other boards should work - **send logs to certify**. Curves on **CPU-like temps only**, multi-kind graph (GPU metrics + **AMD CPU package power W**), Activity deck, optional metrics store, Start with Windows, **Restart as Administrator** (UAC).  
 Public source of truth: this repo ([Releases](https://github.com/Leyukaka/fancontrol-rs/releases), issues, PRs).
 
 | Crate | Role |
