@@ -190,7 +190,7 @@ gpu.vram: "VRAM"
 gpu.fan: "Fan"
 
 cpu.heading: "CPU"
-cpu.package_subtitle: "パッケージ"
+cpu.package_subtitle: "Package"
 cpu.read_only_note: "読み取り専用"
 cpu.none: "CPU 電力メトリクスがありません"
 cpu.none_hint: "管理者権限の PawnIO が必要です(AMD RAPL / Intel MSR)。CPU 温度は Super I/O 経由で表示される場合があります。"
