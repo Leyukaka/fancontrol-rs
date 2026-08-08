@@ -8,17 +8,30 @@ use egui_plot::{Line, Plot};
 pub const POWER_SPARKLINE_HEIGHT: f32 = 72.0;
 
 /// Card frame around a domain panel (GPU / CPU) so headers and plots share padding.
+/// Expands to the full **available height** of the parent (equal Sensors/GPU/CPU slots).
 pub fn domain_card(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui)) {
-    Frame::group(ui.style())
-        .inner_margin(Margin::same(8))
-        .stroke(Stroke::new(
-            1.0,
-            ui.visuals().widgets.noninteractive.bg_stroke.color,
-        ))
-        .show(ui, |ui| {
-            ui.set_min_width(ui.available_width());
-            add_contents(ui);
-        });
+    let fill = egui::vec2(ui.available_width(), ui.available_height().max(40.0));
+    ui.allocate_ui(fill, |ui| {
+        Frame::group(ui.style())
+            .inner_margin(Margin::same(8))
+            .stroke(Stroke::new(
+                1.0,
+                ui.visuals().widgets.noninteractive.bg_stroke.color,
+            ))
+            .show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                ui.set_min_height(ui.available_height().max(0.0));
+                add_contents(ui);
+                // Stretch frame to the allocated slot when content is shorter.
+                let leftover = ui.available_height();
+                if leftover > 1.0 {
+                    ui.allocate_exact_size(
+                        egui::vec2(ui.available_width(), leftover),
+                        egui::Sense::hover(),
+                    );
+                }
+            });
+    });
 }
 
 /// Thin horizontal fill bar under a metric row.
