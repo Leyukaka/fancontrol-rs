@@ -1,25 +1,33 @@
 //! Plugin provider bridging Super I/O hardware into fancontrol traits.
 
-use crate::cpu_power::AmdCpuPower;
+use crate::cpu_power::{CpuPower, CpuPowerSample};
 use crate::device::SuperIoDevice;
 use crate::nct668::HwmSample;
 use crate::superio::detect_chips;
 use fancontrol_core::{ControlDescriptor, ControlId, SensorDescriptor, SensorId, SensorKind};
 use fancontrol_plugins::{ControlProvider, PluginError, Result, SensorProvider};
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
-/// Sensor id for AMD/Intel package power, plottable on the graph regardless of
-/// board (host-facing, not `pawnio.{device_index}.*` like the Super I/O sensors).
+/// Sensor ids for CPU/DRAM power (host-facing, PawnIO MSR backend).
 const CPU_POWER_PACKAGE_ID: &str = "host.cpu.power.package";
+const CPU_POWER_LIMIT_ID: &str = "host.cpu.power.limit";
+const RAM_POWER_ID: &str = "host.ram.power";
+
+/// Reuse one MSR sample for all power ids within this window (avoids triple ΔE).
+const CPU_POWER_SAMPLE_TTL: Duration = Duration::from_millis(200);
 
 pub struct PawnioProvider {
     devices: Vec<SuperIoDevice>,
     detect_notes: Mutex<Vec<String>>,
     init_error: Option<String>,
     write_enabled: bool,
-    /// AMD package power (PawnIO `AMDFamily17` MSR module). `None` on non-AMD
-    /// CPUs, unsupported AMD families, or when the module fails to load.
-    cpu_power: Option<AmdCpuPower>,
+    /// AMD or Intel package power (PawnIO MSR). `None` when unavailable.
+    cpu_power: Option<CpuPower>,
+    /// Whether limit / DRAM sensors should be advertised (Intel RAPL).
+    cpu_power_has_limit: bool,
+    cpu_power_has_dram: bool,
+    cpu_power_cache: Mutex<Option<(Instant, CpuPowerSample)>>,
 }
 
 impl PawnioProvider {
@@ -28,16 +36,28 @@ impl PawnioProvider {
     }
 
     pub fn probe_with_writes(write_enabled: bool) -> Self {
-        let (cpu_power, cpu_power_note) = match AmdCpuPower::try_open() {
-            Ok(p) => (
-                Some(p),
-                format!("{CPU_POWER_PACKAGE_ID}: AMD MSR (AMDFamily17) available"),
-            ),
+        let (cpu_power, cpu_power_note, has_limit, has_dram) = match CpuPower::try_open() {
+            Ok((p, label)) => {
+                // Probe once so we know which optional sensors to list.
+                let (has_limit, has_dram) = match p.sample() {
+                    Ok(s) => (s.limit_w.is_some(), s.dram_w.is_some()),
+                    Err(_) => (false, false),
+                };
+                (
+                    Some(p),
+                    format!("{CPU_POWER_PACKAGE_ID}: {label} available"),
+                    has_limit,
+                    has_dram,
+                )
+            }
             Err(e) => {
-                tracing::debug!(error = %e, "AMD CPU package power unavailable");
-                // Surface the real cause (admin denied, non-AMD, family, etc.)
-                // instead of a generic "non-AMD" guess that misleads on E_ACCESSDENIED.
-                (None, format!("{CPU_POWER_PACKAGE_ID}: unavailable ({e})"))
+                tracing::debug!(error = %e, "CPU package power unavailable");
+                (
+                    None,
+                    format!("{CPU_POWER_PACKAGE_ID}: unavailable ({e})"),
+                    false,
+                    false,
+                )
             }
         };
 
@@ -84,6 +104,9 @@ impl PawnioProvider {
                     init_error: None,
                     write_enabled,
                     cpu_power,
+                    cpu_power_has_limit: has_limit,
+                    cpu_power_has_dram: has_dram,
+                    cpu_power_cache: Mutex::new(None),
                 }
             }
             Err(e) => Self {
@@ -92,8 +115,30 @@ impl PawnioProvider {
                 init_error: Some(e),
                 write_enabled,
                 cpu_power,
+                cpu_power_has_limit: has_limit,
+                cpu_power_has_dram: has_dram,
+                cpu_power_cache: Mutex::new(None),
             },
         }
+    }
+
+    fn cpu_power_sample(&self) -> std::result::Result<CpuPowerSample, PluginError> {
+        let now = Instant::now();
+        if let Ok(g) = self.cpu_power_cache.lock()
+            && let Some((t, s)) = g.as_ref()
+            && now.duration_since(*t) < CPU_POWER_SAMPLE_TTL
+        {
+            return Ok(s.clone());
+        }
+        let backend = self
+            .cpu_power
+            .as_ref()
+            .ok_or_else(|| PluginError::SensorNotFound(CPU_POWER_PACKAGE_ID.into()))?;
+        let s = backend.sample().map_err(PluginError::Io)?;
+        if let Ok(mut g) = self.cpu_power_cache.lock() {
+            *g = Some((now, s.clone()));
+        }
+        Ok(s)
     }
 
     pub fn write_enabled(&self) -> bool {
@@ -166,10 +211,27 @@ impl SensorProvider for PawnioProvider {
                 id: SensorId::new(CPU_POWER_PACKAGE_ID),
                 name: "CPU Package Power".into(),
                 kind: SensorKind::Power,
-                // host.* id convention (backend is still PawnIO MSR).
                 provider: "host".into(),
                 unit: Some("W".into()),
             });
+            if self.cpu_power_has_limit {
+                out.push(SensorDescriptor {
+                    id: SensorId::new(CPU_POWER_LIMIT_ID),
+                    name: "CPU Power limit (TDP-ish)".into(),
+                    kind: SensorKind::Power,
+                    provider: "host".into(),
+                    unit: Some("W".into()),
+                });
+            }
+            if self.cpu_power_has_dram {
+                out.push(SensorDescriptor {
+                    id: SensorId::new(RAM_POWER_ID),
+                    name: "DRAM Power".into(),
+                    kind: SensorKind::Power,
+                    provider: "host".into(),
+                    unit: Some("W".into()),
+                });
+            }
         }
         out
     }
@@ -177,12 +239,19 @@ impl SensorProvider for PawnioProvider {
     fn read(&self, id: &SensorId) -> Result<f64> {
         let s = id.as_str();
         if s == CPU_POWER_PACKAGE_ID {
+            return Ok(self.cpu_power_sample()?.package_w);
+        }
+        if s == CPU_POWER_LIMIT_ID {
             return self
-                .cpu_power
-                .as_ref()
-                .ok_or_else(|| PluginError::SensorNotFound(s.into()))?
-                .sample_watts()
-                .map_err(PluginError::Io);
+                .cpu_power_sample()?
+                .limit_w
+                .ok_or_else(|| PluginError::SensorNotFound(s.into()));
+        }
+        if s == RAM_POWER_ID {
+            return self
+                .cpu_power_sample()?
+                .dram_w
+                .ok_or_else(|| PluginError::SensorNotFound(s.into()));
         }
         let rest = s
             .strip_prefix("pawnio.")

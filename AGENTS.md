@@ -47,17 +47,17 @@ Rust edition 2024, stable toolchain pinned via `rust-toolchain.toml` (rustfmt + 
 
 ## Status (keep updated)
 
-- Product line: **v0.4.2** — AMD CPU package power (`host.cpu.power.package` via PawnIO `AMDFamily17`, graph seed + CLI sample Power section) + v0.4.1 UAC restart. OTEL export still deferred. Intel RAPL / DRAM power next.
+- Product line: **v0.4.2** (+ main WIP) — CPU package power AMD + **Intel RAPL** via PawnIO MSR; graph seed; manual update check only (no auto-update). OTEL export deferred.
 - Phase 0 foundation: **done**.
 - Phase 1: PawnIOLib FFI + LpcIO + **NCT668x EC HWM** (validated class id `0xD5` rev `0x92` @ `0x0A20`) + **banked NCT** (ROG B550-A `0xD4` validated reads+writes) + control loop + CLI.
 - Elevation required for `pawnio_open` (Administrator). **PawnIO is a prerequisite** (not bundled) — UI shows a startup dialog if missing / not openable, with a **Restart as Administrator** button (`ShellExecute` `runas` → UAC; no silent elevation).
 - Validated paths: **NCT6687D-class** (`0xD5`) and **banked NCT** on ROG STRIX B550-A (`0xD4`); higher NCT668x controls = DR/experimental. See `docs/SUPPORTED_HARDWARE.md`.
 - Host sensors: fixed-path `nvidia-smi` **multi-metric** (temp core/memory, power W, util %, clocks, fan %, VRAM; NVIDIA-only; Hot Spot **not** via smi — needs NvAPI, not shipped) + storage via `DeviceIoControl` (NVMe health-log fallback; read-only, no PowerShell, no PATH walk). AMD/Intel GPU research in `docs/GPU_VENDOR_APIS.md`.
-- CPU package power (Phase 1a, **AMD only so far**): PawnIO `AMDFamily17` MSR module (`MSR_PWR_UNIT` / `MSR_PKG_ENERGY_STAT`), read-only, ΔE/Δt → `host.cpu.power.package` (W). No `host.cpu.power.limit` / `host.ram.power` on AMD yet — the module exposes no power-limit or DRAM-energy MSR, so those stay omitted rather than invented. Graph default seed includes package power when present; Power Y ceiling also considers `host.cpu.power.limit` once Intel lands. Mock: `mock.cpu_power` (+ `mock.cpu_power_limit`). Intel RAPL (`IntelMSR`: package + limit + DRAM) is next.
+- CPU package power: PawnIO MSR **AMD** (`AMDFamily17`) or **Intel** (`IntelMSR` RAPL). Ids `host.cpu.power.package`; Intel may also expose `host.cpu.power.limit` + `host.ram.power`. Read-only ΔE/Δt. Graph seed includes package power. Mock: `mock.cpu_power` (+ limit).
 - Vendored modules: `crates/fancontrol-pawnio/modules/` (PawnIO.Modules, includes `AMDFamily17.bin`).
 - i18n: 8 languages (en/fr/de/es/it/zh/ja/lb) via `rust-i18n`, picker in Options panel, OS-locale default on first run, live switch (no restart), Noto Sans CJK bundled for zh/ja glyph coverage. `crates/fancontrol-ui/locales/`.
 - Fun extra: optional fractal pyramid panel (raymarched, GLSL→WGSL port) rendered via a custom wgpu pipeline through `egui_wgpu::CallbackTrait` — first custom wgpu callback in this codebase (`crates/fancontrol-ui/src/fractal.rs` + `fractal_shader.wgsl`). Toggle + speed + 2 colors in Options panel; off by default.
-- UI: **egui/eframe 0.35** — live sensors, sliders, curve editor, curve auto-apply, graph windows, **GPU detail panel** (shares top viz with multi-sensor graph; power/util/clocks/VRAM; Hot Spot shown as unavailable), rename map, options, system tray, profile last-used, manual update check.
+- UI: **egui/eframe 0.36** (+ `egui_plot` 0.37) — live sensors, sliders, curve editor, curve auto-apply, graph windows, **GPU detail panel**, rename map, options, system tray, profile last-used. **Updates: manual button only** (no background check, no download/install).
 - Graph: multi-sensor (pick any combination of live sensors in Options, ordered `graph_sensor_ids`, categorical color legend once >1 is plotted), per-control curve sensor binding next to the curve-assignment combo (defaults unchanged, so untouched controls behave exactly as before), "hide controls at 0% duty" option. Rendered via **`egui_plot`** (0.36, the release that pairs with `egui` 0.35, not 0.35.0 which pairs with `egui` 0.34) instead of a hand-rolled painter — the old custom fill polygon (`egui::Shape::convex_polygon`) fanned triangles from the oldest sample, which is only correct for a convex area and produced spike artifacts on any real (concave) trace. `crates/fancontrol-ui/src/graph.rs`.
 - **Activity deck** (v0.3.0, Options toggle, **default on**): CPU load sparkline (0–100 %, X anchored to last sample) + top processes with CPU % and RAM, sort CPU/RAM, name filter. Load-only mode skips process scan. Windows APIs only — no PowerShell, no WMI, no process kill.
 - Binary is GUI-subsystem (no console flash on launch); CLI usage from an existing terminal re-attaches to it automatically.
@@ -65,15 +65,14 @@ Rust edition 2024, stable toolchain pinned via `rust-toolchain.toml` (rustfmt + 
 
 ## Next priorities (order)
 
-1. Intel RAPL CPU/DRAM power (`IntelMSR`): package + `host.cpu.power.limit` + `host.ram.power` when present — see `specs/07-metrics-telemetry.md`.
-2. OpenTelemetry OTLP/HTTP metrics export (endpoint already in Options; see `specs/07-metrics-telemetry.md`).
-3. Broader chip validation (ITE IT87 still experimental; more banked NCT boards).
-4. Code signing (SmartScreen) — see `docs/SIGNING_AND_DISTRIBUTION.md`.
-5. Auto-update: download + SHA256 verify + install (manual check already done) — see `docs/SECURITY.md`.
-6. AMD/Intel GPU sensors — blocked on hardware; see `docs/GPU_VENDOR_APIS.md`. Optional later: NVML in-process, experimental NvAPI Hot Spot.
-7. RGB (future — not Super I/O).
-8. SSD/NVMe temps: validated under load on owner hardware (device_prop live); EVO SATA may report no temp.
-9. Mock is **opt-in** (`--mock`); product default is hardware/host only.
+1. OpenTelemetry OTLP/HTTP metrics export (endpoint already in Options; see `specs/07-metrics-telemetry.md`).
+2. Broader chip validation (ITE IT87 still experimental; more banked NCT boards).
+3. Code signing (SmartScreen) — see `docs/SIGNING_AND_DISTRIBUTION.md`.
+4. Optional later: download + SHA256 after **manual** check only (no silent auto-update) — see `docs/SECURITY.md`.
+5. AMD/Intel GPU sensors — blocked on hardware; see `docs/GPU_VENDOR_APIS.md`.
+6. RGB (future — not Super I/O).
+7. SSD/NVMe temps: more drives; EVO SATA may report no temp.
+8. Mock is **opt-in** (`--mock`); product default is hardware/host only.
 
 ## Safety product rules
 

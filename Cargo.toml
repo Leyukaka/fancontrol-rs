@@ -34,10 +34,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 clap = { version = "4", features = ["derive"] }
 directories = "6"
 
-# UI (egui + eframe)
-egui = "0.35"
-eframe = "0.35"
-egui_plot = "0.36"
+# UI (egui + eframe) — 0.36 pairs with egui_plot 0.37
+egui = "0.36"
+eframe = "0.36"
+egui_plot = "0.37"
 
 [package]
 name = "fancontrol-rs"

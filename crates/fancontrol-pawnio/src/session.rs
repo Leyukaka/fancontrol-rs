@@ -52,6 +52,7 @@ fn embedded_module(name: &str) -> Result<&'static [u8], String> {
         "LpcIO" | "lpcio" => Ok(include_bytes!("../modules/LpcIO.bin")),
         "Echo" | "echo" => Ok(include_bytes!("../modules/Echo.bin")),
         "AMDFamily17" | "amdfamily17" => Ok(include_bytes!("../modules/AMDFamily17.bin")),
+        "IntelMSR" | "intelmsr" => Ok(include_bytes!("../modules/IntelMSR.bin")),
         other => Err(format!("unknown embedded module: {other}")),
     }
 }
@@ -64,5 +65,11 @@ mod tests {
     fn embedded_lpcio_non_empty() {
         let b = embedded_module("LpcIO").unwrap();
         assert!(b.len() > 100);
+    }
+
+    #[test]
+    fn embedded_msr_modules_non_empty() {
+        assert!(embedded_module("AMDFamily17").unwrap().len() > 100);
+        assert!(embedded_module("IntelMSR").unwrap().len() > 100);
     }
 }

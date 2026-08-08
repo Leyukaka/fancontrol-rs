@@ -43,10 +43,11 @@ Binaries are **unsigned** (SmartScreen may warn). PWM writes are on by default a
 - **Activity deck**: CPU load history + top processes (CPU % and RAM), filter and sort (default on, can be turned off in Options)
 - **Security**: [PawnIO](https://pawnio.eu/) only for Super I/O / EC. Never ships WinRing0 or other known-vulnerable ring-0 drivers
 - **Host sensors**: NVIDIA GPU multi-metric via fixed-path `nvidia-smi` (temp, power W, util, clocks, VRAM, fan %) + GPU detail panel; SSD/NVMe temps via DeviceIoControl (no PowerShell)
-- **Metrics (v0.4)**: graph multi-kind series (GPU power/util/…; AMD CPU package W via PawnIO MSR; W scale from power limit), optional local SQLite store + CSV export; see `docs/METRICS_AND_OTEL.md`
+- **Metrics (v0.4)**: graph multi-kind series (GPU power/util/…; CPU package W via PawnIO MSR on **AMD + Intel**; optional DRAM/limit on Intel RAPL), optional local SQLite store + CSV export; see `docs/METRICS_AND_OTEL.md`
+- **Updates**: **manual only** — Options → **Check for updates** (GitHub Releases API link). No background check, no auto-download, no silent install
 - **Start with Windows**: Options + first-run prompt (current-user Run key, no admin)
 - **Admin elevation**: Needs-admin dialog + top bar **Restart as Administrator** (UAC via `runas`; no silent elevation)
-- **UI**: egui desktop app, system tray, first-run write consent, 8 languages (en/fr/de/es/it/zh/ja/lb)
+- **UI**: egui 0.36 desktop app, system tray, first-run write consent, 8 languages (en/fr/de/es/it/zh/ja/lb)
 - **CLI**: `sample`, `list-sensors`, `list-controls`, `test-duty`, `sample-storage`, …
 - **Optional fun**: shader graph styles (wgpu) in Options
 - Spec-driven design: decisions live under [`specs/`](./specs)

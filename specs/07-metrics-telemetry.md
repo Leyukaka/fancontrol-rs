@@ -71,7 +71,13 @@ trait MetricSink: Send {
 | `host.cpu.power.limit` | TDP / package power info (W) | Power-info MSR when available |
 | `host.ram.power` | DRAM power (W) | DRAM energy domain when available |
 
-**Vendor order:** **AMD first** (`AMDFamily17` — Zen fam 17h–1Ah: `MSR_PWR_UNIT` / `MSR_PKG_ENERGY_STAT`), then **Intel** (`IntelMSR` RAPL: unit / PKG energy / PKG power info / DRAM energy).
+**Vendor order:** try **AMD** (`AMDFamily17` — Zen fam 17h–1Ah) then **Intel** (`IntelMSR` RAPL).
+
+| Domain | AMD | Intel |
+|--------|-----|--------|
+| Package W | yes | yes |
+| Power limit / TDP-ish | no (omit sensor) | `MSR_PKG_POWER_INFO` when valid |
+| DRAM W | no | `MSR_DRAM_ENERGY_STATUS` when readable |
 
 - Requires elevated PawnIO session (same as Super I/O).
 - Monitoring only — **no** write of PL1/PL2 or undervolt MSRs.
@@ -143,7 +149,7 @@ Document smoke setup in `docs/METRICS_AND_OTEL.md` (collector → Prometheus/Gra
 ## Acceptance (CPU / DRAM power)
 
 - [x] AMD package power via PawnIO `AMDFamily17` → `host.cpu.power.package` plottable + metrics store.
-- [ ] Intel RAPL path after AMD: package + limit + DRAM when present (`host.cpu.power.limit`, `host.ram.power`).
-- [x] Power Y ceiling considers CPU limit as well as GPU `power.limit` (wired; no source populates CPU limit until Intel lands).
+- [x] Intel RAPL via `IntelMSR`: package + limit + DRAM when present.
+- [x] Power Y ceiling considers CPU limit as well as GPU `power.limit`.
 - [x] Default graph seed includes package power when the sensor exists.
 - [x] Read-only MSRs only; graceful omit when PawnIO/module/CPU unsupported.

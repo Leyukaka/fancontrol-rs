@@ -75,21 +75,20 @@ Spec: `specs/07-metrics-telemetry.md`.
 - [x] Start with Windows (Options + first-run prompt; HKCU Run)
 - [x] Docs `docs/METRICS_AND_OTEL.md` + Options i18n
 - [ ] OpenTelemetry OTLP metrics export (endpoint settings present; export not wired)
-- [ ] **CPU / DRAM power (W)** via PawnIO MSR only — see `07-metrics-telemetry.md`
-  - [x] AMD first (`AMDFamily17`): `host.cpu.power.package` (no limit MSR available on this module — omitted, not invented)
-  - [ ] Intel second (`IntelMSR`): package + `host.cpu.power.limit` + `host.ram.power` when DRAM RAPL present
+- [x] **CPU / DRAM power (W)** via PawnIO MSR only — see `07-metrics-telemetry.md`
+  - [x] AMD (`AMDFamily17`): `host.cpu.power.package`
+  - [x] Intel (`IntelMSR` RAPL): package + limit + DRAM when present
   - [x] Graph default seed includes package power; W axis ceiling max(GPU limit, CPU limit)
 
 ## Next priorities (order)
 
-1. **Intel CPU/DRAM package power (PawnIO `IntelMSR`)** — AMD done; graph + metrics
-2. OTEL OTLP/HTTP metrics export
-3. Broader chip validation (community logs + experimental paths)
-4. SSD/NVMe temp validation on real hardware
-5. Code signing when ready for wider audience
-6. Auto-update download + SHA256
-7. Multi-sensor curves (max CPU+GPU)
-8. RGB remains **future / out of Super I/O fan HWM scope**
+1. OTEL OTLP/HTTP metrics export
+2. Broader chip validation (community logs + experimental paths)
+3. SSD/NVMe temp validation on real hardware
+4. Code signing when ready for wider audience
+5. Optional: download + SHA256 after manual check (still no silent auto-update)
+6. Multi-sensor curves (max CPU+GPU)
+7. RGB remains **future / out of Super I/O fan HWM scope**
 
 ## Out of scope for v1
 
