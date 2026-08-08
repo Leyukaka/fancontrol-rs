@@ -42,6 +42,7 @@ impl MockProvider {
         values.insert("mock.gpu_mem_total".into(), 12288.0);
         values.insert("mock.cpu_fan_rpm".into(), 900.0);
         values.insert("mock.case_fan_rpm".into(), 700.0);
+        values.insert("mock.dimm0.temp".into(), 41.0);
 
         let mut duties = HashMap::new();
         duties.insert("mock.cpu_fan".into(), 30);
@@ -190,6 +191,13 @@ impl SensorProvider for MockProvider {
                 provider: self.name.clone(),
                 unit: Some("RPM".into()),
             },
+            SensorDescriptor {
+                id: SensorId::new("mock.dimm0.temp"),
+                name: "DIMM 0 Temp (experimental)".into(),
+                kind: SensorKind::Temperature,
+                provider: self.name.clone(),
+                unit: Some("°C".into()),
+            },
         ]
     }
 
@@ -257,8 +265,8 @@ mod tests {
     #[test]
     fn mock_lists_and_reads() {
         let m = MockProvider::new();
-        // 2 temps (CPU/GPU) + 9 GPU metrics + 2 CPU power + 2 fan RPM
-        assert_eq!(m.sensors().len(), 15);
+        // 2 temps (CPU/GPU) + 9 GPU metrics + 2 CPU power + 2 fan RPM + 1 DIMM temp
+        assert_eq!(m.sensors().len(), 16);
         assert_eq!(m.controls().len(), 2);
         let t = m.read(&SensorId::new("mock.cpu_temp")).unwrap();
         assert!((t - 42.0).abs() < f64::EPSILON);

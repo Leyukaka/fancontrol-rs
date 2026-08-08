@@ -53,6 +53,8 @@ fn embedded_module(name: &str) -> Result<&'static [u8], String> {
         "Echo" | "echo" => Ok(include_bytes!("../modules/Echo.bin")),
         "AMDFamily17" | "amdfamily17" => Ok(include_bytes!("../modules/AMDFamily17.bin")),
         "IntelMSR" | "intelmsr" => Ok(include_bytes!("../modules/IntelMSR.bin")),
+        "SmbusPIIX4" | "smbuspiix4" => Ok(include_bytes!("../modules/SmbusPIIX4.bin")),
+        "SmbusI801" | "smbusi801" => Ok(include_bytes!("../modules/SmbusI801.bin")),
         other => Err(format!("unknown embedded module: {other}")),
     }
 }
@@ -71,5 +73,11 @@ mod tests {
     fn embedded_msr_modules_non_empty() {
         assert!(embedded_module("AMDFamily17").unwrap().len() > 100);
         assert!(embedded_module("IntelMSR").unwrap().len() > 100);
+    }
+
+    #[test]
+    fn embedded_smbus_modules_non_empty() {
+        assert!(embedded_module("SmbusPIIX4").unwrap().len() > 100);
+        assert!(embedded_module("SmbusI801").unwrap().len() > 100);
     }
 }

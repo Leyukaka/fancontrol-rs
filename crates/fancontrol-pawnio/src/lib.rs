@@ -6,9 +6,11 @@
 
 mod cpu_power;
 mod device;
+mod dimm_temp;
 mod ffi;
 mod lpcio;
 mod mutex_isa;
+mod mutex_smbus;
 mod nct668;
 mod provider;
 mod session;

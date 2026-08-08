@@ -19,6 +19,11 @@ Spec-Driven Design: product and architecture decisions live in `specs/`.
 
 No PR process for now: commit and push straight to `main` (a local feature branch is still fine for a large/risky change, but merge it yourself, no `gh pr create`). Still run `cargo test`/`clippy`/`fmt` before pushing, CI runs on `main` pushes too. `CONTRIBUTING.md`'s PR template, AI-disclosure section, and review rules are written for when this project opens up to outside contributors; they don't apply to day-to-day solo work right now.
 
+### Commit messages (mandatory for agents)
+
+- **Never** add AI trailers or co-author spam: no `Co-Authored-By:`, `Co-authored-by:`, `Generated-by:`, `Signed-off-by:` for models, or similar.
+- Commits are authored as the human maintainer only. Do not advertise the tool in the commit body.
+
 ## Environment (critical)
 
 Hardware sensors and PawnIO need a **real Windows host** (not a disposable Linux container as the only target).
@@ -54,7 +59,8 @@ Rust edition 2024, stable toolchain pinned via `rust-toolchain.toml` (rustfmt + 
 - Validated paths: **NCT6687D-class** (`0xD5`) and **banked NCT** on ROG STRIX B550-A (`0xD4`); higher NCT668x controls = DR/experimental. See `docs/SUPPORTED_HARDWARE.md`.
 - Host sensors: fixed-path `nvidia-smi` **multi-metric** (temp core/memory, power W, util %, clocks, fan %, VRAM; NVIDIA-only; Hot Spot **not** via smi — needs NvAPI, not shipped) + storage via `DeviceIoControl` (NVMe health-log fallback; read-only, no PowerShell, no PATH walk). AMD/Intel GPU research in `docs/GPU_VENDOR_APIS.md`.
 - CPU package power: PawnIO MSR **AMD** (`AMDFamily17`) or **Intel** (`IntelMSR` RAPL). Ids `host.cpu.power.package`; Intel may also expose `host.cpu.power.limit` + `host.ram.power`. Read-only ΔE/Δt. Graph seed includes package power. Mock: `mock.cpu_power` (+ limit).
-- Vendored modules: `crates/fancontrol-pawnio/modules/` (PawnIO.Modules, includes `AMDFamily17.bin`).
+- **DIMM temp (DDR5 SPD hub)**: PawnIO `SmbusPIIX4` then `SmbusI801`; ids `host.dimm{N}.temp`. Owner-validated on AMD + NCT668x + 4× DDR5 (~35–38 °C idle). Still experimental for other boards. See `docs/DIMM_TEMP.md`.
+- Vendored modules: `crates/fancontrol-pawnio/modules/` (PawnIO.Modules, includes SMBus + MSR bins).
 - i18n: 8 languages (en/fr/de/es/it/zh/ja/lb) via `rust-i18n`, picker in Options panel, OS-locale default on first run, live switch (no restart), Noto Sans CJK bundled for zh/ja glyph coverage. `crates/fancontrol-ui/locales/`.
 - Fun extra: optional fractal pyramid panel (raymarched, GLSL→WGSL port) rendered via a custom wgpu pipeline through `egui_wgpu::CallbackTrait` — first custom wgpu callback in this codebase (`crates/fancontrol-ui/src/fractal.rs` + `fractal_shader.wgsl`). Toggle + speed + 2 colors in Options panel; off by default.
 - UI: **egui/eframe 0.36** (+ `egui_plot` 0.37) — live sensors, sliders, curve editor, curve auto-apply, graph windows, **GPU detail panel**, rename map, options, system tray, profile last-used. **Updates: manual button only** (no background check, no download/install).
