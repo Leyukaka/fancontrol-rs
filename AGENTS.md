@@ -91,6 +91,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo run -- list-sensors
 cargo run -- backend-status
 cargo run -- --no-hw ui
+# Faster optimized local builds (no full LTO). Ship with --release only.
+cargo run --profile release-fast -- ui
 ```
 
 ## Specs map

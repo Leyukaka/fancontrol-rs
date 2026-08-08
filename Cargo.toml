@@ -91,3 +91,11 @@ lto = true
 codegen-units = 1
 strip = true
 
+# Faster local "almost release" builds (no full LTO). Ship with `release` only.
+#   cargo build --profile release-fast
+#   cargo run --profile release-fast -- ui
+[profile.release-fast]
+inherits = "release"
+lto = false
+codegen-units = 16
+
