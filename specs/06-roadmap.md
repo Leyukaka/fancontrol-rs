@@ -83,10 +83,11 @@ Spec: `specs/07-metrics-telemetry.md`.
 
 ## Next priorities (order)
 
-1. OTEL OTLP/HTTP metrics export
-2. Broader chip validation (community logs + experimental paths)
-3. SSD/NVMe temp validation on real hardware
-4. Code signing when ready for wider audience
+1. **GPU panel layout**: move Hot Spot / Memory-temp *unavailable via nvidia-smi* captions **right of the temp chips** (they currently stack under the chips and shift the card). See `specs/04-ui.md`.
+2. OTEL OTLP/HTTP metrics export
+3. Broader chip validation (community logs + experimental paths)
+4. SSD/NVMe temp validation on real hardware
+5. Code signing when ready for wider audience
 5. Optional: download + SHA256 after manual check (still no silent auto-update)
 6. Multi-sensor curves (max CPU+GPU)
 7. RGB remains **future / out of Super I/O fan HWM scope**
