@@ -190,6 +190,7 @@ gpu.vram: "VRAM"
 gpu.fan: "Fan"
 
 cpu.heading: "CPU"
+cpu.package_subtitle: "封装"
 cpu.read_only_note: "只读"
 cpu.none: "无 CPU 功耗数据"
 cpu.none_hint: "需要提升权限的 PawnIO（AMD RAPL / Intel MSR）。CPU 温度仍可能通过 Super I/O 显示。"

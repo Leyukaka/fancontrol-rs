@@ -1,47 +1,50 @@
-//! GPU detail panel: power, temps, load, clocks, VRAM (read-only host metrics).
+//! GPU detail panel: power, temps, load, clocks, VRAM (aligned card layout with CPU).
 
 use crate::graph::TempHistory;
-use crate::panel_metrics::{load_color, metric_bar, power_color, power_sparkline, temp_chip};
+use crate::panel_metrics::{
+    domain_card, load_color, metric_bar, power_history_block, power_metric_row, temp_chip,
+};
 use crate::poll::GpuSnap;
 use eframe::egui::{self, Color32, RichText};
 
-/// Draw one or more GPU cards into `ui`. `power_history` is an optional recent
-/// power-draw trace for the **first** GPU (see `app.rs::gpu_power_history`) —
-/// only the primary card gets the sparkline.
+/// Draw one or more GPU cards. First card may show a shared power history sparkline.
 pub fn show_gpu_panel(ui: &mut egui::Ui, gpus: &[GpuSnap], power_history: Option<&TempHistory>) {
-    ui.horizontal(|ui| {
-        ui.heading(t!("gpu.heading").to_string());
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.small(t!("gpu.read_only_note").to_string());
+    domain_card(ui, |ui| {
+        ui.horizontal(|ui| {
+            ui.heading(t!("gpu.heading").to_string());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.small(t!("gpu.read_only_note").to_string());
+            });
         });
-    });
 
-    if gpus.is_empty() {
-        ui.colored_label(Color32::GRAY, t!("gpu.none").to_string());
-        ui.small(t!("gpu.none_hint").to_string());
-        return;
-    }
+        if gpus.is_empty() {
+            ui.colored_label(Color32::GRAY, t!("gpu.none").to_string());
+            ui.small(t!("gpu.none_hint").to_string());
+            return;
+        }
 
-    egui::ScrollArea::vertical()
-        .id_salt("gpu_panel_scroll")
-        .auto_shrink([false, false])
-        .show(ui, |ui| {
-            for (i, gpu) in gpus.iter().enumerate() {
-                if i > 0 {
-                    ui.add_space(8.0);
-                    ui.separator();
-                    ui.add_space(4.0);
+        egui::ScrollArea::vertical()
+            .id_salt("gpu_panel_scroll")
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                for (i, gpu) in gpus.iter().enumerate() {
+                    if i > 0 {
+                        ui.add_space(8.0);
+                        ui.separator();
+                        ui.add_space(4.0);
+                    }
+                    let history = if i == 0 { power_history } else { None };
+                    show_gpu_card(ui, gpu, history);
                 }
-                let history = if i == 0 { power_history } else { None };
-                show_gpu_card(ui, gpu, history);
-            }
-        });
+            });
+    });
 }
 
 fn show_gpu_card(ui: &mut egui::Ui, gpu: &GpuSnap, power_history: Option<&TempHistory>) {
+    // Subtitle = device name (matches CPU package subtitle slot).
     ui.label(RichText::new(&gpu.name).strong().size(16.0));
 
-    // Temperature row: Core | Hot Spot | Memory
+    // Chip row: Core | Hot Spot | Memory (always 3 slots).
     ui.add_space(4.0);
     ui.horizontal(|ui| {
         temp_chip(ui, t!("gpu.core").to_string(), gpu.temp_core, true);
@@ -59,49 +62,21 @@ fn show_gpu_card(ui: &mut egui::Ui, gpu: &GpuSnap, power_history: Option<&TempHi
 
     ui.add_space(6.0);
 
-    // Power
-    if gpu.power_w.is_some() || gpu.power_limit_w.is_some() {
-        let draw = gpu.power_w.unwrap_or(0.0);
-        let limit = gpu.power_limit_w.unwrap_or(0.0).max(1.0);
-        let frac = if gpu.power_limit_w.is_some() {
-            (draw / limit).clamp(0.0, 1.5) as f32
-        } else {
-            0.0
-        };
-        let text = match (gpu.power_w, gpu.power_limit_w) {
-            (Some(d), Some(l)) => format!("{d:.0} / {l:.0} W"),
-            (Some(d), None) => format!("{d:.0} W"),
-            (None, Some(l)) => format!("— / {l:.0} W"),
-            (None, None) => "—".into(),
-        };
-        ui.horizontal(|ui| {
-            ui.label(t!("gpu.power").to_string());
-            ui.label(
-                RichText::new(text)
-                    .monospace()
-                    .strong()
-                    .color(power_color(frac)),
-            );
-        });
-        if gpu.power_w.is_some() && gpu.power_limit_w.is_some() {
-            metric_bar(ui, frac.min(1.0), power_color(frac));
-        }
-    }
+    // Power row + bar (same block as CPU).
+    power_metric_row(ui, &t!("gpu.power"), gpu.power_w, gpu.power_limit_w, None);
 
-    if let Some(history) = power_history
-        && !history.is_empty()
-    {
-        ui.add_space(6.0);
-        ui.small(t!("gpu.power_history").to_string());
-        power_sparkline(
-            ui,
-            "gpu_power_sparkline",
-            history,
-            gpu.power_limit_w.map(|w| w as f32),
-        );
-    }
+    // Power history (fixed height, same as CPU).
+    power_history_block(
+        ui,
+        &t!("gpu.power_history"),
+        "gpu_power_sparkline",
+        power_history,
+        gpu.power_limit_w.map(|w| w as f32),
+    );
 
-    // Utilization
+    // Secondary metrics below the shared “above the fold” (GPU-only extras).
+    ui.add_space(6.0);
+
     if let Some(u) = gpu.util_gpu {
         ui.horizontal(|ui| {
             ui.label(t!("gpu.util_gpu").to_string());
@@ -119,7 +94,6 @@ fn show_gpu_card(ui: &mut egui::Ui, gpu: &GpuSnap, power_history: Option<&TempHi
         metric_bar(ui, (u / 100.0) as f32, load_color(u as f32 / 100.0));
     }
 
-    // Clocks
     if gpu.clock_graphics_mhz.is_some() || gpu.clock_memory_mhz.is_some() {
         ui.horizontal(|ui| {
             ui.label(t!("gpu.clocks").to_string());
@@ -135,7 +109,6 @@ fn show_gpu_card(ui: &mut egui::Ui, gpu: &GpuSnap, power_history: Option<&TempHi
         });
     }
 
-    // VRAM
     if let (Some(used), Some(total)) = (gpu.mem_used_mib, gpu.mem_total_mib)
         && total > 0.0
     {
@@ -151,7 +124,6 @@ fn show_gpu_card(ui: &mut egui::Ui, gpu: &GpuSnap, power_history: Option<&TempHi
         metric_bar(ui, frac, load_color(frac));
     }
 
-    // Fan %
     if let Some(f) = gpu.fan_percent {
         ui.horizontal(|ui| {
             ui.label(t!("gpu.fan").to_string());

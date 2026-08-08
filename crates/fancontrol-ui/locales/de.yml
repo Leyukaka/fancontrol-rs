@@ -190,6 +190,7 @@ gpu.vram: "VRAM"
 gpu.fan: "Fan"
 
 cpu.heading: "CPU"
+cpu.package_subtitle: "Package"
 cpu.read_only_note: "nur Lesen"
 cpu.none: "Keine CPU-Leistungsmetriken"
 cpu.none_hint: "Benötigt erhöhtes PawnIO (AMD RAPL / Intel MSR). Die CPU-Temperatur kann trotzdem über Super I/O angezeigt werden."

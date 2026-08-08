@@ -1,14 +1,30 @@
-//! Shared metric widgets (bar, temp/load chip, color ramps, power sparkline)
-//! for the GPU and CPU detail panels, so both stay visually consistent.
+//! Shared metric widgets for GPU and CPU detail panels (aligned layout).
 
 use crate::graph::{TempHistory, power_y_max};
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, Color32, Frame, Margin, RichText, Stroke};
 use egui_plot::{Line, Plot};
 
-/// Thin horizontal fill bar (used under a metric row: power, load, VRAM, fan…).
+/// Fixed sparkline height so GPU and CPU power graphs align.
+pub const POWER_SPARKLINE_HEIGHT: f32 = 72.0;
+
+/// Card frame around a domain panel (GPU / CPU) so headers and plots share padding.
+pub fn domain_card(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui)) {
+    Frame::group(ui.style())
+        .inner_margin(Margin::same(8))
+        .stroke(Stroke::new(
+            1.0,
+            ui.visuals().widgets.noninteractive.bg_stroke.color,
+        ))
+        .show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            add_contents(ui);
+        });
+}
+
+/// Thin horizontal fill bar under a metric row.
 pub fn metric_bar(ui: &mut egui::Ui, frac: f32, color: Color32) {
     let frac = frac.clamp(0.0, 1.0);
-    let desired = egui::vec2(ui.available_width().clamp(80.0, 280.0), 8.0);
+    let desired = egui::vec2(ui.available_width().max(40.0), 8.0);
     let (rect, _) = ui.allocate_exact_size(desired, egui::Sense::hover());
     let painter = ui.painter();
     painter.rect_filled(rect, 2.0, Color32::from_gray(40));
@@ -19,10 +35,11 @@ pub fn metric_bar(ui: &mut egui::Ui, frac: f32, color: Color32) {
     }
 }
 
-/// Small boxed temperature readout (`"—"` when unavailable).
+/// Boxed temperature readout (`"—"` when unavailable).
 pub fn temp_chip(ui: &mut egui::Ui, label: String, value: Option<f64>, colorize: bool) {
     ui.group(|ui| {
         ui.set_min_width(72.0);
+        ui.set_min_height(48.0);
         ui.vertical(|ui| {
             ui.small(label);
             match value {
@@ -54,10 +71,11 @@ pub fn temp_chip(ui: &mut egui::Ui, label: String, value: Option<f64>, colorize:
     });
 }
 
-/// Small boxed percentage readout (`"—"` when unavailable), colorized like a load bar.
+/// Boxed percentage readout.
 pub fn load_chip(ui: &mut egui::Ui, label: String, value: Option<f64>) {
     ui.group(|ui| {
         ui.set_min_width(72.0);
+        ui.set_min_height(48.0);
         ui.vertical(|ui| {
             ui.small(label);
             match value {
@@ -82,6 +100,85 @@ pub fn load_chip(ui: &mut egui::Ui, label: String, value: Option<f64>) {
             }
         });
     });
+}
+
+/// Empty chip slot to keep a 3-chip row aligned across panels.
+pub fn empty_chip(ui: &mut egui::Ui, label: String) {
+    temp_chip(ui, label, None, false);
+}
+
+/// Power row + bar. Always allocates bar space (grey if no value) so layout height is stable.
+pub fn power_metric_row(
+    ui: &mut egui::Ui,
+    label: &str,
+    power_w: Option<f64>,
+    limit_w: Option<f64>,
+    no_limit_hint: Option<&str>,
+) {
+    let draw = power_w.unwrap_or(0.0);
+    let limit = limit_w.unwrap_or(0.0).max(1.0);
+    let frac = if power_w.is_some() && limit_w.is_some() {
+        (draw / limit).clamp(0.0, 1.5) as f32
+    } else {
+        0.0
+    };
+    let text = match (power_w, limit_w) {
+        (Some(d), Some(l)) => format!("{d:.0} / {l:.0} W"),
+        (Some(d), None) => format!("{d:.0} W"),
+        (None, Some(l)) => format!("— / {l:.0} W"),
+        (None, None) => "—".into(),
+    };
+    let color = if power_w.is_some() {
+        power_color(frac)
+    } else {
+        Color32::DARK_GRAY
+    };
+    ui.horizontal(|ui| {
+        ui.label(label.to_string());
+        ui.label(RichText::new(text).monospace().strong().color(color));
+    });
+    if power_w.is_some() && limit_w.is_some() {
+        metric_bar(ui, frac.min(1.0), power_color(frac));
+    } else if power_w.is_some() {
+        // Keep bar slot height even without limit.
+        metric_bar(ui, 0.0, Color32::from_gray(40));
+        if let Some(hint) = no_limit_hint {
+            ui.small(hint.to_string());
+        }
+    } else {
+        metric_bar(ui, 0.0, Color32::from_gray(40));
+    }
+}
+
+/// Power history block: fixed height plot so GPU/CPU graphs align.
+pub fn power_history_block(
+    ui: &mut egui::Ui,
+    title: &str,
+    id_salt: &str,
+    history: Option<&TempHistory>,
+    limit_w: Option<f32>,
+) {
+    ui.add_space(6.0);
+    ui.small(title.to_string());
+    if let Some(history) = history
+        && !history.is_empty()
+    {
+        power_sparkline(ui, id_salt, history, limit_w);
+    } else {
+        // Reserve the same vertical space as the sparkline.
+        let (rect, _) = ui.allocate_exact_size(
+            egui::vec2(ui.available_width(), POWER_SPARKLINE_HEIGHT),
+            egui::Sense::hover(),
+        );
+        ui.painter().rect_filled(rect, 2.0, Color32::from_gray(25));
+        ui.painter().text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            "—",
+            egui::FontId::proportional(12.0),
+            Color32::DARK_GRAY,
+        );
+    }
 }
 
 pub fn temp_color(c: f32) -> Color32 {
@@ -116,9 +213,7 @@ pub fn power_color(frac: f32) -> Color32 {
     }
 }
 
-/// Recent power-draw sparkline shared by the CPU and GPU panels: real axes
-/// (not hidden), a grid, watts on Y, minutes-ago on X, a zero floor, and a
-/// soft ceiling from the reported power limit when known.
+/// Power sparkline: fixed height, axes, grid, W / minutes-ago.
 pub fn power_sparkline(
     ui: &mut egui::Ui,
     id_salt: &str,
@@ -134,7 +229,7 @@ pub fn power_sparkline(
         .color(color)
         .width(2.0);
     Plot::new(id_salt)
-        .height(60.0)
+        .height(POWER_SPARKLINE_HEIGHT)
         .allow_drag(false)
         .allow_zoom(false)
         .allow_scroll(false)

@@ -182,6 +182,7 @@ gpu.vram: "VRAM"
 gpu.fan: "Ventilo"
 
 cpu.heading: "CPU"
+cpu.package_subtitle: "Package"
 cpu.read_only_note: "lecture seule"
 cpu.none: "Aucune métrique de puissance CPU"
 cpu.none_hint: "Nécessite PawnIO en élévation (AMD RAPL / Intel MSR). La température CPU peut quand même s'afficher via Super I/O."

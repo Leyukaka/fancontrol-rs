@@ -170,6 +170,7 @@ gpu.vram: "VRAM"
 gpu.fan: "Fan"
 
 cpu.heading: "CPU"
+cpu.package_subtitle: "Package"
 cpu.read_only_note: "read-only"
 cpu.none: "No CPU power metrics"
 cpu.none_hint: "Needs elevated PawnIO (AMD RAPL / Intel MSR). CPU temperature may still show from Super I/O."

@@ -574,22 +574,7 @@ impl eframe::App for FanApp {
                     {
                         self.show_settings = !self.show_settings;
                     }
-                    let update_available =
-                        matches!(self.updates.status(), Some(UpdateStatus::Available { .. }));
-                    let update_btn =
-                        egui::Button::new(format!("⬆ {}", t!("top_bar.check_updates_button")))
-                            .fill(if update_available {
-                                egui::Color32::from_rgb(30, 90, 50)
-                            } else {
-                                ui.visuals().widgets.inactive.bg_fill
-                            });
-                    if ui
-                        .add(update_btn)
-                        .on_hover_text(t!("top_bar.check_updates_tooltip").to_string())
-                        .clicked()
-                    {
-                        self.updates.check_now();
-                    }
+                    // Updates: Options only (no top-bar button — clutter / unclear action).
                     // right-to-left: add Controls, Fans, Temps, then Curves
                     if ui
                         .selectable_label(
