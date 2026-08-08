@@ -411,6 +411,9 @@ impl eframe::App for FanApp {
             if let Some(id) = &snap.gpu_temp_id {
                 seed.push(id.clone());
             }
+            if let Some(id) = &snap.cpu_power_id {
+                seed.push(id.clone());
+            }
             // Fallback: first available temp if CPU id not yet labeled
             if seed.is_empty() {
                 if let Some((id, _, _)) = snap.temps.first() {
@@ -1188,10 +1191,16 @@ impl eframe::App for FanApp {
                         clamp_ui_height(room, 140.0_f32.min(room), room)
                     };
 
+                    // Ceiling from GPU power.limit and CPU package power limit
+                    // (host.cpu.power.limit / mock.cpu_power_limit), whichever is higher.
                     let power_ceiling = snap
                         .gpus
                         .iter()
                         .filter_map(|g| g.power_limit_w)
+                        .chain(snap.plottable.iter().filter_map(|p| {
+                            (p.id == "host.cpu.power.limit" || p.id == "mock.cpu_power_limit")
+                                .then_some(p.value)
+                        }))
                         .filter(|w| w.is_finite() && *w > 1.0)
                         .fold(None, |acc: Option<f64>, w| {
                             Some(acc.map(|a| a.max(w)).unwrap_or(w))

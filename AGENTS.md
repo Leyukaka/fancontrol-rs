@@ -45,13 +45,14 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 
 ## Status (keep updated)
 
-- Product line: **v0.4.1** — v0.4 metrics/graph/autostart + **Restart as Administrator** (UAC `runas` button in Needs-admin dialog + top bar; no silent elevation). OTEL export still deferred.
+- Product line: **v0.4.2** — AMD CPU package power (`host.cpu.power.package` via PawnIO `AMDFamily17`, graph seed + CLI sample Power section) + v0.4.1 UAC restart. OTEL export still deferred. Intel RAPL / DRAM power next.
 - Phase 0 foundation: **done**.
 - Phase 1: PawnIOLib FFI + LpcIO + **NCT668x EC HWM** (validated class id `0xD5` rev `0x92` @ `0x0A20`) + **banked NCT** (ROG B550-A `0xD4` validated reads+writes) + control loop + CLI.
 - Elevation required for `pawnio_open` (Administrator). **PawnIO is a prerequisite** (not bundled) — UI shows a startup dialog if missing / not openable, with a **Restart as Administrator** button (`ShellExecute` `runas` → UAC; no silent elevation).
 - Validated paths: **NCT6687D-class** (`0xD5`) and **banked NCT** on ROG STRIX B550-A (`0xD4`); higher NCT668x controls = DR/experimental. See `docs/SUPPORTED_HARDWARE.md`.
 - Host sensors: fixed-path `nvidia-smi` **multi-metric** (temp core/memory, power W, util %, clocks, fan %, VRAM; NVIDIA-only; Hot Spot **not** via smi — needs NvAPI, not shipped) + storage via `DeviceIoControl` (NVMe health-log fallback; read-only, no PowerShell, no PATH walk). AMD/Intel GPU research in `docs/GPU_VENDOR_APIS.md`.
-- Vendored modules: `crates/fancontrol-pawnio/modules/` (PawnIO.Modules).
+- CPU package power (Phase 1a, **AMD only so far**): PawnIO `AMDFamily17` MSR module (`MSR_PWR_UNIT` / `MSR_PKG_ENERGY_STAT`), read-only, ΔE/Δt → `host.cpu.power.package` (W). No `host.cpu.power.limit` / `host.ram.power` on AMD yet — the module exposes no power-limit or DRAM-energy MSR, so those stay omitted rather than invented. Graph default seed includes package power when present; Power Y ceiling also considers `host.cpu.power.limit` once Intel lands. Mock: `mock.cpu_power` (+ `mock.cpu_power_limit`). Intel RAPL (`IntelMSR`: package + limit + DRAM) is next.
+- Vendored modules: `crates/fancontrol-pawnio/modules/` (PawnIO.Modules, includes `AMDFamily17.bin`).
 - i18n: 8 languages (en/fr/de/es/it/zh/ja/lb) via `rust-i18n`, picker in Options panel, OS-locale default on first run, live switch (no restart), Noto Sans CJK bundled for zh/ja glyph coverage. `crates/fancontrol-ui/locales/`.
 - Fun extra: optional fractal pyramid panel (raymarched, GLSL→WGSL port) rendered via a custom wgpu pipeline through `egui_wgpu::CallbackTrait` — first custom wgpu callback in this codebase (`crates/fancontrol-ui/src/fractal.rs` + `fractal_shader.wgsl`). Toggle + speed + 2 colors in Options panel; off by default.
 - UI: **egui/eframe 0.35** — live sensors, sliders, curve editor, curve auto-apply, graph windows, **GPU detail panel** (shares top viz with multi-sensor graph; power/util/clocks/VRAM; Hot Spot shown as unavailable), rename map, options, system tray, profile last-used, manual update check.
@@ -62,14 +63,15 @@ Config dir: `%APPDATA%` via `directories` → project `fancontrol-rs` (`profiles
 
 ## Next priorities (order)
 
-1. OpenTelemetry OTLP/HTTP metrics export (endpoint already in Options; see `specs/07-metrics-telemetry.md`).
-2. Broader chip validation (ITE IT87 still experimental; more banked NCT boards).
-3. Code signing (SmartScreen) — see `docs/SIGNING_AND_DISTRIBUTION.md`.
-4. Auto-update: download + SHA256 verify + install (manual check already done) — see `docs/SECURITY.md`.
-5. AMD/Intel GPU sensors — blocked on hardware; see `docs/GPU_VENDOR_APIS.md`. Optional later: NVML in-process, experimental NvAPI Hot Spot.
-6. RGB (future — not Super I/O).
-7. SSD/NVMe temps: validated under load on owner hardware (device_prop live); EVO SATA may report no temp.
-8. Mock is **opt-in** (`--mock`); product default is hardware/host only.
+1. Intel RAPL CPU/DRAM power (`IntelMSR`): package + `host.cpu.power.limit` + `host.ram.power` when present — see `specs/07-metrics-telemetry.md`.
+2. OpenTelemetry OTLP/HTTP metrics export (endpoint already in Options; see `specs/07-metrics-telemetry.md`).
+3. Broader chip validation (ITE IT87 still experimental; more banked NCT boards).
+4. Code signing (SmartScreen) — see `docs/SIGNING_AND_DISTRIBUTION.md`.
+5. Auto-update: download + SHA256 verify + install (manual check already done) — see `docs/SECURITY.md`.
+6. AMD/Intel GPU sensors — blocked on hardware; see `docs/GPU_VENDOR_APIS.md`. Optional later: NVML in-process, experimental NvAPI Hot Spot.
+7. RGB (future — not Super I/O).
+8. SSD/NVMe temps: validated under load on owner hardware (device_prop live); EVO SATA may report no temp.
+9. Mock is **opt-in** (`--mock`); product default is hardware/host only.
 
 ## Safety product rules
 

@@ -4,7 +4,7 @@ Spec for **v0.4.0** metrics pipeline. Complements UI graph / GPU panel (`04-ui.m
 
 ## Goals
 
-1. **Graph multi-kind series** (not only temperatures): GPU power, util, clocks, VRAM, fan %, etc.
+1. **Graph multi-kind series** (not only temperatures): GPU power, util, clocks, VRAM, fan %, **CPU package power**, **CPU power limit / TDP**, **DRAM power** when available, etc.
 2. **Local metrics store** (SQLite), opt-in, configurable retention and sample interval, **manual CSV export**.
 3. **OpenTelemetry metrics export** (opt-in), protocol chosen after store lands (default target: **OTLP/HTTP** to a user-run local collector).
 
@@ -31,7 +31,7 @@ Poll snapshot
 
 | Field | Type | Notes |
 |-------|------|--------|
-| `sensor_id` | string | Stable id (`host.gpu0.power.draw`, `pawnio.0.temp.CPUTIN`, …) |
+| `sensor_id` | string | Stable id (`host.gpu0.power.draw`, `host.cpu.power.package`, `host.ram.power`, `pawnio.0.temp.CPUTIN`, …) |
 | `label` | string | Display name at sample time |
 | `kind` | `SensorKind` | Temperature, Power, Load, … |
 | `unit` | optional string | `°C`, `W`, `%`, `MHz`, `MiB` |
@@ -51,14 +51,32 @@ trait MetricSink: Send {
 
 ## Graph multi-kind
 
-- Options picker sections: **Temperatures** and **GPU / other metrics**.
+- Options picker sections: **Temperatures** and **GPU / other metrics** (includes CPU/RAM power).
 - Live series use the same ring buffer concept as today’s thermal history (`SampleHistory`).
 - **Y axes**:
   - One unit among selected series → single Y axis.
   - Two units → dual Y (left primary, right secondary).
   - More than two units selected → keep first two unit groups; warn in UI (no third axis).
 - Shader graph styles stay **temperature-driven** (non-temp series do not drive heat uniforms).
-- **Power (W) Y-axis**: ceiling from live GPU `power.limit` when available (readable scale at idle), not a fixed ~1000 W range.
+- **Power (W) Y-axis**: ceiling from `max(live GPU power.limit, host.cpu.power.limit)` when available (readable scale at idle), not a fixed ~1000 W range.
+- **Default graph seed** (first run): CPU-like temp + GPU temp when known **+** `host.cpu.power.package` (and `host.ram.power` / CPU limit when present).
+
+## CPU / DRAM package power (PawnIO MSR)
+
+**Backend rule:** PawnIO modules only — no WinRing0, no WMI/PowerShell, no EMI fallback in v1.
+
+| Sensor id | Meaning | Source (read-only) |
+|-----------|---------|---------------------|
+| `host.cpu.power.package` | Package power (W) | ΔE/Δt from package energy MSR |
+| `host.cpu.power.limit` | TDP / package power info (W) | Power-info MSR when available |
+| `host.ram.power` | DRAM power (W) | DRAM energy domain when available |
+
+**Vendor order:** **AMD first** (`AMDFamily17` — Zen fam 17h–1Ah: `MSR_PWR_UNIT` / `MSR_PKG_ENERGY_STAT`), then **Intel** (`IntelMSR` RAPL: unit / PKG energy / PKG power info / DRAM energy).
+
+- Requires elevated PawnIO session (same as Super I/O).
+- Monitoring only — **no** write of PL1/PL2 or undervolt MSRs.
+- If a domain is missing on a CPU, omit the sensor (do not invent values).
+- Fan **curves still use CPU-like temperatures only** — power series are graph/metrics only.
 
 ## Local SQLite store
 
@@ -121,3 +139,11 @@ Document smoke setup in `docs/METRICS_AND_OTEL.md` (collector → Prometheus/Gra
 - [x] Start with Windows opt-in (Options + first-run prompt).
 - [ ] OTEL off by default; enable + local collector → metrics visible (export still TODO).
 - [x] CI green; no regression on PWM / GPU panel.
+
+## Acceptance (CPU / DRAM power)
+
+- [x] AMD package power via PawnIO `AMDFamily17` → `host.cpu.power.package` plottable + metrics store.
+- [ ] Intel RAPL path after AMD: package + limit + DRAM when present (`host.cpu.power.limit`, `host.ram.power`).
+- [x] Power Y ceiling considers CPU limit as well as GPU `power.limit` (wired; no source populates CPU limit until Intel lands).
+- [x] Default graph seed includes package power when the sensor exists.
+- [x] Read-only MSRs only; graceful omit when PawnIO/module/CPU unsupported.

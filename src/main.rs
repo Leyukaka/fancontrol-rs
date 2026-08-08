@@ -650,6 +650,34 @@ fn print_sample(reg: &ProviderRegistry, map: &ChannelMap, show_all: bool) {
         println!("  (none with valid readings)");
     }
 
+    println!("Power:");
+    let mut any_p = false;
+    for s in reg.all_sensors() {
+        if s.kind != SensorKind::Power {
+            continue;
+        }
+        match reg.read_sensor(&s.id) {
+            Ok(v) => {
+                // Skip first-tick 0 W package samples unless --all (ΔE/Δt needs 2 reads).
+                if !show_all && v <= 0.0 && s.id.as_str().contains("power.package") {
+                    continue;
+                }
+                any_p = true;
+                let label = map.sensor_name(s.id.as_str(), &s.name);
+                let unit = s.unit.as_deref().unwrap_or("W");
+                println!("  {:>28}  {v:7.1} {unit}  ({label})", s.id);
+            }
+            Err(e) => {
+                if show_all {
+                    println!("  {:>28}  n/a ({e})", s.id);
+                }
+            }
+        }
+    }
+    if !any_p {
+        println!("  (none yet — package W needs 2+ samples; use --all or re-run)");
+    }
+
     println!("Fan RPM:");
     let mut any_f = false;
     for s in reg.all_sensors() {

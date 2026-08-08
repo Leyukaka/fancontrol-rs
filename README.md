@@ -14,7 +14,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/rust-edition%202021-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue" alt="License">
-  <img src="https://img.shields.io/badge/version-0.4.1-informational" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.4.2-informational" alt="Version">
   <img src="https://img.shields.io/badge/backend-PawnIO-success" alt="PawnIO">
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-blue" alt="Windows">
 </p>
@@ -43,7 +43,7 @@ Binaries are **unsigned** (SmartScreen may warn). PWM writes are on by default a
 - **Activity deck**: CPU load history + top processes (CPU % and RAM), filter and sort (default on, can be turned off in Options)
 - **Security**: [PawnIO](https://pawnio.eu/) only for Super I/O / EC. Never ships WinRing0 or other known-vulnerable ring-0 drivers
 - **Host sensors**: NVIDIA GPU multi-metric via fixed-path `nvidia-smi` (temp, power W, util, clocks, VRAM, fan %) + GPU detail panel; SSD/NVMe temps via DeviceIoControl (no PowerShell)
-- **Metrics (v0.4)**: graph multi-kind series (GPU power/util/…; W scale from power limit), optional local SQLite store + CSV export; see `docs/METRICS_AND_OTEL.md`
+- **Metrics (v0.4)**: graph multi-kind series (GPU power/util/…; AMD CPU package W via PawnIO MSR; W scale from power limit), optional local SQLite store + CSV export; see `docs/METRICS_AND_OTEL.md`
 - **Start with Windows**: Options + first-run prompt (current-user Run key, no admin)
 - **Admin elevation**: Needs-admin dialog + top bar **Restart as Administrator** (UAC via `runas`; no silent elevation)
 - **UI**: egui desktop app, system tray, first-run write consent, 8 languages (en/fr/de/es/it/zh/ja/lb)
@@ -104,7 +104,7 @@ Rough map of the Windows landscape. Support always depends on your board and EC.
 
 ## Status
 
-**v0.4.1**. NCT668x + banked NCT (ROG B550-A) **certified**; other boards should work - **send logs to certify**. Curves on **CPU-like temps only**, multi-kind graph (GPU metrics), Activity deck, optional metrics store, Start with Windows, **Restart as Administrator** (UAC).  
+**v0.4.2**. NCT668x + banked NCT (ROG B550-A) **certified**; other boards should work - **send logs to certify**. Curves on **CPU-like temps only**, multi-kind graph (GPU metrics + **AMD CPU package power W**), Activity deck, optional metrics store, Start with Windows, **Restart as Administrator** (UAC).  
 Public source of truth: this repo ([Releases](https://github.com/Leyukaka/fancontrol-rs/releases), issues, PRs).
 
 | Crate | Role |

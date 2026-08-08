@@ -62,6 +62,7 @@ Replace FanControl with a modern, secure, open-source alternative written in Rus
 | Capability | Status |
 |------------|--------|
 | Graph non-temp series (GPU power/util/clocks/…) | **Done** (dual unit plots; W axis uses GPU power.limit) |
+| CPU package / DRAM power (W) on graph | **Partial** (AMD `host.cpu.power.package` done via PawnIO MSR, default seed; Intel + `host.ram.*` planned) |
 | Local SQLite metrics store + CSV export (Options) | **Done** (opt-in) |
 | Start with Windows | **Done** (Options + first-run prompt; HKCU Run) |
 | OpenTelemetry metrics export (opt-in) | **Partial** (endpoint/settings saved; OTLP export next) |

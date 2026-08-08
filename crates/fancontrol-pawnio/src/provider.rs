@@ -1,5 +1,6 @@
 //! Plugin provider bridging Super I/O hardware into fancontrol traits.
 
+use crate::cpu_power::AmdCpuPower;
 use crate::device::SuperIoDevice;
 use crate::nct668::HwmSample;
 use crate::superio::detect_chips;
@@ -7,11 +8,18 @@ use fancontrol_core::{ControlDescriptor, ControlId, SensorDescriptor, SensorId, 
 use fancontrol_plugins::{ControlProvider, PluginError, Result, SensorProvider};
 use std::sync::Mutex;
 
+/// Sensor id for AMD/Intel package power, plottable on the graph regardless of
+/// board (host-facing, not `pawnio.{device_index}.*` like the Super I/O sensors).
+const CPU_POWER_PACKAGE_ID: &str = "host.cpu.power.package";
+
 pub struct PawnioProvider {
     devices: Vec<SuperIoDevice>,
     detect_notes: Mutex<Vec<String>>,
     init_error: Option<String>,
     write_enabled: bool,
+    /// AMD package power (PawnIO `AMDFamily17` MSR module). `None` on non-AMD
+    /// CPUs, unsupported AMD families, or when the module fails to load.
+    cpu_power: Option<AmdCpuPower>,
 }
 
 impl PawnioProvider {
@@ -20,6 +28,19 @@ impl PawnioProvider {
     }
 
     pub fn probe_with_writes(write_enabled: bool) -> Self {
+        let (cpu_power, cpu_power_note) = match AmdCpuPower::try_open() {
+            Ok(p) => (
+                Some(p),
+                format!("{CPU_POWER_PACKAGE_ID}: AMD MSR (AMDFamily17) available"),
+            ),
+            Err(e) => {
+                tracing::debug!(error = %e, "AMD CPU package power unavailable");
+                // Surface the real cause (admin denied, non-AMD, family, etc.)
+                // instead of a generic "non-AMD" guess that misleads on E_ACCESSDENIED.
+                (None, format!("{CPU_POWER_PACKAGE_ID}: unavailable ({e})"))
+            }
+        };
+
         match detect_chips() {
             Ok(chips) => {
                 let mut notes = Vec::new();
@@ -30,6 +51,7 @@ impl PawnioProvider {
                     "mode=READ-ONLY (hardware writes blocked; drop --read-only / don't pass --read-only)"
                         .into()
                 });
+                notes.push(cpu_power_note);
                 for c in &chips {
                     notes.push(format!(
                         "slot{} @0x{:02X}: {} hwm={:?}",
@@ -61,13 +83,15 @@ impl PawnioProvider {
                     detect_notes: Mutex::new(notes),
                     init_error: None,
                     write_enabled,
+                    cpu_power,
                 }
             }
             Err(e) => Self {
                 devices: Vec::new(),
-                detect_notes: Mutex::new(vec![format!("detect failed: {e}")]),
+                detect_notes: Mutex::new(vec![format!("detect failed: {e}"), cpu_power_note]),
                 init_error: Some(e),
                 write_enabled,
+                cpu_power,
             },
         }
     }
@@ -137,11 +161,29 @@ impl SensorProvider for PawnioProvider {
                 });
             }
         }
+        if self.cpu_power.is_some() {
+            out.push(SensorDescriptor {
+                id: SensorId::new(CPU_POWER_PACKAGE_ID),
+                name: "CPU Package Power".into(),
+                kind: SensorKind::Power,
+                // host.* id convention (backend is still PawnIO MSR).
+                provider: "host".into(),
+                unit: Some("W".into()),
+            });
+        }
         out
     }
 
     fn read(&self, id: &SensorId) -> Result<f64> {
         let s = id.as_str();
+        if s == CPU_POWER_PACKAGE_ID {
+            return self
+                .cpu_power
+                .as_ref()
+                .ok_or_else(|| PluginError::SensorNotFound(s.into()))?
+                .sample_watts()
+                .map_err(PluginError::Io);
+        }
         let rest = s
             .strip_prefix("pawnio.")
             .ok_or_else(|| PluginError::SensorNotFound(s.into()))?;

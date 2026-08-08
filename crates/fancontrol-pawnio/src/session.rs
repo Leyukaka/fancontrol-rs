@@ -51,6 +51,7 @@ fn embedded_module(name: &str) -> Result<&'static [u8], String> {
     match name {
         "LpcIO" | "lpcio" => Ok(include_bytes!("../modules/LpcIO.bin")),
         "Echo" | "echo" => Ok(include_bytes!("../modules/Echo.bin")),
+        "AMDFamily17" | "amdfamily17" => Ok(include_bytes!("../modules/AMDFamily17.bin")),
         other => Err(format!("unknown embedded module: {other}")),
     }
 }

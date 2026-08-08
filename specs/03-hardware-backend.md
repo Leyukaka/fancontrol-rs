@@ -55,6 +55,7 @@ If PawnIO is missing or not openable:
 | NVIDIA GPU multi-metric | `nvidia-smi` at **fixed install paths** (no PATH walk): temp, power, util, clocks, fan %, VRAM | Read-only |
 | NVIDIA Hot Spot | Not via smi/NVML public; would need NvAPI (not shipped) | — |
 | Storage temp | `DeviceIoControl` + `StorageDeviceTemperatureProperty` on `\\.\PhysicalDriveN` | No PowerShell; often needs elevation |
+| CPU package / DRAM power | PawnIO MSR modules only (`AMDFamily17` first, then `IntelMSR`) | Read-only; ΔE/Δt → W; ids `host.cpu.power.*`, `host.ram.power`; elevated PawnIO |
 | Mock provider | In-process | Dev / CI / `--no-hw` |
 
 ### Non-negotiable rules

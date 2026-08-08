@@ -24,6 +24,10 @@ pub struct Snapshot {
     /// can seed a sensor picker with it. `None` on machines without a supported
     /// discrete GPU (no `nvidia-smi`, AMD/Intel not probed).
     pub gpu_temp_id: Option<String>,
+    /// Sensor id of CPU package power (`host.cpu.power.package` / `mock.cpu_power`),
+    /// so the UI can seed the graph with it. `None` when unavailable (non-AMD CPU,
+    /// unsupported family, PawnIO missing, or mock disabled).
+    pub cpu_power_id: Option<String>,
     pub error: Option<String>,
     pub tick: u64,
 }
@@ -123,6 +127,7 @@ fn take_snapshot(
     let mut cpu_temp_id = None;
     let mut cpu_prio = u8::MAX;
     let mut gpu_temp_id = None;
+    let mut cpu_power_id = None;
     // id → value for host GPU metrics (also mock.gpu* for UI demos).
     let mut host_gpu_vals: HashMap<String, f64> = HashMap::new();
     let mut host_gpu_names: HashMap<u32, String> = HashMap::new();
@@ -246,6 +251,11 @@ fn take_snapshot(
                                 || id.starts_with("mock.gpu")
                                 || s.kind == SensorKind::Power) =>
                     {
+                        if cpu_power_id.is_none()
+                            && (id == "host.cpu.power.package" || id == "mock.cpu_power")
+                        {
+                            cpu_power_id = Some(id.to_string());
+                        }
                         let label = map.sensor_name(id, &s.name).to_string();
                         plottable.push(PlottableSensor {
                             id: id.to_string(),
@@ -320,6 +330,7 @@ fn take_snapshot(
         cpu_temp,
         cpu_temp_id,
         gpu_temp_id,
+        cpu_power_id,
         error,
         tick,
     }

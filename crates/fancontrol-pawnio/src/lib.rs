@@ -4,6 +4,7 @@
 //! (`modules/LpcIO.bin`). Super I/O detection and Nuvoton banked HWM reads
 //! are implemented; full chip coverage is incremental.
 
+mod cpu_power;
 mod device;
 mod ffi;
 mod lpcio;
@@ -120,7 +121,9 @@ mod tests {
     fn embedded_modules_present() {
         let lpc = include_bytes!("../modules/LpcIO.bin");
         let echo = include_bytes!("../modules/Echo.bin");
+        let amd17 = include_bytes!("../modules/AMDFamily17.bin");
         assert!(lpc.len() > 1000);
         assert!(echo.len() > 100);
+        assert!(amd17.len() > 1000);
     }
 }

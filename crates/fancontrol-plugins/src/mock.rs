@@ -31,6 +31,8 @@ impl MockProvider {
         values.insert("mock.gpu_temp".into(), 38.0);
         values.insert("mock.gpu_power".into(), 55.0);
         values.insert("mock.gpu_power_limit".into(), 320.0);
+        values.insert("mock.cpu_power".into(), 65.0);
+        values.insert("mock.cpu_power_limit".into(), 142.0);
         values.insert("mock.gpu_load".into(), 12.0);
         values.insert("mock.gpu_load_mem".into(), 8.0);
         values.insert("mock.gpu_clock".into(), 1200.0);
@@ -107,6 +109,20 @@ impl SensorProvider for MockProvider {
             SensorDescriptor {
                 id: SensorId::new("mock.gpu_power_limit"),
                 name: "GPU Power limit".into(),
+                kind: SensorKind::Power,
+                provider: self.name.clone(),
+                unit: Some("W".into()),
+            },
+            SensorDescriptor {
+                id: SensorId::new("mock.cpu_power"),
+                name: "CPU Package Power".into(),
+                kind: SensorKind::Power,
+                provider: self.name.clone(),
+                unit: Some("W".into()),
+            },
+            SensorDescriptor {
+                id: SensorId::new("mock.cpu_power_limit"),
+                name: "CPU Power limit".into(),
                 kind: SensorKind::Power,
                 provider: self.name.clone(),
                 unit: Some("W".into()),
@@ -241,13 +257,17 @@ mod tests {
     #[test]
     fn mock_lists_and_reads() {
         let m = MockProvider::new();
-        // 2 temps (CPU/GPU) + 9 GPU metrics + 2 fan RPM
-        assert_eq!(m.sensors().len(), 13);
+        // 2 temps (CPU/GPU) + 9 GPU metrics + 2 CPU power + 2 fan RPM
+        assert_eq!(m.sensors().len(), 15);
         assert_eq!(m.controls().len(), 2);
         let t = m.read(&SensorId::new("mock.cpu_temp")).unwrap();
         assert!((t - 42.0).abs() < f64::EPSILON);
         let p = m.read(&SensorId::new("mock.gpu_power")).unwrap();
         assert!((p - 55.0).abs() < f64::EPSILON);
+        let cp = m.read(&SensorId::new("mock.cpu_power")).unwrap();
+        assert!((cp - 65.0).abs() < f64::EPSILON);
+        let cpl = m.read(&SensorId::new("mock.cpu_power_limit")).unwrap();
+        assert!((cpl - 142.0).abs() < f64::EPSILON);
     }
 
     #[test]

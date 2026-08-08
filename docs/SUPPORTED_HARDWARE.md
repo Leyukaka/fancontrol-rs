@@ -22,7 +22,7 @@ fancontrol-rs controls PC fans on **Windows** through **[PawnIO](https://pawnio.
 | **Administrator** | `pawnio_open` needs elevation. In the UI use **Restart as Administrator** (UAC), or right-click the exe / use an elevated terminal for CLI. |
 | **Defender awareness** | Unsigned binaries that talk to PawnIO may false-positive. Prefer a folder exclusion for `target\` (see README) - do not disable AV entirely. |
 
-Vendored PawnIO modules (e.g. `LpcIO.bin`) ship under `crates/fancontrol-pawnio/modules/` for the user-mode loader; the **PawnIO service/driver** itself must already be installed on the machine.
+Vendored PawnIO modules (e.g. `LpcIO.bin`, `AMDFamily17.bin`) ship under `crates/fancontrol-pawnio/modules/` for the user-mode loader; the **PawnIO service/driver** itself must already be installed on the machine.
 
 ---
 
@@ -66,6 +66,7 @@ These are **high value** for expanding the certified list. Code may already rout
 | **ITE IT87** / other banked layouts | Detect / sensors | **Experimental** (needs reports) | Detection helpers exist; not certified on maintainer hardware. |
 | **Any other Super I/O board** | - | **Should work - not certified until reported** | Open a hardware report with logs. |
 | **Host: GPU** (`nvidia-smi` multi-metric) | Temp core/memory, power W, util %, clocks, fan %, VRAM | **Read-only** | Fixed paths; UI GPU panel. **Hot Spot not available** via smi (would need NvAPI). No GPU fan curve writes. |
+| **Host: CPU package power** (PawnIO `AMDFamily17` MSR) | `host.cpu.power.package` (W) | **Read-only** (AMD Zen 17h-1Ah only) | ΔE/Δt from `MSR_PKG_ENERGY_STAT`, scaled by `MSR_PWR_UNIT`. No power-limit MSR in this module, so `host.cpu.power.limit` / `host.ram.power` are **not** exposed on AMD. Intel RAPL (`IntelMSR`) next. |
 | **Host: storage** (`DeviceIoControl`, no PowerShell) | Temperature | **Read-only** | Prefer **NVMe health log** (composite °C), then `StorageDeviceTemperatureProperty` / adapter (all sensors scanned). Elevate for `\\.\PhysicalDriveN`. CLI: `sample-storage`. |
 | **Host: Activity deck** (Options, default on) | CPU load %, top processes (CPU + RAM) | **Read-only** | Windows APIs only (`GetSystemTimes`, Toolhelp, `GetProcessTimes`, working set). **No PowerShell, no WMI.** ~1 s while enabled; Load-only skips process enum. |
 | **Mock provider** | Dev / UI without hardware | Always available | `--no-hw` |
