@@ -19,6 +19,11 @@ Spec-Driven Design: product and architecture decisions live in `specs/`.
 
 No PR process for now: commit and push straight to `main` (a local feature branch is still fine for a large/risky change, but merge it yourself, no `gh pr create`). Still run `cargo test`/`clippy`/`fmt` before pushing, CI runs on `main` pushes too. `CONTRIBUTING.md`'s PR template, AI-disclosure section, and review rules are written for when this project opens up to outside contributors; they don't apply to day-to-day solo work right now.
 
+### Commit messages (mandatory for agents)
+
+- **Never** add AI trailers or co-author spam: no `Co-Authored-By:`, `Co-authored-by:`, `Generated-by:`, `Signed-off-by:` for models, or similar.
+- Commits are authored as the human maintainer only. Do not advertise the tool in the commit body.
+
 ## Environment (critical)
 
 Hardware sensors and PawnIO need a **real Windows host** (not a disposable Linux container as the only target).

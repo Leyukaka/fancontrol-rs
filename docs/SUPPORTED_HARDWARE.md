@@ -69,6 +69,7 @@ These are **high value** for expanding the certified list. Code may already rout
 | **Host: CPU package power** (PawnIO MSR) | `host.cpu.power.package` (W); Intel also `host.cpu.power.limit`, `host.ram.power` when RAPL exposes them | **Read-only** | **AMD** Zen 17h–1Ah: `AMDFamily17`. **Intel**: `IntelMSR` RAPL (package energy, power-info limit, DRAM energy). ΔE/Δt → W. Elevated PawnIO. AMD has no package-limit/DRAM MSR in that module — those ids stay omitted on AMD. |
 | **Host: storage** (`DeviceIoControl`, no PowerShell) | Temperature | **Read-only** | Prefer **NVMe health log** (composite °C), then `StorageDeviceTemperatureProperty` / adapter (all sensors scanned). Elevate for `\\.\PhysicalDriveN`. CLI: `sample-storage`. |
 | **Host: Activity deck** (Options, default on) | CPU load %, top processes (CPU + RAM) | **Read-only** | Windows APIs only (`GetSystemTimes`, Toolhelp, `GetProcessTimes`, working set). **No PowerShell, no WMI.** ~1 s while enabled; Load-only skips process enum. |
+| **Host: DIMM temperature** (`host.dimm{N}.temp`, SMBus SPD hub) | Temperature | **Experimental** | DDR5 SPD5118-class on-die sensor via PawnIO `SmbusPIIX4` (AMD, tried first) or `SmbusI801` (Intel, fallback). Read-only, no SPD writes. Elevated PawnIO. Owner-validated on AMD + NCT668x + DDR5 only. See [docs/DIMM_TEMP.md](./DIMM_TEMP.md). |
 | **Mock provider** | Dev / UI without hardware | Always available | `--no-hw` |
 
 ---
@@ -126,7 +127,7 @@ Validated configuration (2026-07-29):
 
 | Area | Status |
 |------|--------|
-| **System DIMM temperature (SPD)** | Not read - would need SMBus/SPD access; not GPU VRAM, not SSD/NVMe (those are covered above) |
+| **System DIMM temperature (SPD)** | **Experimental** as of this branch (DDR5 SPD5118 hub via SMBus, `host.dimm{N}.temp`) - see [docs/DIMM_TEMP.md](./DIMM_TEMP.md). Not GPU VRAM, not SSD/NVMe (those are covered above). DDR4 TSOD path not implemented. |
 | **RGB / ARGB** | Not Super I/O fan HWM - out of scope for v1 |
 | **Linux / macOS** | Out of scope |
 | **WinRing0 / unsigned random drivers** | **Forbidden** - never embedded |

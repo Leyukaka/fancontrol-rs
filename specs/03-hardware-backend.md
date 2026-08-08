@@ -56,6 +56,7 @@ If PawnIO is missing or not openable:
 | NVIDIA Hot Spot | Not via smi/NVML public; would need NvAPI (not shipped) | — |
 | Storage temp | `DeviceIoControl` + `StorageDeviceTemperatureProperty` on `\\.\PhysicalDriveN` | No PowerShell; often needs elevation |
 | CPU package / DRAM power | PawnIO MSR modules only (`AMDFamily17` first, then `IntelMSR`) | Read-only; ΔE/Δt → W; ids `host.cpu.power.*`, `host.ram.power`; elevated PawnIO |
+| DIMM temperature (DDR5 SPD hub) | PawnIO SMBus modules (`SmbusPIIX4` first, then `SmbusI801`) | **Experimental**; read-only, no SPD writes; ids `host.dimm{N}.temp`; elevated PawnIO. See `docs/DIMM_TEMP.md`. |
 | Mock provider | In-process | Dev / CI / `--no-hw` |
 
 ### Non-negotiable rules

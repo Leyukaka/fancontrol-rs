@@ -80,6 +80,7 @@ AI tools are allowed. Unreviewed AI dumps are **not**.
 - Fake hardware test claims (“tested on NCT6687D, RPM went from X to Y”) without evidence
 - Silent removal or bypass of write safety gates
 - Shipping secrets, certs, or personal absolute paths unrelated to docs examples
+- **AI commit trailers** (`Co-Authored-By: Claude/GPT/…`, `Generated-by:`, model `Signed-off-by:`, etc.). Commits are human-authored only; disclose AI tools in the PR body if/when PRs are used, not in git metadata.
 
 Maintainers may **reject or rewrite** any contribution whose intent, quality, or safety story is weak — AI-assisted or not.
 

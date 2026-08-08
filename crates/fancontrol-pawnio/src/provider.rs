@@ -2,6 +2,7 @@
 
 use crate::cpu_power::{CpuPower, CpuPowerSample};
 use crate::device::SuperIoDevice;
+use crate::dimm_temp::DimmTemp;
 use crate::nct668::HwmSample;
 use crate::superio::detect_chips;
 use fancontrol_core::{ControlDescriptor, ControlId, SensorDescriptor, SensorId, SensorKind};
@@ -17,6 +18,13 @@ const RAM_POWER_ID: &str = "host.ram.power";
 /// Reuse one MSR sample for all power ids within this window (avoids triple ΔE).
 const CPU_POWER_SAMPLE_TTL: Duration = Duration::from_millis(200);
 
+/// DIMM SMBus reads are slow (bus arbitration, per-byte transactions) and the
+/// value barely moves — cache aggressively.
+const DIMM_TEMP_SAMPLE_TTL: Duration = Duration::from_secs(3);
+
+/// (index, temperature °C) pairs from the last DIMM SMBus sample.
+type DimmTempSample = Vec<(usize, f64)>;
+
 pub struct PawnioProvider {
     devices: Vec<SuperIoDevice>,
     detect_notes: Mutex<Vec<String>>,
@@ -28,6 +36,10 @@ pub struct PawnioProvider {
     cpu_power_has_limit: bool,
     cpu_power_has_dram: bool,
     cpu_power_cache: Mutex<Option<(Instant, CpuPowerSample)>>,
+    /// Experimental DDR5 DIMM temperature (SMBus SPD hub). `None` when no
+    /// SMBus module opened or no DDR5 DIMM answered the probe.
+    dimm_temp: Option<DimmTemp>,
+    dimm_temp_cache: Mutex<Option<(Instant, DimmTempSample)>>,
 }
 
 impl PawnioProvider {
@@ -61,6 +73,26 @@ impl PawnioProvider {
             }
         };
 
+        let dimm_temp = match DimmTemp::try_open() {
+            Ok(d) => Some(d),
+            Err(e) => {
+                tracing::debug!(error = %e, "DIMM temp (SMBus) unavailable");
+                None
+            }
+        };
+        let dimm_temp_note = match &dimm_temp {
+            Some(d) if d.dimm_count() > 0 => format!(
+                "host.dimm.temp: {} DDR5 DIMM(s) via {} (experimental)",
+                d.dimm_count(),
+                d.module_label()
+            ),
+            Some(d) => format!(
+                "host.dimm.temp: {} opened, no DDR5 SPD hub answered (experimental)",
+                d.module_label()
+            ),
+            None => "host.dimm.temp: unavailable (no SMBus module opened)".into(),
+        };
+
         match detect_chips() {
             Ok(chips) => {
                 let mut notes = Vec::new();
@@ -72,6 +104,7 @@ impl PawnioProvider {
                         .into()
                 });
                 notes.push(cpu_power_note);
+                notes.push(dimm_temp_note);
                 for c in &chips {
                     notes.push(format!(
                         "slot{} @0x{:02X}: {} hwm={:?}",
@@ -107,17 +140,25 @@ impl PawnioProvider {
                     cpu_power_has_limit: has_limit,
                     cpu_power_has_dram: has_dram,
                     cpu_power_cache: Mutex::new(None),
+                    dimm_temp,
+                    dimm_temp_cache: Mutex::new(None),
                 }
             }
             Err(e) => Self {
                 devices: Vec::new(),
-                detect_notes: Mutex::new(vec![format!("detect failed: {e}"), cpu_power_note]),
+                detect_notes: Mutex::new(vec![
+                    format!("detect failed: {e}"),
+                    cpu_power_note,
+                    dimm_temp_note,
+                ]),
                 init_error: Some(e),
                 write_enabled,
                 cpu_power,
                 cpu_power_has_limit: has_limit,
                 cpu_power_has_dram: has_dram,
                 cpu_power_cache: Mutex::new(None),
+                dimm_temp,
+                dimm_temp_cache: Mutex::new(None),
             },
         }
     }
@@ -139,6 +180,25 @@ impl PawnioProvider {
             *g = Some((now, s.clone()));
         }
         Ok(s)
+    }
+
+    /// Cached DIMM temperature sample (slow SMBus reads, TTL'd like CPU power).
+    fn dimm_temp_sample(&self) -> DimmTempSample {
+        let now = Instant::now();
+        if let Ok(g) = self.dimm_temp_cache.lock()
+            && let Some((t, s)) = g.as_ref()
+            && now.duration_since(*t) < DIMM_TEMP_SAMPLE_TTL
+        {
+            return s.clone();
+        }
+        let Some(dimm_temp) = self.dimm_temp.as_ref() else {
+            return Vec::new();
+        };
+        let s = dimm_temp.sample_all();
+        if let Ok(mut g) = self.dimm_temp_cache.lock() {
+            *g = Some((now, s.clone()));
+        }
+        s
     }
 
     pub fn write_enabled(&self) -> bool {
@@ -233,6 +293,17 @@ impl SensorProvider for PawnioProvider {
                 });
             }
         }
+        if let Some(dimm_temp) = &self.dimm_temp {
+            for i in 0..dimm_temp.dimm_count() {
+                out.push(SensorDescriptor {
+                    id: SensorId::new(format!("host.dimm{i}.temp")),
+                    name: format!("DIMM {i} Temp (experimental)"),
+                    kind: SensorKind::Temperature,
+                    provider: "host".into(),
+                    unit: Some("°C".into()),
+                });
+            }
+        }
         out
     }
 
@@ -252,6 +323,19 @@ impl SensorProvider for PawnioProvider {
                 .cpu_power_sample()?
                 .dram_w
                 .ok_or_else(|| PluginError::SensorNotFound(s.into()));
+        }
+        if let Some(tail) = s.strip_prefix("host.dimm")
+            && let Some(idx_str) = tail.strip_suffix(".temp")
+        {
+            let idx: usize = idx_str
+                .parse()
+                .map_err(|_| PluginError::SensorNotFound(s.into()))?;
+            return self
+                .dimm_temp_sample()
+                .into_iter()
+                .find(|(i, _)| *i == idx)
+                .map(|(_, t)| t)
+                .ok_or_else(|| PluginError::Other("DIMM temp out of range / missing".into()));
         }
         let rest = s
             .strip_prefix("pawnio.")
