@@ -47,6 +47,10 @@ fn show_gpu_card(ui: &mut egui::Ui, gpu: &GpuSnap) {
         ui.small(t!("gpu.hotspot_unavailable").to_string())
             .on_hover_text(t!("gpu.hotspot_tooltip").to_string());
     }
+    if gpu.temp_memory.is_none() {
+        ui.small(t!("gpu.memory_unavailable").to_string())
+            .on_hover_text(t!("gpu.memory_tooltip").to_string());
+    }
 
     ui.add_space(6.0);
 

@@ -86,6 +86,10 @@ pub struct UiSettings {
     /// **Default on** — empty/placeholder when no host GPU is present.
     #[serde(default = "default_true")]
     pub show_gpu_panel: bool,
+    /// CPU detail panel (package power vs. limit, temp, load %). Shares the top
+    /// visualization area with the sensors graph and GPU panel. **Default on**.
+    #[serde(default = "default_true")]
+    pub show_cpu_panel: bool,
     /// Persist metrics to SQLite under the config dir (opt-in).
     #[serde(default)]
     pub metrics_store_enabled: bool,
@@ -191,6 +195,7 @@ impl Default for UiSettings {
             graph_sensor_ids_seeded: false,
             show_activity_deck: true,
             show_gpu_panel: true,
+            show_cpu_panel: true,
             metrics_store_enabled: false,
             metrics_sample_secs: default_metrics_sample_secs(),
             metrics_retention_days: default_metrics_retention_days(),

@@ -126,6 +126,7 @@ Validated configuration (2026-07-29):
 
 | Area | Status |
 |------|--------|
+| **System DIMM temperature (SPD)** | Not read - would need SMBus/SPD access; not GPU VRAM, not SSD/NVMe (those are covered above) |
 | **RGB / ARGB** | Not Super I/O fan HWM - out of scope for v1 |
 | **Linux / macOS** | Out of scope |
 | **WinRing0 / unsigned random drivers** | **Forbidden** - never embedded |

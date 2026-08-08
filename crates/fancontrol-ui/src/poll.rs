@@ -24,12 +24,22 @@ pub struct Snapshot {
     /// can seed a sensor picker with it. `None` on machines without a supported
     /// discrete GPU (no `nvidia-smi`, AMD/Intel not probed).
     pub gpu_temp_id: Option<String>,
-    /// Sensor id of CPU package power (`host.cpu.power.package` / `mock.cpu_power`),
-    /// so the UI can seed the graph with it. `None` when unavailable (non-AMD CPU,
-    /// unsupported family, PawnIO missing, or mock disabled).
-    pub cpu_power_id: Option<String>,
+    /// Assembled CPU package power/temp for the CPU detail panel.
+    pub cpu: CpuSnap,
     pub error: Option<String>,
     pub tick: u64,
+}
+
+/// CPU package metrics for the CPU detail panel (`cpu_panel.rs`).
+///
+/// `load_pct` is left `None` here — it comes from the Activity deck sampler, which
+/// runs independently of the poll thread; the UI layer fills it in per frame.
+#[derive(Debug, Clone, Default)]
+pub struct CpuSnap {
+    pub temp_c: Option<f64>,
+    pub power_w: Option<f64>,
+    pub power_limit_w: Option<f64>,
+    pub load_pct: Option<f64>,
 }
 
 /// One live value that can be selected on the graph (any unit).
@@ -320,6 +330,20 @@ fn take_snapshot(
     temps.sort_by(|a, b| a.1.cmp(&b.1));
     plottable.sort_by(|a, b| a.label.cmp(&b.label));
 
+    let cpu_power_w = cpu_power_id
+        .as_ref()
+        .and_then(|id| plottable.iter().find(|p| p.id == *id).map(|p| p.value));
+    let cpu_power_limit_w = plottable
+        .iter()
+        .find(|p| p.id == "host.cpu.power.limit" || p.id == "mock.cpu_power_limit")
+        .map(|p| p.value);
+    let cpu = CpuSnap {
+        temp_c: cpu_temp,
+        power_w: cpu_power_w,
+        power_limit_w: cpu_power_limit_w,
+        load_pct: None,
+    };
+
     Snapshot {
         temps,
         fans,
@@ -329,7 +353,7 @@ fn take_snapshot(
         cpu_temp,
         cpu_temp_id,
         gpu_temp_id,
-        cpu_power_id,
+        cpu,
         error,
         tick,
     }

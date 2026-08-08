@@ -8,6 +8,7 @@ i18n!("locales", fallback = "en");
 mod activity;
 mod app;
 mod autostart;
+mod cpu_panel;
 mod curve_editor;
 mod elevation;
 mod gpu_panel;

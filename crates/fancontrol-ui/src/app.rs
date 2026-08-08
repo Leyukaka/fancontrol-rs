@@ -2,6 +2,7 @@
 
 use crate::UiError;
 use crate::activity::{ActivityDeckView, ActivityMode, show_activity_deck};
+use crate::cpu_panel::show_cpu_panel;
 use crate::curve_editor::show_curve_editor;
 use crate::gpu_panel::show_gpu_panel;
 use crate::graph::{GraphSeries, TempHistory, ThermalSignal, show_metric_graph};
@@ -127,6 +128,8 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
 
     let mut load_history = TempHistory::default();
     load_history.configure(settings.activity_window_minutes, 1);
+    let mut cpu_power_history = TempHistory::default();
+    cpu_power_history.configure(settings.graph_window_minutes, settings.graph_sample_secs);
 
     let metrics_sink = if settings.metrics_store_enabled {
         SqliteMetricsStore::spawn(SqliteStoreConfig {
@@ -175,6 +178,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         metrics_sink,
         last_metrics_record: Instant::now() - Duration::from_secs(60),
         load_history,
+        cpu_power_history,
         activity_filter: String::new(),
         show_settings: false,
         show_curves: true,
@@ -299,6 +303,10 @@ struct FanApp {
     last_metrics_record: Instant,
     /// CPU load % history for the Activity deck.
     load_history: TempHistory,
+    /// CPU package power history for the CPU panel sparkline. Independent of
+    /// `graph_sensor_ids` so it keeps tracking even when the Sensors graph
+    /// filters power series out (see `ui_thermal_graph_block`).
+    cpu_power_history: TempHistory,
     /// Process name filter (Activity deck).
     activity_filter: String,
     show_settings: bool,
@@ -411,9 +419,8 @@ impl eframe::App for FanApp {
             if let Some(id) = &snap.gpu_temp_id {
                 seed.push(id.clone());
             }
-            if let Some(id) = &snap.cpu_power_id {
-                seed.push(id.clone());
-            }
+            // Package power belongs to the CPU panel, not the Sensors (temperature)
+            // graph — do not seed `cpu_power_id` here (see `ui_thermal_graph_block`).
             // Fallback: first available temp if CPU id not yet labeled
             if seed.is_empty()
                 && let Some((id, _, _)) = snap.temps.first()
@@ -445,6 +452,9 @@ impl eframe::App for FanApp {
                     })
                     .push_if_due(v as f32, Instant::now());
             }
+        }
+        if let Some(w) = snap.cpu.power_w {
+            self.cpu_power_history.push_if_due(w as f32, Instant::now());
         }
 
         // Metrics store (best-effort, separate cadence).
@@ -583,6 +593,17 @@ impl eframe::App for FanApp {
                     }
                     if ui
                         .selectable_label(
+                            self.settings.show_cpu_panel,
+                            t!("top_bar.cpu_toggle").to_string(),
+                        )
+                        .on_hover_text(t!("top_bar.cpu_toggle_tooltip").to_string())
+                        .clicked()
+                    {
+                        self.settings.show_cpu_panel = !self.settings.show_cpu_panel;
+                        self.settings.save();
+                    }
+                    if ui
+                        .selectable_label(
                             self.settings.show_gpu_panel,
                             t!("top_bar.gpu_toggle").to_string(),
                         )
@@ -590,6 +611,17 @@ impl eframe::App for FanApp {
                         .clicked()
                     {
                         self.settings.show_gpu_panel = !self.settings.show_gpu_panel;
+                        self.settings.save();
+                    }
+                    if ui
+                        .selectable_label(
+                            self.settings.show_graph_panel,
+                            t!("top_bar.sensors_toggle").to_string(),
+                        )
+                        .on_hover_text(t!("top_bar.sensors_toggle_tooltip").to_string())
+                        .clicked()
+                    {
+                        self.settings.show_graph_panel = !self.settings.show_graph_panel;
                         self.settings.save();
                     }
                     if ui
@@ -655,7 +687,7 @@ impl eframe::App for FanApp {
         if self.show_settings {
             egui::Panel::right("settings")
                 .resizable(true)
-                .default_size(260.0)
+                .default_size(300.0)
                 .show(ui, |ui| {
                     ui.heading(t!("options.heading").to_string());
                     ui.separator();
@@ -693,426 +725,508 @@ impl eframe::App for FanApp {
                             t!("options.hide_zero_duty_controls").to_string(),
                         )
                         .changed();
-                    dirty |= ui
-                        .checkbox(
-                            &mut self.settings.show_graph_panel,
-                            t!("options.show_cpu_graph").to_string(),
-                        )
-                        .changed();
-                    if ui
-                        .checkbox(
-                            &mut self.settings.show_activity_deck,
-                            t!("options.show_activity_deck").to_string(),
-                        )
-                        .changed()
-                    {
-                        fancontrol_plugins::cpu_activity::set_enabled(
-                            self.settings.show_activity_deck,
-                        );
-                        fancontrol_plugins::cpu_activity::set_sample_processes(
-                            self.settings.show_activity_deck
-                                && !matches!(self.settings.activity_mode, ActivityMode::LoadOnly),
-                        );
-                        dirty = true;
-                    }
-                    let mut launch = self.settings.launch_on_startup;
-                    if ui
-                        .checkbox(&mut launch, t!("options.launch_on_startup").to_string())
-                        .on_hover_text(t!("options.launch_on_startup_tooltip").to_string())
-                        .changed()
-                    {
-                        match crate::autostart::set_enabled(launch) {
-                            Ok(()) => {
-                                self.settings.launch_on_startup = launch;
-                                self.settings.startup_prompt_shown = true;
-                                dirty = true;
-                            }
-                            Err(e) => {
-                                self.profile_status =
-                                    Some(format!("{}: {e}", t!("options.launch_on_startup_err")));
-                            }
-                        }
-                    }
-                    if self.settings.show_activity_deck {
-                        ui.indent("activity_opts", |ui| {
-                            ui.horizontal(|ui| {
-                                ui.label(t!("options.activity_mode").to_string());
-                                for (mode, key) in [
-                                    (ActivityMode::Both, "options.activity_mode_both"),
-                                    (ActivityMode::LoadOnly, "options.activity_mode_load"),
-                                    (ActivityMode::ProcessesOnly, "options.activity_mode_procs"),
-                                ] {
+                    ui.separator();
+
+                    // Everything below can get long (graph sensors, metrics, updates, …);
+                    // scroll it so the Close button below always stays reachable.
+                    egui::ScrollArea::vertical()
+                        .id_salt("options_scroll")
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            egui::CollapsingHeader::new(
+                                t!("options.section_graph_sensors").to_string(),
+                            )
+                            .default_open(true)
+                            .show(ui, |ui| {
+                                dirty |= ui
+                                    .checkbox(
+                                        &mut self.settings.show_graph_panel,
+                                        t!("options.show_sensors_graph").to_string(),
+                                    )
+                                    .changed();
+                                ui.add_space(4.0);
+                                ui.label(t!("options.graph_style_heading").to_string());
+                                let current_style = self.settings.graph_style;
+                                egui::ComboBox::from_id_salt("graph_style_pick")
+                                    .selected_text(t!(current_style.display_key()).to_string())
+                                    .show_ui(ui, |ui| {
+                                        for style in GraphStyle::ALL {
+                                            let enabled = style == GraphStyle::Classic
+                                                || self.shader_backend_available;
+                                            let selected = current_style == style;
+                                            ui.add_enabled_ui(enabled, |ui| {
+                                                if ui
+                                                    .selectable_label(
+                                                        selected,
+                                                        t!(style.display_key()).to_string(),
+                                                    )
+                                                    .on_disabled_hover_text(
+                                                        t!("options.shader_unavailable")
+                                                            .to_string(),
+                                                    )
+                                                    .clicked()
+                                                    && !selected
+                                                {
+                                                    self.settings.graph_style = style;
+                                                    self.settings.save();
+                                                }
+                                            });
+                                        }
+                                    });
+                                if self.settings.graph_style.is_shader() {
+                                    ui.colored_label(
+                                        egui::Color32::YELLOW,
+                                        t!("options.shader_gpu_warning").to_string(),
+                                    );
+                                    dirty |= ui
+                                        .add(
+                                            egui::Slider::new(
+                                                &mut self.settings.shader_speed,
+                                                0.0..=3.0,
+                                            )
+                                            .text(t!("options.shader_speed").to_string()),
+                                        )
+                                        .changed();
+                                    ui.horizontal(|ui| {
+                                        ui.label(t!("options.fps_label").to_string());
+                                        for fps in SHADER_FPS_ALLOWED {
+                                            let selected = self.settings.shader_fps == fps;
+                                            let label = if fps >= 90 {
+                                                format!("{fps} ⚠")
+                                            } else {
+                                                format!("{fps}")
+                                            };
+                                            let resp = ui.selectable_label(selected, label);
+                                            let resp = if fps >= 90 {
+                                                resp.on_hover_text(
+                                                    t!("options.fps_high_usage").to_string(),
+                                                )
+                                            } else {
+                                                resp
+                                            };
+                                            if resp.clicked() && !selected {
+                                                self.settings.shader_fps = fps;
+                                                dirty = true;
+                                            }
+                                        }
+                                    });
+                                    ui.horizontal(|ui| {
+                                        ui.label(t!("options.fractal_color_a").to_string());
+                                        dirty |= ui
+                                            .color_edit_button_rgb(
+                                                &mut self.settings.shader_color_a,
+                                            )
+                                            .changed();
+                                        ui.label(t!("options.fractal_color_b").to_string());
+                                        dirty |= ui
+                                            .color_edit_button_rgb(
+                                                &mut self.settings.shader_color_b,
+                                            )
+                                            .changed();
+                                    });
+                                }
+                                ui.add_space(4.0);
+                                ui.label(t!("options.graph_sensors_heading").to_string());
+                                ui.small(t!("options.graph_sensors_note").to_string());
+                                // Sensors graph plots temperature only (GPU/CPU power and
+                                // load live in their own panels) — only offer temp sensors
+                                // here so the picker matches what the graph can show.
+                                let temps: Vec<_> = snap
+                                    .plottable
+                                    .iter()
+                                    .filter(|p| p.kind == SensorKind::Temperature)
+                                    .collect();
+                                if temps.is_empty() {
+                                    ui.small(t!("dashboard.none").to_string());
+                                } else {
+                                    for p in &temps {
+                                        let mut checked = self
+                                            .settings
+                                            .graph_sensor_ids
+                                            .iter()
+                                            .any(|s| s == &p.id);
+                                        if ui.checkbox(&mut checked, p.label.as_str()).changed() {
+                                            if checked {
+                                                self.settings.graph_sensor_ids.push(p.id.clone());
+                                            } else {
+                                                self.settings
+                                                    .graph_sensor_ids
+                                                    .retain(|s| s != &p.id);
+                                            }
+                                            self.settings.save();
+                                        }
+                                    }
+                                }
+                                if self.settings.graph_sensor_ids.len() > 6 {
+                                    ui.small(t!("options.graph_sensors_many_note").to_string());
+                                }
+                            });
+
+                            egui::CollapsingHeader::new(t!("options.section_gpu_cpu").to_string())
+                                .default_open(true)
+                                .show(ui, |ui| {
                                     if ui
-                                        .selectable_value(
-                                            &mut self.settings.activity_mode,
-                                            mode,
-                                            t!(key).to_string(),
+                                        .checkbox(
+                                            &mut self.settings.show_gpu_panel,
+                                            t!("options.show_gpu_panel").to_string(),
                                         )
                                         .changed()
                                     {
-                                        fancontrol_plugins::cpu_activity::set_sample_processes(
-                                            !matches!(mode, ActivityMode::LoadOnly),
+                                        dirty = true;
+                                    }
+                                    if ui
+                                        .checkbox(
+                                            &mut self.settings.show_cpu_panel,
+                                            t!("options.show_cpu_panel").to_string(),
+                                        )
+                                        .changed()
+                                    {
+                                        dirty = true;
+                                    }
+                                    if ui
+                                        .checkbox(
+                                            &mut self.settings.show_host_sensors,
+                                            t!("options.show_host_sensors").to_string(),
+                                        )
+                                        .changed()
+                                    {
+                                        self.host_enabled.store(
+                                            self.settings.show_host_sensors,
+                                            Ordering::Relaxed,
                                         );
                                         dirty = true;
                                     }
-                                }
-                            });
-                            ui.horizontal(|ui| {
-                                ui.label(t!("options.activity_top_n").to_string());
-                                for n in [5_u8, 8, 10, 12, 16, 20] {
+                                    ui.small(t!("options.host_sensor_note").to_string());
+                                    ui.add_space(4.0);
+                                    dirty |= ui
+                                        .checkbox(
+                                            &mut self.settings.auto_apply_curves,
+                                            t!("options.auto_apply_curves").to_string(),
+                                        )
+                                        .changed();
+                                    if self.settings.auto_apply_curves
+                                        && !self.options.allow_hw_write
+                                    {
+                                        ui.colored_label(
+                                            egui::Color32::YELLOW,
+                                            t!("options.auto_apply_needs_write").to_string(),
+                                        );
+                                    }
+                                    ui.add_space(4.0);
+                                    ui.label(t!("options.rgb_heading").to_string());
+                                    ui.small(t!("options.rgb_note").to_string());
+                                    ui.add_space(4.0);
+                                    ui.label(t!("options.names_heading").to_string());
+                                    ui.small(t!("options.names_note").to_string());
+                                });
+
+                            egui::CollapsingHeader::new(t!("options.section_activity").to_string())
+                                .default_open(false)
+                                .show(ui, |ui| {
                                     if ui
-                                        .selectable_value(
-                                            &mut self.settings.activity_top_n,
-                                            n,
-                                            n.to_string(),
+                                        .checkbox(
+                                            &mut self.settings.show_activity_deck,
+                                            t!("options.show_activity_deck").to_string(),
                                         )
                                         .changed()
                                     {
+                                        fancontrol_plugins::cpu_activity::set_enabled(
+                                            self.settings.show_activity_deck,
+                                        );
+                                        fancontrol_plugins::cpu_activity::set_sample_processes(
+                                            self.settings.show_activity_deck
+                                                && !matches!(
+                                                    self.settings.activity_mode,
+                                                    ActivityMode::LoadOnly
+                                                ),
+                                        );
                                         dirty = true;
                                     }
-                                }
-                            });
-                        });
-                    }
-                    if ui
-                        .checkbox(
-                            &mut self.settings.show_gpu_panel,
-                            t!("options.show_gpu_panel").to_string(),
-                        )
-                        .changed()
-                    {
-                        dirty = true;
-                    }
-                    if ui
-                        .checkbox(
-                            &mut self.settings.show_host_sensors,
-                            t!("options.show_host_sensors").to_string(),
-                        )
-                        .changed()
-                    {
-                        self.host_enabled
-                            .store(self.settings.show_host_sensors, Ordering::Relaxed);
-                        dirty = true;
-                    }
-                    dirty |= ui
-                        .checkbox(
-                            &mut self.settings.auto_apply_curves,
-                            t!("options.auto_apply_curves").to_string(),
-                        )
-                        .changed();
-                    if self.settings.auto_apply_curves && !self.options.allow_hw_write {
-                        ui.colored_label(
-                            egui::Color32::YELLOW,
-                            t!("options.auto_apply_needs_write").to_string(),
-                        );
-                    }
-                    ui.small(t!("options.host_sensor_note").to_string());
-                    ui.separator();
-                    ui.label(t!("options.rgb_heading").to_string());
-                    ui.small(t!("options.rgb_note").to_string());
-                    ui.separator();
-                    ui.label(t!("options.names_heading").to_string());
-                    ui.small(t!("options.names_note").to_string());
-                    ui.separator();
-                    ui.label(t!("options.updates_heading").to_string());
-                    if ui
-                        .button(t!("options.check_updates_button").to_string())
-                        .clicked()
-                    {
-                        self.updates.check_now();
-                    }
-                    match self.updates.status() {
-                        Some(UpdateStatus::Checking) => {
-                            ui.small(t!("options.checking").to_string());
-                        }
-                        Some(UpdateStatus::UpToDate) => {
-                            ui.small(
-                                t!("options.up_to_date", version = env!("CARGO_PKG_VERSION"))
-                                    .to_string(),
-                            );
-                        }
-                        Some(UpdateStatus::Available { version, url }) => {
-                            ui.colored_label(
-                                egui::Color32::LIGHT_GREEN,
-                                t!("options.new_version_available", version = version).to_string(),
-                            );
-                            ui.hyperlink_to(t!("options.open_release_page").to_string(), url);
-                        }
-                        Some(UpdateStatus::Error(e)) => {
-                            ui.colored_label(
-                                egui::Color32::YELLOW,
-                                t!("options.check_failed", error = e).to_string(),
-                            );
-                        }
-                        None => {}
-                    }
-                    ui.separator();
-                    ui.label(t!("options.language_heading").to_string());
-                    let current_lang = self
-                        .settings
-                        .language
-                        .clone()
-                        .unwrap_or_else(|| "en".to_string());
-                    egui::ComboBox::from_id_salt("language_pick")
-                        .selected_text(display_name_for(&current_lang))
-                        .show_ui(ui, |ui| {
-                            for code in SUPPORTED {
-                                let selected = current_lang == code;
-                                if ui
-                                    .selectable_label(selected, display_name_for(code))
-                                    .clicked()
-                                    && !selected
-                                {
-                                    self.settings.language = Some(code.to_string());
-                                    rust_i18n::set_locale(code);
-                                    if let Some(tray) = &self.tray {
-                                        tray.retranslate();
-                                    }
-                                    self.settings.save();
-                                }
-                            }
-                        });
-                    ui.separator();
-                    ui.label(t!("options.graph_style_heading").to_string());
-                    let current_style = self.settings.graph_style;
-                    egui::ComboBox::from_id_salt("graph_style_pick")
-                        .selected_text(t!(current_style.display_key()).to_string())
-                        .show_ui(ui, |ui| {
-                            for style in GraphStyle::ALL {
-                                let enabled =
-                                    style == GraphStyle::Classic || self.shader_backend_available;
-                                let selected = current_style == style;
-                                ui.add_enabled_ui(enabled, |ui| {
-                                    if ui
-                                        .selectable_label(
-                                            selected,
-                                            t!(style.display_key()).to_string(),
-                                        )
-                                        .on_disabled_hover_text(
-                                            t!("options.shader_unavailable").to_string(),
-                                        )
-                                        .clicked()
-                                        && !selected
-                                    {
-                                        self.settings.graph_style = style;
-                                        self.settings.save();
+                                    if self.settings.show_activity_deck {
+                                        ui.indent("activity_opts", |ui| {
+                                            ui.horizontal(|ui| {
+                                                ui.label(t!("options.activity_mode").to_string());
+                                                for (mode, key) in [
+                                                    (ActivityMode::Both, "options.activity_mode_both"),
+                                                    (
+                                                        ActivityMode::LoadOnly,
+                                                        "options.activity_mode_load",
+                                                    ),
+                                                    (
+                                                        ActivityMode::ProcessesOnly,
+                                                        "options.activity_mode_procs",
+                                                    ),
+                                                ] {
+                                                    if ui
+                                                        .selectable_value(
+                                                            &mut self.settings.activity_mode,
+                                                            mode,
+                                                            t!(key).to_string(),
+                                                        )
+                                                        .changed()
+                                                    {
+                                                        fancontrol_plugins::cpu_activity::set_sample_processes(
+                                                            !matches!(mode, ActivityMode::LoadOnly),
+                                                        );
+                                                        dirty = true;
+                                                    }
+                                                }
+                                            });
+                                            ui.horizontal(|ui| {
+                                                ui.label(t!("options.activity_top_n").to_string());
+                                                for n in [5_u8, 8, 10, 12, 16, 20] {
+                                                    if ui
+                                                        .selectable_value(
+                                                            &mut self.settings.activity_top_n,
+                                                            n,
+                                                            n.to_string(),
+                                                        )
+                                                        .changed()
+                                                    {
+                                                        dirty = true;
+                                                    }
+                                                }
+                                            });
+                                        });
                                     }
                                 });
-                            }
-                        });
-                    if self.settings.graph_style.is_shader() {
-                        ui.colored_label(
-                            egui::Color32::YELLOW,
-                            t!("options.shader_gpu_warning").to_string(),
-                        );
-                        dirty |= ui
-                            .add(
-                                egui::Slider::new(&mut self.settings.shader_speed, 0.0..=3.0)
-                                    .text(t!("options.shader_speed").to_string()),
+
+                            egui::CollapsingHeader::new(
+                                t!("options.section_host_metrics").to_string(),
                             )
-                            .changed();
-                        ui.horizontal(|ui| {
-                            ui.label(t!("options.fps_label").to_string());
-                            for fps in SHADER_FPS_ALLOWED {
-                                let selected = self.settings.shader_fps == fps;
-                                let label = if fps >= 90 {
-                                    format!("{fps} ⚠")
-                                } else {
-                                    format!("{fps}")
-                                };
-                                let resp = ui.selectable_label(selected, label);
-                                let resp = if fps >= 90 {
-                                    resp.on_hover_text(t!("options.fps_high_usage").to_string())
-                                } else {
-                                    resp
-                                };
-                                if resp.clicked() && !selected {
-                                    self.settings.shader_fps = fps;
+                            .default_open(false)
+                            .show(ui, |ui| {
+                                ui.label(t!("options.metrics_heading").to_string());
+                                ui.small(t!("options.metrics_note").to_string());
+                                if ui
+                                    .checkbox(
+                                        &mut self.settings.metrics_store_enabled,
+                                        t!("options.metrics_store_enabled").to_string(),
+                                    )
+                                    .changed()
+                                {
+                                    dirty = true;
+                                    if self.settings.metrics_store_enabled {
+                                        self.metrics_sink =
+                                            SqliteMetricsStore::spawn(SqliteStoreConfig {
+                                                path: default_metrics_db_path().unwrap_or_else(
+                                                    || std::path::PathBuf::from("metrics.sqlite"),
+                                                ),
+                                                retention_days: u32::from(
+                                                    self.settings.metrics_retention_days.max(1),
+                                                ),
+                                                flush_ms: 500,
+                                            });
+                                    } else {
+                                        self.metrics_sink = None;
+                                    }
+                                }
+                                if self.settings.metrics_store_enabled {
+                                    ui.horizontal(|ui| {
+                                        ui.label(t!("options.metrics_sample_secs").to_string());
+                                        for s in [2_u16, 5, 10, 30] {
+                                            if ui
+                                                .selectable_value(
+                                                    &mut self.settings.metrics_sample_secs,
+                                                    s,
+                                                    format!("{s}s"),
+                                                )
+                                                .changed()
+                                            {
+                                                dirty = true;
+                                            }
+                                        }
+                                    });
+                                    ui.horizontal(|ui| {
+                                        ui.label(t!("options.metrics_retention_days").to_string());
+                                        for d in [1_u16, 7, 30, 90] {
+                                            if ui
+                                                .selectable_value(
+                                                    &mut self.settings.metrics_retention_days,
+                                                    d,
+                                                    format!("{d}d"),
+                                                )
+                                                .changed()
+                                            {
+                                                dirty = true;
+                                                if let Some(store) = &self.metrics_sink {
+                                                    store.request_purge();
+                                                }
+                                            }
+                                        }
+                                    });
+                                    if let Some(path) = default_metrics_db_path() {
+                                        ui.small(format!(
+                                            "{} {}",
+                                            t!("options.metrics_path"),
+                                            path.display()
+                                        ));
+                                    }
+                                    if ui
+                                        .button(t!("options.metrics_export_csv").to_string())
+                                        .clicked()
+                                        && let Some(store) = &self.metrics_sink
+                                        && let Ok(dir) = fancontrol_core::config_dir()
+                                    {
+                                        let exports = dir.join("exports");
+                                        let _ = std::fs::create_dir_all(&exports);
+                                        let name = format!(
+                                            "metrics-{}.csv",
+                                            std::time::SystemTime::now()
+                                                .duration_since(std::time::UNIX_EPOCH)
+                                                .map(|d| d.as_secs())
+                                                .unwrap_or(0)
+                                        );
+                                        let path = exports.join(name);
+                                        match store.request_export_csv(&path) {
+                                            Ok(n) => {
+                                                self.profile_status = Some(format!(
+                                                    "{} ({n} rows) → {}",
+                                                    t!("options.metrics_export_ok"),
+                                                    path.display()
+                                                ));
+                                            }
+                                            Err(e) => {
+                                                self.profile_status = Some(format!(
+                                                    "{}: {e}",
+                                                    t!("options.metrics_export_err")
+                                                ));
+                                            }
+                                        }
+                                    }
+                                }
+                                ui.add_space(4.0);
+                                if ui
+                                    .checkbox(
+                                        &mut self.settings.otel_enabled,
+                                        t!("options.otel_enabled").to_string(),
+                                    )
+                                    .changed()
+                                {
                                     dirty = true;
                                 }
-                            }
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label(t!("options.fractal_color_a").to_string());
-                            dirty |= ui
-                                .color_edit_button_rgb(&mut self.settings.shader_color_a)
-                                .changed();
-                            ui.label(t!("options.fractal_color_b").to_string());
-                            dirty |= ui
-                                .color_edit_button_rgb(&mut self.settings.shader_color_b)
-                                .changed();
-                        });
-                    }
-                    ui.separator();
-                    ui.label(t!("options.graph_sensors_heading").to_string());
-                    ui.small(t!("options.graph_sensors_note").to_string());
-                    if snap.plottable.is_empty() {
-                        ui.small(t!("dashboard.none").to_string());
-                    } else {
-                        let temps: Vec<_> = snap
-                            .plottable
-                            .iter()
-                            .filter(|p| p.kind == SensorKind::Temperature)
-                            .collect();
-                        let other: Vec<_> = snap
-                            .plottable
-                            .iter()
-                            .filter(|p| p.kind != SensorKind::Temperature)
-                            .collect();
-                        if !temps.is_empty() {
-                            ui.small(t!("options.graph_section_temps").to_string());
-                            for p in &temps {
-                                let mut checked =
-                                    self.settings.graph_sensor_ids.iter().any(|s| s == &p.id);
-                                if ui.checkbox(&mut checked, p.label.as_str()).changed() {
-                                    if checked {
-                                        self.settings.graph_sensor_ids.push(p.id.clone());
-                                    } else {
-                                        self.settings.graph_sensor_ids.retain(|s| s != &p.id);
-                                    }
-                                    self.settings.save();
+                                if self.settings.otel_enabled {
+                                    ui.horizontal(|ui| {
+                                        ui.label(t!("options.otel_endpoint").to_string());
+                                        dirty |= ui
+                                            .text_edit_singleline(&mut self.settings.otel_endpoint)
+                                            .changed();
+                                    });
+                                    ui.small(t!("options.otel_deferred_note").to_string());
                                 }
-                            }
-                        }
-                        if !other.is_empty() {
-                            ui.small(t!("options.graph_section_gpu").to_string());
-                            for p in &other {
-                                let unit = p.unit.as_deref().unwrap_or("");
-                                let text = if unit.is_empty() {
-                                    p.label.clone()
-                                } else {
-                                    format!("{} ({unit})", p.label)
-                                };
-                                let mut checked =
-                                    self.settings.graph_sensor_ids.iter().any(|s| s == &p.id);
-                                if ui.checkbox(&mut checked, text).changed() {
-                                    if checked {
-                                        self.settings.graph_sensor_ids.push(p.id.clone());
-                                    } else {
-                                        self.settings.graph_sensor_ids.retain(|s| s != &p.id);
-                                    }
-                                    self.settings.save();
-                                }
-                            }
-                        }
-                    }
-                    if self.settings.graph_sensor_ids.len() > 6 {
-                        ui.small(t!("options.graph_sensors_many_note").to_string());
-                    }
-                    ui.separator();
-                    ui.label(t!("options.metrics_heading").to_string());
-                    ui.small(t!("options.metrics_note").to_string());
-                    if ui
-                        .checkbox(
-                            &mut self.settings.metrics_store_enabled,
-                            t!("options.metrics_store_enabled").to_string(),
-                        )
-                        .changed()
-                    {
-                        dirty = true;
-                        if self.settings.metrics_store_enabled {
-                            self.metrics_sink = SqliteMetricsStore::spawn(SqliteStoreConfig {
-                                path: default_metrics_db_path()
-                                    .unwrap_or_else(|| std::path::PathBuf::from("metrics.sqlite")),
-                                retention_days: u32::from(
-                                    self.settings.metrics_retention_days.max(1),
-                                ),
-                                flush_ms: 500,
                             });
-                        } else {
-                            self.metrics_sink = None;
-                        }
-                    }
-                    if self.settings.metrics_store_enabled {
-                        ui.horizontal(|ui| {
-                            ui.label(t!("options.metrics_sample_secs").to_string());
-                            for s in [2_u16, 5, 10, 30] {
-                                if ui
-                                    .selectable_value(
-                                        &mut self.settings.metrics_sample_secs,
-                                        s,
-                                        format!("{s}s"),
-                                    )
-                                    .changed()
-                                {
-                                    dirty = true;
-                                }
-                            }
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label(t!("options.metrics_retention_days").to_string());
-                            for d in [1_u16, 7, 30, 90] {
-                                if ui
-                                    .selectable_value(
-                                        &mut self.settings.metrics_retention_days,
-                                        d,
-                                        format!("{d}d"),
-                                    )
-                                    .changed()
-                                {
-                                    dirty = true;
-                                    if let Some(store) = &self.metrics_sink {
-                                        store.request_purge();
+
+                            egui::CollapsingHeader::new(t!("options.section_updates").to_string())
+                                .default_open(false)
+                                .show(ui, |ui| {
+                                    let mut launch = self.settings.launch_on_startup;
+                                    if ui
+                                        .checkbox(
+                                            &mut launch,
+                                            t!("options.launch_on_startup").to_string(),
+                                        )
+                                        .on_hover_text(
+                                            t!("options.launch_on_startup_tooltip").to_string(),
+                                        )
+                                        .changed()
+                                    {
+                                        match crate::autostart::set_enabled(launch) {
+                                            Ok(()) => {
+                                                self.settings.launch_on_startup = launch;
+                                                self.settings.startup_prompt_shown = true;
+                                                dirty = true;
+                                            }
+                                            Err(e) => {
+                                                self.profile_status = Some(format!(
+                                                    "{}: {e}",
+                                                    t!("options.launch_on_startup_err")
+                                                ));
+                                            }
+                                        }
                                     }
-                                }
-                            }
+                                    ui.add_space(4.0);
+                                    if ui
+                                        .button(t!("options.check_updates_button").to_string())
+                                        .clicked()
+                                    {
+                                        self.updates.check_now();
+                                    }
+                                    match self.updates.status() {
+                                        Some(UpdateStatus::Checking) => {
+                                            ui.small(t!("options.checking").to_string());
+                                        }
+                                        Some(UpdateStatus::UpToDate) => {
+                                            ui.small(
+                                                t!(
+                                                    "options.up_to_date",
+                                                    version = env!("CARGO_PKG_VERSION")
+                                                )
+                                                .to_string(),
+                                            );
+                                        }
+                                        Some(UpdateStatus::Available { version, url }) => {
+                                            ui.colored_label(
+                                                egui::Color32::LIGHT_GREEN,
+                                                t!(
+                                                    "options.new_version_available",
+                                                    version = version
+                                                )
+                                                .to_string(),
+                                            );
+                                            ui.hyperlink_to(
+                                                t!("options.open_release_page").to_string(),
+                                                url,
+                                            );
+                                        }
+                                        Some(UpdateStatus::Error(e)) => {
+                                            ui.colored_label(
+                                                egui::Color32::YELLOW,
+                                                t!("options.check_failed", error = e).to_string(),
+                                            );
+                                        }
+                                        None => {}
+                                    }
+                                });
+
+                            egui::CollapsingHeader::new(t!("options.section_language").to_string())
+                                .default_open(false)
+                                .show(ui, |ui| {
+                                    let current_lang = self
+                                        .settings
+                                        .language
+                                        .clone()
+                                        .unwrap_or_else(|| "en".to_string());
+                                    egui::ComboBox::from_id_salt("language_pick")
+                                        .selected_text(display_name_for(&current_lang))
+                                        .show_ui(ui, |ui| {
+                                            for code in SUPPORTED {
+                                                let selected = current_lang == code;
+                                                if ui
+                                                    .selectable_label(
+                                                        selected,
+                                                        display_name_for(code),
+                                                    )
+                                                    .clicked()
+                                                    && !selected
+                                                {
+                                                    self.settings.language =
+                                                        Some(code.to_string());
+                                                    rust_i18n::set_locale(code);
+                                                    if let Some(tray) = &self.tray {
+                                                        tray.retranslate();
+                                                    }
+                                                    self.settings.save();
+                                                }
+                                            }
+                                        });
+                                });
                         });
-                        if let Some(path) = default_metrics_db_path() {
-                            ui.small(format!("{} {}", t!("options.metrics_path"), path.display()));
-                        }
-                        if ui
-                            .button(t!("options.metrics_export_csv").to_string())
-                            .clicked()
-                            && let Some(store) = &self.metrics_sink
-                            && let Ok(dir) = fancontrol_core::config_dir()
-                        {
-                            let exports = dir.join("exports");
-                            let _ = std::fs::create_dir_all(&exports);
-                            let name = format!(
-                                "metrics-{}.csv",
-                                std::time::SystemTime::now()
-                                    .duration_since(std::time::UNIX_EPOCH)
-                                    .map(|d| d.as_secs())
-                                    .unwrap_or(0)
-                            );
-                            let path = exports.join(name);
-                            match store.request_export_csv(&path) {
-                                Ok(n) => {
-                                    self.profile_status = Some(format!(
-                                        "{} ({n} rows) → {}",
-                                        t!("options.metrics_export_ok"),
-                                        path.display()
-                                    ));
-                                }
-                                Err(e) => {
-                                    self.profile_status =
-                                        Some(format!("{}: {e}", t!("options.metrics_export_err")));
-                                }
-                            }
-                        }
-                    }
-                    if ui
-                        .checkbox(
-                            &mut self.settings.otel_enabled,
-                            t!("options.otel_enabled").to_string(),
-                        )
-                        .changed()
-                    {
-                        dirty = true;
-                    }
-                    if self.settings.otel_enabled {
-                        ui.horizontal(|ui| {
-                            ui.label(t!("options.otel_endpoint").to_string());
-                            dirty |= ui
-                                .text_edit_singleline(&mut self.settings.otel_endpoint)
-                                .changed();
-                        });
-                        ui.small(t!("options.otel_deferred_note").to_string());
-                    }
+
                     if dirty {
                         self.settings.clamp_graph_options();
                         self.settings.save();
                     }
+                    ui.separator();
                     if ui.button(t!("common.close").to_string()).clicked() {
                         self.show_settings = false;
                     }
@@ -1131,9 +1245,16 @@ impl eframe::App for FanApp {
         let show_thermal = self.settings.show_graph_panel;
         let show_activity = self.settings.show_activity_deck;
         let show_gpu = self.settings.show_gpu_panel;
+        let show_cpu = self.settings.show_cpu_panel;
+        // Activity deck load % lands on the CPU panel's load chip when both are live;
+        // the poll thread can't fill this in itself (separate sampler/cadence).
+        let mut cpu_view = snap.cpu.clone();
+        if let Some(act) = &activity_snap {
+            cpu_view.load_pct = act.load_pct;
+        }
         // When Temps/Fans/Controls are all closed, grow graphs into that space.
         let dashboard_open = self.show_temps || self.show_fans || self.show_controls;
-        if show_thermal || show_activity || show_gpu {
+        if show_thermal || show_activity || show_gpu || show_cpu {
             let labels: HashMap<&str, &str> = snap
                 .plottable
                 .iter()
@@ -1144,11 +1265,16 @@ impl eframe::App for FanApp {
                 .iter()
                 .map(|p| (p.id.as_str(), p.unit.as_deref()))
                 .collect();
+            let kinds: HashMap<&str, SensorKind> = snap
+                .plottable
+                .iter()
+                .map(|p| (p.id.as_str(), p.kind))
+                .collect();
 
             // Compact defaults when the dashboard lists are visible; when they are
             // all closed, fill almost all remaining height so plots are not stuck
             // at ~half the window.
-            let top_viz = show_thermal || show_gpu;
+            let top_viz = show_thermal || show_gpu || show_cpu;
             let default_h = match (top_viz, show_activity) {
                 (true, true) => 420.0,
                 (true, false) => 260.0,
@@ -1203,31 +1329,66 @@ impl eframe::App for FanApp {
                         })
                         .map(|w| w as f32);
 
-                    if show_thermal && show_gpu {
-                        ui.columns(2, |cols| {
-                            cols[0].push_id("thermal_graph_col", |ui| {
-                                self.ui_thermal_graph_block(
-                                    ui,
-                                    &labels,
-                                    &units,
-                                    row_h,
-                                    power_ceiling,
-                                );
-                            });
-                            cols[1].push_id("gpu_detail_col", |ui| {
-                                egui::ScrollArea::vertical()
-                                    .id_salt("gpu_col_scroll")
-                                    .max_height(row_h)
-                                    .show(ui, |ui| {
-                                        show_gpu_panel(ui, &snap.gpus);
-                                    });
-                            });
+                    let active_cols =
+                        usize::from(show_thermal) + usize::from(show_gpu) + usize::from(show_cpu);
+                    if active_cols > 1 {
+                        ui.columns(active_cols, |cols| {
+                            let mut i = 0;
+                            if show_thermal {
+                                cols[i].push_id("thermal_graph_col", |ui| {
+                                    self.ui_thermal_graph_block(
+                                        ui,
+                                        &labels,
+                                        &units,
+                                        &kinds,
+                                        row_h,
+                                        power_ceiling,
+                                    );
+                                });
+                                i += 1;
+                            }
+                            if show_gpu {
+                                cols[i].push_id("gpu_detail_col", |ui| {
+                                    egui::ScrollArea::vertical()
+                                        .id_salt("gpu_col_scroll")
+                                        .max_height(row_h)
+                                        .show(ui, |ui| {
+                                            show_gpu_panel(ui, &snap.gpus);
+                                        });
+                                });
+                                i += 1;
+                            }
+                            if show_cpu {
+                                cols[i].push_id("cpu_detail_col", |ui| {
+                                    egui::ScrollArea::vertical()
+                                        .id_salt("cpu_col_scroll")
+                                        .max_height(row_h)
+                                        .show(ui, |ui| {
+                                            show_cpu_panel(
+                                                ui,
+                                                &cpu_view,
+                                                Some(&self.cpu_power_history),
+                                            );
+                                        });
+                                });
+                            }
                         });
                     } else if show_thermal {
-                        self.ui_thermal_graph_block(ui, &labels, &units, row_h, power_ceiling);
+                        self.ui_thermal_graph_block(
+                            ui,
+                            &labels,
+                            &units,
+                            &kinds,
+                            row_h,
+                            power_ceiling,
+                        );
                     } else if show_gpu {
                         ui.allocate_ui(egui::vec2(ui.available_width(), row_h), |ui| {
                             show_gpu_panel(ui, &snap.gpus);
+                        });
+                    } else if show_cpu {
+                        ui.allocate_ui(egui::vec2(ui.available_width(), row_h), |ui| {
+                            show_cpu_panel(ui, &cpu_view, Some(&self.cpu_power_history));
                         });
                     }
                 }
@@ -1534,6 +1695,7 @@ impl FanApp {
         ui: &mut egui::Ui,
         labels: &HashMap<&str, &str>,
         units: &HashMap<&str, Option<&str>>,
+        kinds: &HashMap<&str, SensorKind>,
         plot_h: f32,
         power_axis_ceiling: Option<f32>,
     ) {
@@ -1549,11 +1711,19 @@ impl FanApp {
                 h
             });
         }
+        // Sensors graph is temperature-only (see spec goal 2/8): GPU/CPU power ids some
+        // users still have saved in `graph_sensor_ids` from before the CPU/GPU panels
+        // existed are filtered out here (by live `SensorKind`, not stripped from
+        // settings) rather than stripped from settings, so nothing is lost if a future
+        // graph adds other units back. An id currently absent from the live snapshot
+        // (e.g. a power sensor with PawnIO not elevated) is excluded too — its kind is
+        // unknown, and showing an empty, uncategorized ghost series helps no one.
         let series: Vec<GraphSeries> = self
             .settings
             .graph_sensor_ids
             .iter()
             .enumerate()
+            .filter(|(_, id)| kinds.get(id.as_str()) == Some(&SensorKind::Temperature))
             .filter_map(|(i, id)| {
                 self.histories.get(id).map(|h| GraphSeries {
                     label: labels.get(id.as_str()).copied().unwrap_or(id.as_str()),
@@ -1564,7 +1734,6 @@ impl FanApp {
             })
             .collect();
         let style = self.settings.graph_style;
-        // Shaders only use temperature series for heat signal.
         let only_temps = series
             .iter()
             .all(|s| s.unit.is_none() || s.unit == Some("°C") || s.unit == Some("C"));
@@ -1633,6 +1802,10 @@ impl FanApp {
                     self.settings.graph_sample_secs,
                 );
             }
+            self.cpu_power_history.configure(
+                self.settings.graph_window_minutes,
+                self.settings.graph_sample_secs,
+            );
             self.load_history.configure(
                 self.settings.activity_window_minutes,
                 1, // activity worker ~1 Hz
