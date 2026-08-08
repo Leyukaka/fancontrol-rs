@@ -130,6 +130,8 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
     load_history.configure(settings.activity_window_minutes, 1);
     let mut cpu_power_history = TempHistory::default();
     cpu_power_history.configure(settings.graph_window_minutes, settings.graph_sample_secs);
+    let mut gpu_power_history = TempHistory::default();
+    gpu_power_history.configure(settings.graph_window_minutes, settings.graph_sample_secs);
 
     let metrics_sink = if settings.metrics_store_enabled {
         SqliteMetricsStore::spawn(SqliteStoreConfig {
@@ -179,6 +181,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         last_metrics_record: Instant::now() - Duration::from_secs(60),
         load_history,
         cpu_power_history,
+        gpu_power_history,
         activity_filter: String::new(),
         show_settings: false,
         show_curves: true,
@@ -307,6 +310,8 @@ struct FanApp {
     /// `graph_sensor_ids` so it keeps tracking even when the Sensors graph
     /// filters power series out (see `ui_thermal_graph_block`).
     cpu_power_history: TempHistory,
+    /// First-GPU power history for the GPU panel sparkline (see `cpu_power_history`).
+    gpu_power_history: TempHistory,
     /// Process name filter (Activity deck).
     activity_filter: String,
     show_settings: bool,
@@ -456,6 +461,9 @@ impl eframe::App for FanApp {
         if let Some(w) = snap.cpu.power_w {
             self.cpu_power_history.push_if_due(w as f32, Instant::now());
         }
+        if let Some(w) = snap.gpus.first().and_then(|g| g.power_w) {
+            self.gpu_power_history.push_if_due(w as f32, Instant::now());
+        }
 
         // Metrics store (best-effort, separate cadence).
         if self.settings.metrics_store_enabled {
@@ -565,6 +573,22 @@ impl eframe::App for FanApp {
                         .clicked()
                     {
                         self.show_settings = !self.show_settings;
+                    }
+                    let update_available =
+                        matches!(self.updates.status(), Some(UpdateStatus::Available { .. }));
+                    let update_btn =
+                        egui::Button::new(format!("⬆ {}", t!("top_bar.check_updates_button")))
+                            .fill(if update_available {
+                                egui::Color32::from_rgb(30, 90, 50)
+                            } else {
+                                ui.visuals().widgets.inactive.bg_fill
+                            });
+                    if ui
+                        .add(update_btn)
+                        .on_hover_text(t!("top_bar.check_updates_tooltip").to_string())
+                        .clicked()
+                    {
+                        self.updates.check_now();
                     }
                     // right-to-left: add Controls, Fans, Temps, then Curves
                     if ui
@@ -733,6 +757,120 @@ impl eframe::App for FanApp {
                         .id_salt("options_scroll")
                         .auto_shrink([false, false])
                         .show(ui, |ui| {
+                            egui::CollapsingHeader::new(t!("options.section_updates").to_string())
+                                .default_open(true)
+                                .show(ui, |ui| {
+                                    ui.add_space(2.0);
+                                    let big_button = egui::Button::new(
+                                        egui::RichText::new(
+                                            t!("options.check_updates_button").to_string(),
+                                        )
+                                        .size(16.0)
+                                        .strong(),
+                                    );
+                                    if ui
+                                        .add_sized([ui.available_width(), 36.0], big_button)
+                                        .clicked()
+                                    {
+                                        self.updates.check_now();
+                                    }
+                                    match self.updates.status() {
+                                        Some(UpdateStatus::Checking) => {
+                                            ui.small(t!("options.checking").to_string());
+                                        }
+                                        Some(UpdateStatus::UpToDate) => {
+                                            ui.small(
+                                                t!(
+                                                    "options.up_to_date",
+                                                    version = env!("CARGO_PKG_VERSION")
+                                                )
+                                                .to_string(),
+                                            );
+                                        }
+                                        Some(UpdateStatus::Available { version, url }) => {
+                                            ui.colored_label(
+                                                egui::Color32::LIGHT_GREEN,
+                                                t!(
+                                                    "options.new_version_available",
+                                                    version = version
+                                                )
+                                                .to_string(),
+                                            );
+                                            ui.hyperlink_to(
+                                                t!("options.open_release_page").to_string(),
+                                                url,
+                                            );
+                                        }
+                                        Some(UpdateStatus::Error(e)) => {
+                                            ui.colored_label(
+                                                egui::Color32::YELLOW,
+                                                t!("options.check_failed", error = e).to_string(),
+                                            );
+                                        }
+                                        None => {}
+                                    }
+                                    ui.add_space(6.0);
+                                    ui.separator();
+                                    let mut launch = self.settings.launch_on_startup;
+                                    if ui
+                                        .checkbox(
+                                            &mut launch,
+                                            t!("options.launch_on_startup").to_string(),
+                                        )
+                                        .on_hover_text(
+                                            t!("options.launch_on_startup_tooltip").to_string(),
+                                        )
+                                        .changed()
+                                    {
+                                        match crate::autostart::set_enabled(launch) {
+                                            Ok(()) => {
+                                                self.settings.launch_on_startup = launch;
+                                                self.settings.startup_prompt_shown = true;
+                                                dirty = true;
+                                            }
+                                            Err(e) => {
+                                                self.profile_status = Some(format!(
+                                                    "{}: {e}",
+                                                    t!("options.launch_on_startup_err")
+                                                ));
+                                            }
+                                        }
+                                    }
+                                });
+
+                            egui::CollapsingHeader::new(t!("options.section_language").to_string())
+                                .default_open(false)
+                                .show(ui, |ui| {
+                                    let current_lang = self
+                                        .settings
+                                        .language
+                                        .clone()
+                                        .unwrap_or_else(|| "en".to_string());
+                                    egui::ComboBox::from_id_salt("language_pick")
+                                        .selected_text(display_name_for(&current_lang))
+                                        .show_ui(ui, |ui| {
+                                            for code in SUPPORTED {
+                                                let selected = current_lang == code;
+                                                if ui
+                                                    .selectable_label(
+                                                        selected,
+                                                        display_name_for(code),
+                                                    )
+                                                    .clicked()
+                                                    && !selected
+                                                {
+                                                    self.settings.language =
+                                                        Some(code.to_string());
+                                                    rust_i18n::set_locale(code);
+                                                    if let Some(tray) = &self.tray {
+                                                        tray.retranslate();
+                                                    }
+                                                    self.settings.save();
+                                                }
+                                            }
+                                        });
+                                });
+
                             egui::CollapsingHeader::new(
                                 t!("options.section_graph_sensors").to_string(),
                             )
@@ -1115,111 +1253,6 @@ impl eframe::App for FanApp {
                                     ui.small(t!("options.otel_deferred_note").to_string());
                                 }
                             });
-
-                            egui::CollapsingHeader::new(t!("options.section_updates").to_string())
-                                .default_open(false)
-                                .show(ui, |ui| {
-                                    let mut launch = self.settings.launch_on_startup;
-                                    if ui
-                                        .checkbox(
-                                            &mut launch,
-                                            t!("options.launch_on_startup").to_string(),
-                                        )
-                                        .on_hover_text(
-                                            t!("options.launch_on_startup_tooltip").to_string(),
-                                        )
-                                        .changed()
-                                    {
-                                        match crate::autostart::set_enabled(launch) {
-                                            Ok(()) => {
-                                                self.settings.launch_on_startup = launch;
-                                                self.settings.startup_prompt_shown = true;
-                                                dirty = true;
-                                            }
-                                            Err(e) => {
-                                                self.profile_status = Some(format!(
-                                                    "{}: {e}",
-                                                    t!("options.launch_on_startup_err")
-                                                ));
-                                            }
-                                        }
-                                    }
-                                    ui.add_space(4.0);
-                                    if ui
-                                        .button(t!("options.check_updates_button").to_string())
-                                        .clicked()
-                                    {
-                                        self.updates.check_now();
-                                    }
-                                    match self.updates.status() {
-                                        Some(UpdateStatus::Checking) => {
-                                            ui.small(t!("options.checking").to_string());
-                                        }
-                                        Some(UpdateStatus::UpToDate) => {
-                                            ui.small(
-                                                t!(
-                                                    "options.up_to_date",
-                                                    version = env!("CARGO_PKG_VERSION")
-                                                )
-                                                .to_string(),
-                                            );
-                                        }
-                                        Some(UpdateStatus::Available { version, url }) => {
-                                            ui.colored_label(
-                                                egui::Color32::LIGHT_GREEN,
-                                                t!(
-                                                    "options.new_version_available",
-                                                    version = version
-                                                )
-                                                .to_string(),
-                                            );
-                                            ui.hyperlink_to(
-                                                t!("options.open_release_page").to_string(),
-                                                url,
-                                            );
-                                        }
-                                        Some(UpdateStatus::Error(e)) => {
-                                            ui.colored_label(
-                                                egui::Color32::YELLOW,
-                                                t!("options.check_failed", error = e).to_string(),
-                                            );
-                                        }
-                                        None => {}
-                                    }
-                                });
-
-                            egui::CollapsingHeader::new(t!("options.section_language").to_string())
-                                .default_open(false)
-                                .show(ui, |ui| {
-                                    let current_lang = self
-                                        .settings
-                                        .language
-                                        .clone()
-                                        .unwrap_or_else(|| "en".to_string());
-                                    egui::ComboBox::from_id_salt("language_pick")
-                                        .selected_text(display_name_for(&current_lang))
-                                        .show_ui(ui, |ui| {
-                                            for code in SUPPORTED {
-                                                let selected = current_lang == code;
-                                                if ui
-                                                    .selectable_label(
-                                                        selected,
-                                                        display_name_for(code),
-                                                    )
-                                                    .clicked()
-                                                    && !selected
-                                                {
-                                                    self.settings.language =
-                                                        Some(code.to_string());
-                                                    rust_i18n::set_locale(code);
-                                                    if let Some(tray) = &self.tray {
-                                                        tray.retranslate();
-                                                    }
-                                                    self.settings.save();
-                                                }
-                                            }
-                                        });
-                                });
                         });
 
                     if dirty {
@@ -1331,11 +1364,21 @@ impl eframe::App for FanApp {
 
                     let active_cols =
                         usize::from(show_thermal) + usize::from(show_gpu) + usize::from(show_cpu);
-                    if active_cols > 1 {
+                    // Below this per-column width, `ui.columns` no longer clips its content
+                    // to the column rect, so a wide GPU/CPU row visually bleeds into the
+                    // neighboring column (e.g. GPU overlaying Sensors). Stack vertically
+                    // instead of squeezing columns thinner than a metric row can shrink to.
+                    const MIN_DOMAIN_COL_WIDTH: f32 = 180.0;
+                    let too_narrow_for_columns = active_cols > 1
+                        && ui.available_width() / (active_cols as f32) < MIN_DOMAIN_COL_WIDTH;
+
+                    if active_cols > 1 && !too_narrow_for_columns {
                         ui.columns(active_cols, |cols| {
                             let mut i = 0;
                             if show_thermal {
+                                let col_rect = cols[i].max_rect();
                                 cols[i].push_id("thermal_graph_col", |ui| {
+                                    ui.set_clip_rect(col_rect);
                                     self.ui_thermal_graph_block(
                                         ui,
                                         &labels,
@@ -1348,18 +1391,26 @@ impl eframe::App for FanApp {
                                 i += 1;
                             }
                             if show_gpu {
+                                let col_rect = cols[i].max_rect();
                                 cols[i].push_id("gpu_detail_col", |ui| {
+                                    ui.set_clip_rect(col_rect);
                                     egui::ScrollArea::vertical()
                                         .id_salt("gpu_col_scroll")
                                         .max_height(row_h)
                                         .show(ui, |ui| {
-                                            show_gpu_panel(ui, &snap.gpus);
+                                            show_gpu_panel(
+                                                ui,
+                                                &snap.gpus,
+                                                Some(&self.gpu_power_history),
+                                            );
                                         });
                                 });
                                 i += 1;
                             }
                             if show_cpu {
+                                let col_rect = cols[i].max_rect();
                                 cols[i].push_id("cpu_detail_col", |ui| {
+                                    ui.set_clip_rect(col_rect);
                                     egui::ScrollArea::vertical()
                                         .id_salt("cpu_col_scroll")
                                         .max_height(row_h)
@@ -1373,6 +1424,49 @@ impl eframe::App for FanApp {
                                 });
                             }
                         });
+                    } else if active_cols > 1 {
+                        // Too narrow for side-by-side columns: stack the domain panels
+                        // vertically in a scroll area instead of overlaying each other.
+                        egui::ScrollArea::vertical()
+                            .id_salt("domain_stack_scroll")
+                            .max_height(room)
+                            .auto_shrink([false, false])
+                            .show(ui, |ui| {
+                                if show_thermal {
+                                    ui.push_id("thermal_graph_col", |ui| {
+                                        self.ui_thermal_graph_block(
+                                            ui,
+                                            &labels,
+                                            &units,
+                                            &kinds,
+                                            row_h,
+                                            power_ceiling,
+                                        );
+                                    });
+                                    ui.add_space(6.0);
+                                    ui.separator();
+                                }
+                                if show_gpu {
+                                    ui.push_id("gpu_detail_col", |ui| {
+                                        show_gpu_panel(
+                                            ui,
+                                            &snap.gpus,
+                                            Some(&self.gpu_power_history),
+                                        );
+                                    });
+                                    ui.add_space(6.0);
+                                    ui.separator();
+                                }
+                                if show_cpu {
+                                    ui.push_id("cpu_detail_col", |ui| {
+                                        show_cpu_panel(
+                                            ui,
+                                            &cpu_view,
+                                            Some(&self.cpu_power_history),
+                                        );
+                                    });
+                                }
+                            });
                     } else if show_thermal {
                         self.ui_thermal_graph_block(
                             ui,
@@ -1384,7 +1478,7 @@ impl eframe::App for FanApp {
                         );
                     } else if show_gpu {
                         ui.allocate_ui(egui::vec2(ui.available_width(), row_h), |ui| {
-                            show_gpu_panel(ui, &snap.gpus);
+                            show_gpu_panel(ui, &snap.gpus, Some(&self.gpu_power_history));
                         });
                     } else if show_cpu {
                         ui.allocate_ui(egui::vec2(ui.available_width(), row_h), |ui| {
@@ -1803,6 +1897,10 @@ impl FanApp {
                 );
             }
             self.cpu_power_history.configure(
+                self.settings.graph_window_minutes,
+                self.settings.graph_sample_secs,
+            );
+            self.gpu_power_history.configure(
                 self.settings.graph_window_minutes,
                 self.settings.graph_sample_secs,
             );

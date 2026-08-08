@@ -107,6 +107,11 @@ impl TempHistory {
             None => Vec::new(),
         }
     }
+
+    /// Configured rolling window, in (fractional) minutes — for sizing a plot's X axis.
+    pub fn window_minutes(&self) -> f64 {
+        self.window.as_secs_f64() / 60.0
+    }
 }
 
 /// Frame-rate-independent exponential ease toward `target`, using a half-life

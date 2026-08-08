@@ -1,9 +1,11 @@
 //! CPU detail panel: package power vs. limit, temperature, load % (read-only host metrics).
 
 use crate::graph::TempHistory;
+use crate::panel_metrics::{
+    load_chip, load_color, metric_bar, power_color, power_sparkline, temp_chip,
+};
 use crate::poll::CpuSnap;
 use eframe::egui::{self, Color32, RichText};
-use egui_plot::{Line, Plot};
 
 /// Draw the CPU detail card into `ui`. `power_history` is an optional recent
 /// package-power trace (independent of the Sensors graph selection) for a
@@ -24,7 +26,7 @@ pub fn show_cpu_panel(ui: &mut egui::Ui, cpu: &CpuSnap, power_history: Option<&T
 
     ui.add_space(4.0);
     ui.horizontal(|ui| {
-        temp_chip(ui, t!("cpu.temp").to_string(), cpu.temp_c);
+        temp_chip(ui, t!("cpu.temp").to_string(), cpu.temp_c, true);
         load_chip(ui, t!("cpu.load").to_string(), cpu.load_pct);
     });
 
@@ -60,128 +62,31 @@ pub fn show_cpu_panel(ui: &mut egui::Ui, cpu: &CpuSnap, power_history: Option<&T
         }
     }
 
+    // GPU-style load row + bar, denser parity with the GPU panel's utilization row
+    // (the load chip above is a compact readout; this makes the fraction visible).
+    if let Some(l) = cpu.load_pct {
+        let frac = (l / 100.0) as f32;
+        ui.horizontal(|ui| {
+            ui.label(t!("cpu.load").to_string());
+            ui.label(
+                RichText::new(format!("{l:.0}%"))
+                    .monospace()
+                    .color(load_color(frac)),
+            );
+        });
+        metric_bar(ui, frac, load_color(frac));
+    }
+
     if let Some(history) = power_history
         && !history.is_empty()
     {
         ui.add_space(6.0);
         ui.small(t!("cpu.power_history").to_string());
-        let points = history.plot_points();
-        let color = power_color(0.3);
-        let line = Line::new("cpu_power", points).color(color).width(2.0);
-        Plot::new("cpu_power_sparkline")
-            .height(60.0)
-            .allow_drag(false)
-            .allow_zoom(false)
-            .allow_scroll(false)
-            .allow_boxed_zoom(false)
-            .show_axes([false, true])
-            .show_grid([false, true])
-            .include_y(0.0)
-            .show(ui, |plot_ui| {
-                plot_ui.line(line);
-            });
-    }
-}
-
-fn temp_chip(ui: &mut egui::Ui, label: String, value: Option<f64>) {
-    ui.group(|ui| {
-        ui.set_min_width(72.0);
-        ui.vertical(|ui| {
-            ui.small(label);
-            match value {
-                Some(t) => {
-                    ui.label(
-                        RichText::new(format!("{t:.0}°C"))
-                            .monospace()
-                            .strong()
-                            .size(18.0)
-                            .color(temp_color(t as f32)),
-                    );
-                }
-                None => {
-                    ui.label(
-                        RichText::new("—")
-                            .monospace()
-                            .strong()
-                            .size(18.0)
-                            .color(Color32::DARK_GRAY),
-                    );
-                }
-            }
-        });
-    });
-}
-
-fn load_chip(ui: &mut egui::Ui, label: String, value: Option<f64>) {
-    ui.group(|ui| {
-        ui.set_min_width(72.0);
-        ui.vertical(|ui| {
-            ui.small(label);
-            match value {
-                Some(p) => {
-                    ui.label(
-                        RichText::new(format!("{p:.0}%"))
-                            .monospace()
-                            .strong()
-                            .size(18.0)
-                            .color(load_color(p as f32 / 100.0)),
-                    );
-                }
-                None => {
-                    ui.label(
-                        RichText::new("—")
-                            .monospace()
-                            .strong()
-                            .size(18.0)
-                            .color(Color32::DARK_GRAY),
-                    );
-                }
-            }
-        });
-    });
-}
-
-fn metric_bar(ui: &mut egui::Ui, frac: f32, color: Color32) {
-    let frac = frac.clamp(0.0, 1.0);
-    let desired = egui::vec2(ui.available_width().clamp(80.0, 280.0), 8.0);
-    let (rect, _) = ui.allocate_exact_size(desired, egui::Sense::hover());
-    let painter = ui.painter();
-    painter.rect_filled(rect, 2.0, Color32::from_gray(40));
-    if frac > 0.0 {
-        let mut fill = rect;
-        fill.set_width(rect.width() * frac);
-        painter.rect_filled(fill, 2.0, color);
-    }
-}
-
-fn temp_color(c: f32) -> Color32 {
-    if c < 50.0 {
-        Color32::from_rgb(80, 200, 120)
-    } else if c < 70.0 {
-        Color32::from_rgb(220, 200, 80)
-    } else if c < 85.0 {
-        Color32::from_rgb(230, 140, 60)
-    } else {
-        Color32::from_rgb(230, 80, 80)
-    }
-}
-
-fn load_color(frac: f32) -> Color32 {
-    if frac < 0.5 {
-        Color32::from_rgb(80, 200, 120)
-    } else if frac < 0.8 {
-        Color32::from_rgb(220, 180, 60)
-    } else {
-        Color32::from_rgb(230, 90, 70)
-    }
-}
-
-fn power_color(frac: f32) -> Color32 {
-    if frac < 0.4 {
-        Color32::from_rgb(100, 180, 255)
-    } else if frac < 0.75 {
-        Color32::from_rgb(220, 180, 60)
-    } else {
-        Color32::from_rgb(230, 100, 80)
+        power_sparkline(
+            ui,
+            "cpu_power_sparkline",
+            history,
+            cpu.power_limit_w.map(|w| w as f32),
+        );
     }
 }

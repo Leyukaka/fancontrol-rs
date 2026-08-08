@@ -1,6 +1,7 @@
 //! Interactive fan curve editor (temp °C → duty %).
 
 use eframe::egui::{self, Color32, Pos2, Sense, Stroke, StrokeKind, Vec2};
+use fancontrol_core::curve::interpolate_duty;
 use fancontrol_core::{CurvePoint, FanCurve};
 
 const TEMP_MIN: f32 = 20.0;
@@ -96,7 +97,10 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
         ));
     }
 
-    // Live temp marker
+    // Live temp marker, plus (when the curve has points) the duty % the curve
+    // would currently apply at that temperature — the intersection of the
+    // vertical temp line with the curve, so it's obvious what the fan is
+    // actually being told to do right now.
     if let Some(t) = live_temp {
         let x = to_pos(t as f32, 0.0).x;
         painter.line_segment(
@@ -110,6 +114,20 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
             egui::FontId::monospace(11.0),
             Color32::from_rgb(255, 200, 100),
         );
+
+        if !curve.points.is_empty() {
+            let duty = interpolate_duty(&curve.points, t);
+            let marker = to_pos(t as f32, f32::from(duty));
+            painter.circle_filled(marker, 6.0, Color32::from_rgb(255, 210, 90));
+            painter.circle_stroke(marker, 6.0, Stroke::new(1.5_f32, Color32::WHITE));
+            painter.text(
+                Pos2::new(marker.x + 8.0, marker.y),
+                egui::Align2::LEFT_CENTER,
+                format!("{duty}%"),
+                egui::FontId::monospace(12.0),
+                Color32::from_rgb(255, 220, 120),
+            );
+        }
     }
 
     // Handles

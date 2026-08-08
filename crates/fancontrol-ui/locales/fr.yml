@@ -5,6 +5,8 @@ common.save: "Enregistrer"
 common.cancel: "Annuler"
 
 top_bar.options_button: "Options"
+top_bar.check_updates_button: "Mises à jour"
+top_bar.check_updates_tooltip: "Vérifier sur GitHub s'il existe une nouvelle version (manuel, sans vérification automatique)"
 top_bar.curves_toggle: "Courbes"
 top_bar.curves_toggle_tooltip: "Afficher/masquer l'éditeur de courbes"
 top_bar.temps_toggle: "Températures"
@@ -206,8 +208,8 @@ options.otel_deferred_note: "L'export complet arrive après le store local ; l'e
 graph.too_many_units: "Plus de deux unités sélectionnées ; affichage des deux premiers groupes uniquement."
 graph.shader_temps_only_note: "Les styles shader n'utilisent que les températures ; unités mixtes = graphe classique."
 
-options.launch_on_startup: "Démarrer avec Windows"
-options.launch_on_startup_tooltip: "Lance fancontrol-rs à la connexion (utilisateur actuel, sans admin)."
+options.launch_on_startup: "Autostart"
+options.launch_on_startup_tooltip: "Démarrer avec Windows : lance fancontrol-rs à la connexion (clé de registre HKCU Run, utilisateur actuel, sans admin)."
 options.launch_on_startup_err: "Impossible de mettre à jour le démarrage Windows"
 
 options.section_graph_sensors: "Graphe / Capteurs"

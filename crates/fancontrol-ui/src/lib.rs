@@ -14,6 +14,7 @@ mod elevation;
 mod gpu_panel;
 mod graph;
 mod i18n;
+mod panel_metrics;
 mod poll;
 mod registry;
 mod settings;

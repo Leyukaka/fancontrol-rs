@@ -1,10 +1,14 @@
 //! GPU detail panel: power, temps, load, clocks, VRAM (read-only host metrics).
 
+use crate::graph::TempHistory;
+use crate::panel_metrics::{load_color, metric_bar, power_color, power_sparkline, temp_chip};
 use crate::poll::GpuSnap;
 use eframe::egui::{self, Color32, RichText};
 
-/// Draw one or more GPU cards into `ui`.
-pub fn show_gpu_panel(ui: &mut egui::Ui, gpus: &[GpuSnap]) {
+/// Draw one or more GPU cards into `ui`. `power_history` is an optional recent
+/// power-draw trace for the **first** GPU (see `app.rs::gpu_power_history`) —
+/// only the primary card gets the sparkline.
+pub fn show_gpu_panel(ui: &mut egui::Ui, gpus: &[GpuSnap], power_history: Option<&TempHistory>) {
     ui.horizontal(|ui| {
         ui.heading(t!("gpu.heading").to_string());
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -28,12 +32,13 @@ pub fn show_gpu_panel(ui: &mut egui::Ui, gpus: &[GpuSnap]) {
                     ui.separator();
                     ui.add_space(4.0);
                 }
-                show_gpu_card(ui, gpu);
+                let history = if i == 0 { power_history } else { None };
+                show_gpu_card(ui, gpu, history);
             }
         });
 }
 
-fn show_gpu_card(ui: &mut egui::Ui, gpu: &GpuSnap) {
+fn show_gpu_card(ui: &mut egui::Ui, gpu: &GpuSnap, power_history: Option<&TempHistory>) {
     ui.label(RichText::new(&gpu.name).strong().size(16.0));
 
     // Temperature row: Core | Hot Spot | Memory
@@ -81,6 +86,19 @@ fn show_gpu_card(ui: &mut egui::Ui, gpu: &GpuSnap) {
         if gpu.power_w.is_some() && gpu.power_limit_w.is_some() {
             metric_bar(ui, frac.min(1.0), power_color(frac));
         }
+    }
+
+    if let Some(history) = power_history
+        && !history.is_empty()
+    {
+        ui.add_space(6.0);
+        ui.small(t!("gpu.power_history").to_string());
+        power_sparkline(
+            ui,
+            "gpu_power_sparkline",
+            history,
+            gpu.power_limit_w.map(|w| w as f32),
+        );
     }
 
     // Utilization
@@ -144,84 +162,5 @@ fn show_gpu_card(ui: &mut egui::Ui, gpu: &GpuSnap) {
             (f / 100.0).clamp(0.0, 1.0) as f32,
             Color32::from_rgb(100, 180, 220),
         );
-    }
-}
-
-fn temp_chip(ui: &mut egui::Ui, label: String, value: Option<f64>, colorize: bool) {
-    ui.group(|ui| {
-        ui.set_min_width(72.0);
-        ui.vertical(|ui| {
-            ui.small(label);
-            match value {
-                Some(t) => {
-                    let c = if colorize {
-                        temp_color(t as f32)
-                    } else {
-                        Color32::LIGHT_GRAY
-                    };
-                    ui.label(
-                        RichText::new(format!("{t:.0}°C"))
-                            .monospace()
-                            .strong()
-                            .size(18.0)
-                            .color(c),
-                    );
-                }
-                None => {
-                    ui.label(
-                        RichText::new("—")
-                            .monospace()
-                            .strong()
-                            .size(18.0)
-                            .color(Color32::DARK_GRAY),
-                    );
-                }
-            }
-        });
-    });
-}
-
-fn metric_bar(ui: &mut egui::Ui, frac: f32, color: Color32) {
-    let frac = frac.clamp(0.0, 1.0);
-    let desired = egui::vec2(ui.available_width().clamp(80.0, 280.0), 8.0);
-    let (rect, _) = ui.allocate_exact_size(desired, egui::Sense::hover());
-    let painter = ui.painter();
-    painter.rect_filled(rect, 2.0, Color32::from_gray(40));
-    if frac > 0.0 {
-        let mut fill = rect;
-        fill.set_width(rect.width() * frac);
-        painter.rect_filled(fill, 2.0, color);
-    }
-}
-
-fn temp_color(c: f32) -> Color32 {
-    if c < 50.0 {
-        Color32::from_rgb(80, 200, 120)
-    } else if c < 70.0 {
-        Color32::from_rgb(220, 200, 80)
-    } else if c < 85.0 {
-        Color32::from_rgb(230, 140, 60)
-    } else {
-        Color32::from_rgb(230, 80, 80)
-    }
-}
-
-fn load_color(frac: f32) -> Color32 {
-    if frac < 0.5 {
-        Color32::from_rgb(80, 200, 120)
-    } else if frac < 0.8 {
-        Color32::from_rgb(220, 180, 60)
-    } else {
-        Color32::from_rgb(230, 90, 70)
-    }
-}
-
-fn power_color(frac: f32) -> Color32 {
-    if frac < 0.4 {
-        Color32::from_rgb(100, 180, 255)
-    } else if frac < 0.75 {
-        Color32::from_rgb(220, 180, 60)
-    } else {
-        Color32::from_rgb(230, 100, 80)
     }
 }
