@@ -1,6 +1,6 @@
 # Roadmap
 
-Last aligned with product reality: **v0.4.2** (AMD CPU package power via PawnIO MSR + graph seed; OTEL export deferred). See `specs/07-metrics-telemetry.md`, `specs/04-ui.md`.
+Last aligned with product reality: **v0.5.0** (domain panels; CPU package power AMD+Intel; DDR5 DIMM temps via SMBus; OTEL export deferred). See `specs/07-metrics-telemetry.md`, `specs/04-ui.md`, `docs/DIMM_TEMP.md`.
 
 ## Phase 0 — Foundation
 
@@ -78,6 +78,7 @@ Spec: `specs/07-metrics-telemetry.md`.
 - [x] **CPU / DRAM power (W)** via PawnIO MSR only — see `07-metrics-telemetry.md`
   - [x] AMD (`AMDFamily17`): `host.cpu.power.package`
   - [x] Intel (`IntelMSR` RAPL): package + limit + DRAM when present
+- [x] **DIMM temperature (DDR5 SPD hub)** via PawnIO SMBus (`SmbusPIIX4` / `SmbusI801`) — `host.dimm{N}.temp`; experimental; owner-validated AMD — see `docs/DIMM_TEMP.md`
   - [x] Graph default seed includes package power; W axis ceiling max(GPU limit, CPU limit)
 
 ## Next priorities (order)
