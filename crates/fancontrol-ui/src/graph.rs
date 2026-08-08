@@ -400,7 +400,7 @@ fn draw_unit_plot(args: UnitPlotArgs<'_, '_>) {
             move |mark, _range| format!("{:.0}{u}", mark.value)
         })
         .label_formatter({
-            let u = unit_owned.clone();
+            let u = unit_owned;
             move |hover| match hover {
                 egui_plot::HoverPosition::NearDataPoint {
                     plot_name,

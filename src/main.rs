@@ -754,7 +754,7 @@ fn run_test_duty(
         .all_controls()
         .into_iter()
         .find(|c| c.id.as_str() == control);
-    let rpm_id = ctrl_meta.and_then(|c| c.rpm_sensor.clone());
+    let rpm_id = ctrl_meta.and_then(|c| c.rpm_sensor);
 
     let baseline_duty = reg.get_duty(&cid)?;
     let baseline_rpm = rpm_id.as_ref().and_then(|id| reg.read_sensor(id).ok());

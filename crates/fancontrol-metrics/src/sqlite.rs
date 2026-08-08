@@ -291,7 +291,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let db = dir.path().join("t.sqlite");
         let mut store = SqliteMetricsStore::spawn(SqliteStoreConfig {
-            path: db.clone(),
+            path: db,
             retention_days: 7,
             flush_ms: 50,
         })
