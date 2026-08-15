@@ -1,7 +1,7 @@
 //! Shared metric widgets for GPU and CPU detail panels (aligned layout).
 
 use crate::graph::{TempHistory, power_y_max};
-use eframe::egui::{self, Color32, Frame, Margin, RichText, Stroke};
+use eframe::egui::{self, Color32, Frame, Margin, Response, RichText, Stroke};
 use egui_plot::{Line, Plot};
 
 /// Fixed sparkline height so GPU and CPU power graphs align.
@@ -49,7 +49,7 @@ pub fn metric_bar(ui: &mut egui::Ui, frac: f32, color: Color32) {
 }
 
 /// Boxed temperature readout (`"—"` when unavailable).
-pub fn temp_chip(ui: &mut egui::Ui, label: String, value: Option<f64>, colorize: bool) {
+pub fn temp_chip(ui: &mut egui::Ui, label: String, value: Option<f64>, colorize: bool) -> Response {
     ui.group(|ui| {
         ui.set_min_width(72.0);
         ui.set_min_height(48.0);
@@ -81,7 +81,8 @@ pub fn temp_chip(ui: &mut egui::Ui, label: String, value: Option<f64>, colorize:
                 }
             }
         });
-    });
+    })
+    .response
 }
 
 /// Boxed percentage readout.

@@ -71,21 +71,20 @@ Rust edition 2024, stable toolchain pinned via `rust-toolchain.toml` (rustfmt + 
 
 ## Next priorities (order)
 
-1. **UI fix — GPU panel N/A captions** (`gpu_panel.rs`): *“Hot Spot not available via nvidia-smi”* / *“Memory temp not available via nvidia-smi”* currently stack under the Core|Hot Spot|Memory chips and **misalign** the GPU card vs CPU. Put those notes **to the right of the chips** (or chip-internal N/A + tooltip only). Spec: `specs/04-ui.md` § *Next UI fix*. No fake temps; still PawnIO-only for privileged I/O; GPU remains `nvidia-smi` (no new libs).
-2. OpenTelemetry OTLP/HTTP metrics export (endpoint already in Options; see `specs/07-metrics-telemetry.md`).
-3. Broader chip validation (ITE IT87 still experimental; more banked NCT boards).
-4. Code signing (SmartScreen) — see `docs/SIGNING_AND_DISTRIBUTION.md`.
-5. Optional later: download + SHA256 after **manual** check only (no silent auto-update) — see `docs/SECURITY.md`.
-6. AMD/Intel GPU sensors — blocked on hardware; see `docs/GPU_VENDOR_APIS.md`. Optional later: experimental NvAPI Hot Spot (not shipped).
-7. RGB (future — not Super I/O).
-8. SSD/NVMe temps: more drives; EVO SATA may report no temp.
-9. Mock is **opt-in** (`--mock`); product default is hardware/host only.
+1. OpenTelemetry OTLP/HTTP metrics export (endpoint already in Options; see `specs/07-metrics-telemetry.md`).
+2. Broader chip validation (ITE IT87 still experimental; more banked NCT boards).
+3. Code signing (SmartScreen) — see `docs/SIGNING_AND_DISTRIBUTION.md`.
+4. Optional later: download + SHA256 after **manual** check only (no silent auto-update) — see `docs/SECURITY.md`.
+5. AMD/Intel GPU sensors — blocked on hardware; see `docs/GPU_VENDOR_APIS.md`. Optional later: experimental NvAPI Hot Spot (not shipped).
+6. RGB (future — not Super I/O).
+7. SSD/NVMe temps: more drives; EVO SATA may report no temp.
+8. Mock is **opt-in** (`--mock`); product default is hardware/host only.
 
 ### Session handoff (orchestration / agents)
 
-- Product line **v0.5.0** on `main` (DIMM DDR5 temps + domain panels + CPU power AMD/Intel). English for user-facing chat unless they ask otherwise. **No AI commit trailers** (`Co-Authored-By`, etc.).
+- Product line **v0.5.0** on `main` (DIMM DDR5 temps + domain panels + CPU power AMD/Intel). GPU N/A captions sit to the right of the chips (no extra vertical stack). English for user-facing chat unless they ask otherwise. **No AI commit trailers** (`Co-Authored-By`, etc.).
 - Privileged I/O remains **PawnIO only** (modules incl. SmbusPIIX4/I801); no WinRing0 / extra ring-0 libs.
-- Next coding session: GPU panel layout first (item 1), then pick from the list above.
+- Next coding session: OTEL OTLP export, or pick from the list above.
 
 ## Safety product rules
 

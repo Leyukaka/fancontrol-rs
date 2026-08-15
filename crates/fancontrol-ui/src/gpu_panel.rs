@@ -44,21 +44,34 @@ fn show_gpu_card(ui: &mut egui::Ui, gpu: &GpuSnap, power_history: Option<&TempHi
     // Subtitle = device name (matches CPU package subtitle slot).
     ui.label(RichText::new(&gpu.name).strong().size(16.0));
 
-    // Chip row: Core | Hot Spot | Memory (always 3 slots).
+    // Chip row: Core | Hot Spot | Memory (always 3 slots). N/A notes sit
+    // to the right so they do not steal vertical space vs the CPU card.
     ui.add_space(4.0);
     ui.horizontal(|ui| {
         temp_chip(ui, t!("gpu.core").to_string(), gpu.temp_core, true);
-        temp_chip(ui, t!("gpu.hotspot").to_string(), gpu.temp_hotspot, false);
-        temp_chip(ui, t!("gpu.memory_temp").to_string(), gpu.temp_memory, true);
+        let hotspot = temp_chip(ui, t!("gpu.hotspot").to_string(), gpu.temp_hotspot, false);
+        if gpu.temp_hotspot.is_none() {
+            hotspot.on_hover_text(t!("gpu.hotspot_tooltip").to_string());
+        }
+        let memory = temp_chip(ui, t!("gpu.memory_temp").to_string(), gpu.temp_memory, true);
+        if gpu.temp_memory.is_none() {
+            memory.on_hover_text(t!("gpu.memory_tooltip").to_string());
+        }
+        if gpu.temp_hotspot.is_none() || gpu.temp_memory.is_none() {
+            ui.add_space(6.0);
+            ui.vertical(|ui| {
+                ui.add_space(4.0);
+                if gpu.temp_hotspot.is_none() {
+                    ui.small(t!("gpu.hotspot_unavailable").to_string())
+                        .on_hover_text(t!("gpu.hotspot_tooltip").to_string());
+                }
+                if gpu.temp_memory.is_none() {
+                    ui.small(t!("gpu.memory_unavailable").to_string())
+                        .on_hover_text(t!("gpu.memory_tooltip").to_string());
+                }
+            });
+        }
     });
-    if gpu.temp_hotspot.is_none() {
-        ui.small(t!("gpu.hotspot_unavailable").to_string())
-            .on_hover_text(t!("gpu.hotspot_tooltip").to_string());
-    }
-    if gpu.temp_memory.is_none() {
-        ui.small(t!("gpu.memory_unavailable").to_string())
-            .on_hover_text(t!("gpu.memory_tooltip").to_string());
-    }
 
     ui.add_space(6.0);
 
