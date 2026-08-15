@@ -52,7 +52,7 @@ Rust edition 2024, stable toolchain pinned via `rust-toolchain.toml` (rustfmt + 
 
 ## Status (keep updated)
 
-- Product line: **v0.5.0** — domain panels (Sensors/GPU/CPU), CPU package power AMD + **Intel RAPL**, **DDR5 DIMM temps** (SmbusPIIX4/I801, owner-validated on AMD), graph multi-kind, manual update check only (no auto-update). OTEL export deferred.
+- Product line: **v0.5.1** — GPU panel N/A captions beside chips; domain panels (Sensors/GPU/CPU), CPU package power AMD + **Intel RAPL**, **DDR5 DIMM temps** (SmbusPIIX4/I801, owner-validated on AMD), graph multi-kind, manual update check only (no auto-update). OTEL export deferred.
 - Phase 0 foundation: **done**.
 - Phase 1: PawnIOLib FFI + LpcIO + **NCT668x EC HWM** (validated class id `0xD5` rev `0x92` @ `0x0A20`) + **banked NCT** (ROG B550-A `0xD4` validated reads+writes) + control loop + CLI.
 - Elevation required for `pawnio_open` (Administrator). **PawnIO is a prerequisite** (not bundled) — UI shows a startup dialog if missing / not openable, with a **Restart as Administrator** button (`ShellExecute` `runas` → UAC; no silent elevation).
@@ -82,7 +82,7 @@ Rust edition 2024, stable toolchain pinned via `rust-toolchain.toml` (rustfmt + 
 
 ### Session handoff (orchestration / agents)
 
-- Product line **v0.5.0** on `main` (DIMM DDR5 temps + domain panels + CPU power AMD/Intel). GPU N/A captions sit to the right of the chips (no extra vertical stack). English for user-facing chat unless they ask otherwise. **No AI commit trailers** (`Co-Authored-By`, etc.).
+- Product line **v0.5.1** on `main` (GPU N/A captions beside chips; DIMM DDR5 temps + domain panels + CPU power AMD/Intel). English for user-facing chat unless they ask otherwise. **No AI commit trailers** (`Co-Authored-By`, etc.).
 - Privileged I/O remains **PawnIO only** (modules incl. SmbusPIIX4/I801); no WinRing0 / extra ring-0 libs.
 - Next coding session: OTEL OTLP export, or pick from the list above.
 

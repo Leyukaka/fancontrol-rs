@@ -31,10 +31,10 @@
 | `fancontrol-plugins` | Traits (`SensorProvider` / `ControlProvider`), registry, mock, host sensors |
 | `fancontrol-pawnio` | PawnIOLib FFI, LpcIO modules, Super I/O detect, NCT668x EC HWM |
 | `fancontrol-metrics` | Metric sinks: MultiSink, SQLite store, CSV export, OTEL (v0.4) |
-| `fancontrol-ui` | Desktop UI (egui + eframe **0.35**): live view, sliders, curves, graph, options |
+| `fancontrol-ui` | Desktop UI (egui + eframe **0.36**): live view, sliders, curves, graph, options |
 | `fancontrol-rs` | Binary: CLI harness + `ui` subcommand |
 
-Workspace version: **0.4.2** (see root `Cargo.toml`).
+Workspace version: **0.5.1** (see root `Cargo.toml`).
 
 ## Key design decisions
 
