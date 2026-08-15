@@ -188,7 +188,7 @@ fn writer_loop(path: PathBuf, retention_days: u32, flush_ms: u64, rx: Receiver<S
 fn flush_inserts(conn: &Connection, batch: &[MetricSample]) -> Result<(), rusqlite::Error> {
     let tx = conn.unchecked_transaction()?;
     {
-        let mut stmt = tx.prepare_cached(
+        let mut stmt = tx.prepare(
             "INSERT OR REPLACE INTO samples (ts_ms, sensor_id, value, kind, unit) VALUES (?1, ?2, ?3, ?4, ?5)",
         )?;
         for s in batch {
