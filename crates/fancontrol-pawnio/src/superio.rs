@@ -69,7 +69,7 @@ impl SuperIoChip {
 
 fn classify_winbond(id: u8, revision: u8) -> SuperIoChip {
     // NCT668x family uses EC-style page/index/data access.
-    // 0xD5/0x92 = NCT6687D (or MSI NCT6687DR variant — same EC bus, mode bits differ on write).
+    // 0xD5/0x92 = NCT6687D (or MSI NCT6687DR variant - same EC bus, mode bits differ on write).
     if matches!(id, 0xC7) || matches!((id, revision), (0xD4, 0x40 | 0x41) | (0xD5, 0x92)) {
         return SuperIoChip::Nct668x { id, revision };
     }
@@ -202,7 +202,7 @@ impl NctBankedDevice {
         let lpc = LpcIo::open()?;
         {
             let _g = IsaBusGuard::acquire(Duration::from_millis(200));
-            // Once only — select_slot again would clear BARs.
+            // Once only - select_slot again would clear BARs.
             lpc.setup_nuvoton_hwm_bars(detected.slot, detected.register_port)?;
             // Smoke-test banked index/data ports
             lpc.read_port(hwm + ADDR_OFF).map_err(|e| {

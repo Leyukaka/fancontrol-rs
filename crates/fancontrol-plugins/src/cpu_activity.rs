@@ -14,14 +14,14 @@ use std::time::{Duration, Instant};
 pub struct ProcessRow {
     pub pid: u32,
     pub name: String,
-    /// Machine-relative CPU % (0–100 scale, Task Manager–like).
+    /// Machine-relative CPU % (0-100 scale, Task Manager-like).
     pub cpu_pct: f64,
     pub ram_bytes: u64,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct ActivitySnapshot {
-    /// Global CPU load 0–100. `None` until the second sample.
+    /// Global CPU load 0-100. `None` until the second sample.
     pub load_pct: Option<f64>,
     pub processes: Vec<ProcessRow>,
     pub updated: Option<Instant>,
@@ -57,7 +57,7 @@ pub fn set_enabled(on: bool) {
     }
 }
 
-/// Whether to enumerate processes (false = load % only — much cheaper).
+/// Whether to enumerate processes (false = load % only - much cheaper).
 pub fn set_sample_processes(on: bool) {
     shared().sample_processes.store(on, Ordering::Relaxed);
     if !on && let Ok(mut g) = shared().snap.lock() {

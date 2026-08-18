@@ -1,11 +1,11 @@
-//! fancontrol-rs — modern fan control for Windows.
+//! fancontrol-rs - modern fan control for Windows.
 //!
 //! CLI harness: mock and/or real PawnIO Super I/O sensors.
 //! Full GUI arrives in Phase 2.
 
 // GUI subsystem: Windows never auto-allocates a console for this binary (no flash on
 // double-click/Explorer launch). CLI output is restored by re-attaching to a parent
-// console at startup when one exists — see `attach_parent_console_for_cli`.
+// console at startup when one exists - see `attach_parent_console_for_cli`.
 #![windows_subsystem = "windows"]
 
 use clap::{Parser, Subcommand};
@@ -182,7 +182,7 @@ fn build_registry(include_mock: bool, include_hw: bool, allow_hw_write: bool) ->
         reg.register_sensor_provider(Box::new(ArcSensor(arc.clone())));
         reg.register_control_provider(Box::new(ArcControl(arc)));
     }
-    // Best-effort GPU/SSD (nvidia-smi / DeviceIoControl) — host path
+    // Best-effort GPU/SSD (nvidia-smi / DeviceIoControl) - host path
     reg.register_sensor_provider(Box::new(HostSensorProvider::new()));
     reg
 }
@@ -259,7 +259,7 @@ fn main() -> anyhow::Result<()> {
                     .unwrap_or_else(|| "n/a".into());
                 let label = map.sensor_name(s.id.as_str(), &s.name);
                 println!(
-                    "  [{kind:?}] {id} — {label} = {val}  (provider: {prov})",
+                    "  [{kind:?}] {id} - {label} = {val}  (provider: {prov})",
                     kind = s.kind,
                     id = s.id,
                     val = val_str,
@@ -267,7 +267,7 @@ fn main() -> anyhow::Result<()> {
                 );
             }
             if reg.all_sensors().is_empty() {
-                println!("  (none — try without --hw-only, or check backend-status)");
+                println!("  (none - try without --hw-only, or check backend-status)");
             }
         }
         Commands::ListControls => {
@@ -281,7 +281,7 @@ fn main() -> anyhow::Result<()> {
                     .unwrap_or_else(|| "n/a".into());
                 let label = map.control_name(c.id.as_str(), &c.name);
                 println!(
-                    "  {id} — {label}  duty={duty}  writable={writable}  (provider: {prov})",
+                    "  {id} - {label}  duty={duty}  writable={writable}  (provider: {prov})",
                     id = c.id,
                     duty = duty_str,
                     writable = c.writable,
@@ -331,7 +331,7 @@ fn main() -> anyhow::Result<()> {
                     println!("=== sample-storage {}/{} ===", i + 1, n);
                     let rows = diagnose_storage_temps();
                     if rows.is_empty() {
-                        println!("(no PhysicalDrive opened — run as Administrator, or no disks)");
+                        println!("(no PhysicalDrive opened - run as Administrator, or no disks)");
                     }
                     for d in &rows {
                         println!(
@@ -517,7 +517,7 @@ fn main() -> anyhow::Result<()> {
                 println!("Profiles:");
                 for id in ids {
                     match load_profile(&id) {
-                        Ok(p) => println!("  {} — {} ({} curves)", p.id, p.name, p.curves.len()),
+                        Ok(p) => println!("  {} - {} ({} curves)", p.id, p.name, p.curves.len()),
                         Err(e) => println!("  {id} (error: {e})"),
                     }
                 }
@@ -557,7 +557,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 /// Re-attach to the launching terminal's console, if one exists, since this binary
-/// is compiled as a GUI-subsystem app (so Windows never auto-allocates a console —
+/// is compiled as a GUI-subsystem app (so Windows never auto-allocates a console -
 /// no flash on double-click). Double-click / Explorer launches have no parent
 /// console, so `AttachConsole` simply fails and we proceed console-less into the UI.
 #[cfg(windows)]
@@ -578,7 +578,7 @@ fn attach_parent_console_for_cli() {
 }
 
 /// Point a standard handle at the just-attached console, but only if it isn't
-/// already valid — i.e. only when the shell didn't already redirect that stream to
+/// already valid - i.e. only when the shell didn't already redirect that stream to
 /// a file or pipe (`> out.txt`, `| something`), which must be left untouched.
 #[cfg(windows)]
 fn reopen_std_handle(which: u32, file_name: &str) {
@@ -675,7 +675,7 @@ fn print_sample(reg: &ProviderRegistry, map: &ChannelMap, show_all: bool) {
         }
     }
     if !any_p {
-        println!("  (none yet — package W needs 2+ samples; use --all or re-run)");
+        println!("  (none yet - package W needs 2+ samples; use --all or re-run)");
     }
 
     println!("Fan RPM:");
@@ -728,7 +728,7 @@ fn print_sample(reg: &ProviderRegistry, map: &ChannelMap, show_all: bool) {
         }
     }
     if !any_c {
-        println!("  (none with non-zero duty — use --all to list zeros)");
+        println!("  (none with non-zero duty - use --all to list zeros)");
     }
 }
 
@@ -762,7 +762,7 @@ fn run_test_duty(
     println!("test-duty on {control}");
     println!("  baseline duty={baseline_duty}%  rpm={baseline_rpm:?}");
     println!("  will set {percent}% for {hold_ms}ms then restore {baseline_duty}%");
-    eprintln!("WARNING: real PWM write in 2s — Ctrl+C to abort…");
+    eprintln!("WARNING: real PWM write in 2s - Ctrl+C to abort…");
     thread::sleep(Duration::from_secs(2));
 
     reg.set_duty(&cid, percent)?;

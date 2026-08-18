@@ -153,13 +153,13 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
     if settings.launch_on_startup {
         crate::autostart::refresh_if_enabled();
         if !crate::autostart::is_enabled() {
-            // Setting says on but registry missing (e.g. cleaned by OS) — re-apply.
+            // Setting says on but registry missing (e.g. cleaned by OS) - re-apply.
             if let Err(e) = crate::autostart::set_enabled(true) {
                 tracing::warn!(error = %e, "failed to restore autostart registry entry");
             }
         }
     } else if crate::autostart::is_enabled() {
-        // Registry has us but settings say off — reflect OS state into settings once.
+        // Registry has us but settings say off - reflect OS state into settings once.
         settings.launch_on_startup = true;
         settings.save();
     }
@@ -255,7 +255,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
 
             // One-time setup for the shader graph gallery's wgpu pipelines
             // (see crates/fancontrol-ui/src/shaders/mod.rs). Skipped gracefully
-            // if the wgpu backend isn't active — Classic graph still works.
+            // if the wgpu backend isn't active - Classic graph still works.
             let shader_backend_available = if let Some(render_state) = &cc.wgpu_render_state {
                 let gallery = ShaderGallery::new(&render_state.device, render_state.target_format);
                 render_state
@@ -382,7 +382,7 @@ fn load_or_create_default_profile(preferred: Option<&str>) -> Profile {
 impl eframe::App for FanApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Smooth shader animation needs a much faster repaint cadence than the
-        // rest of the UI — only pay for it while a shader style is actually
+        // rest of the UI - only pay for it while a shader style is actually
         // active, the backend supports it, and the window isn't minimized to tray.
         let repaint_interval = if self.settings.graph_style.is_shader()
             && self.shader_backend_available
@@ -399,7 +399,7 @@ impl eframe::App for FanApp {
         {
             // Minimize to tray instead of exiting, unless "Exit" was chosen from the tray menu.
             // Without a tray icon there'd be no way to bring the window back, so skip this
-            // entirely when the tray failed to initialize (rare — e.g. shell explorer.exe issues).
+            // entirely when the tray failed to initialize (rare - e.g. shell explorer.exe issues).
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
             self.window_visible = false;
@@ -433,7 +433,7 @@ impl eframe::App for FanApp {
                 seed.push(id.clone());
             }
             // Package power belongs to the CPU panel, not the Sensors (temperature)
-            // graph — do not seed `cpu_power_id` here (see `ui_thermal_graph_block`).
+            // graph - do not seed `cpu_power_id` here (see `ui_thermal_graph_block`).
             // Fallback: first available temp if CPU id not yet labeled
             if seed.is_empty()
                 && let Some((id, _, _)) = snap.temps.first()
@@ -585,7 +585,7 @@ impl eframe::App for FanApp {
                     {
                         self.show_settings = !self.show_settings;
                     }
-                    // Updates: Options only (no top-bar button — clutter / unclear action).
+                    // Updates: Options only (no top-bar button - clutter / unclear action).
                     // right-to-left: add Controls, Fans, Temps, then Curves
                     if ui
                         .selectable_label(
@@ -963,7 +963,7 @@ impl eframe::App for FanApp {
                                 ui.label(t!("options.graph_sensors_heading").to_string());
                                 ui.small(t!("options.graph_sensors_note").to_string());
                                 // Sensors graph plots temperature only (GPU/CPU power and
-                                // load live in their own panels) — only offer temp sensors
+                                // load live in their own panels) - only offer temp sensors
                                 // here so the picker matches what the graph can show.
                                 let temps: Vec<_> = snap
                                     .plottable
@@ -1670,7 +1670,7 @@ impl FanApp {
                         if let Some(rpm) = c.rpm {
                             ui.monospace(format!("RPM {rpm:.0}"));
                         } else {
-                            ui.weak("RPM —");
+                            ui.weak("RPM -");
                         }
 
                         let cur = self
@@ -1769,7 +1769,7 @@ impl FanApp {
                             && (self.options.allow_hw_write || c.id.starts_with("mock."));
 
                         if c.duty.is_none() {
-                            ui.weak("duty —");
+                            ui.weak("duty -");
                         }
 
                         let mut changed = false;
@@ -1845,7 +1845,7 @@ impl FanApp {
         // existed are filtered out here (by live `SensorKind`, not stripped from
         // settings) rather than stripped from settings, so nothing is lost if a future
         // graph adds other units back. An id currently absent from the live snapshot
-        // (e.g. a power sensor with PawnIO not elevated) is excluded too — its kind is
+        // (e.g. a power sensor with PawnIO not elevated) is excluded too - its kind is
         // unknown, and showing an empty, uncategorized ghost series helps no one.
         let series: Vec<GraphSeries> = self
             .settings
@@ -2112,7 +2112,7 @@ impl FanApp {
     fn try_relaunch_elevated(&mut self) {
         match crate::elevation::relaunch_elevated() {
             Ok(()) => {
-                // Elevated child is running — leave the non-elevated process.
+                // Elevated child is running - leave the non-elevated process.
                 std::process::exit(0);
             }
             Err(crate::elevation::ElevateError::Cancelled) => {

@@ -66,7 +66,7 @@ pub struct DimmTemp {
 impl DimmTemp {
     /// Try `SmbusPIIX4` (AMD) then `SmbusI801` (Intel), probe for DDR5 SPD
     /// hubs with an active thermal sensor. `Ok` with an empty slot list is a
-    /// normal outcome (module opened but no DDR5 DIMM answered) — only
+    /// normal outcome (module opened but no DDR5 DIMM answered) - only
     /// `Err` when neither SMBus module could be opened at all (missing
     /// elevation / unsupported chipset).
     pub fn try_open() -> Result<Self, String> {
@@ -139,7 +139,7 @@ fn is_ddr5_spd_hub(session: &PawnSession, addr: u8) -> bool {
         return false;
     }
     // Prefer hubs that advertise a temp sensor in capability (bit 1). If the
-    // capability read fails, still accept the 0x5118 signature — owner boards
+    // capability read fails, still accept the 0x5118 signature - owner boards
     // may answer device-type but flake on 0x05 under contention.
     match smbus_read_byte(session, addr, REG_DEVICE_CAPABILITY) {
         Ok(cap) if cap & CAP_TEMP_SENSOR_BIT == 0 => {

@@ -1,4 +1,4 @@
-# Code scanning (CodeQL) — free for public repositories on GitHub.com.
+# Code scanning (CodeQL) - free for public repositories on GitHub.com.
 # Results appear under the repo Security tab.
 # Uses ubuntu for analysis minutes; this is source analysis, not the Windows UI smoke test.
 

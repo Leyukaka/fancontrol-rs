@@ -272,10 +272,10 @@
   <h2>Signing &amp; <span class="accent">distribution</span></h2>
   <p>Release binaries are built on <code>windows-latest</code> in GitHub Actions and published with a SHA256 checksum. They are <strong>not code-signed yet</strong>, so expect SmartScreen and occasional Defender heuristics, the same class of warning most tools that talk to Super I/O / EC hardware get.</p>
   <div class="note">
-    <strong>No telemetry. No auto-update.</strong> fancontrol-rs does not phone home, does not poll for new versions in the background, and never downloads or installs updates by itself. The only optional network call is the in-app <strong>Check for updates</strong> button (Options): you click it, it queries GitHub's public Releases API, and shows a link if something newer exists. No babysitting — you decide when to upgrade.
+    <strong>No telemetry. No auto-update.</strong> fancontrol-rs does not phone home, does not poll for new versions in the background, and never downloads or installs updates by itself. The only optional network call is the in-app <strong>Check for updates</strong> button (Options): you click it, it queries GitHub's public Releases API, and shows a link if something newer exists. No babysitting - you decide when to upgrade.
   </div>
   <div class="note" style="margin-top:12px;">
-    <strong>Host sensors</strong> stay local: fixed-path <code>nvidia-smi</code> for GPU metrics, native storage IOCTLs for SSD/NVMe temps, and (when elevated with PawnIO) CPU package power via MSR modules — no PowerShell, no WMI for those paths.
+    <strong>Host sensors</strong> stay local: fixed-path <code>nvidia-smi</code> for GPU metrics, native storage IOCTLs for SSD/NVMe temps, and (when elevated with PawnIO) CPU package power via MSR modules - no PowerShell, no WMI for those paths.
   </div>
   <div class="signpath-badge">
     <div>

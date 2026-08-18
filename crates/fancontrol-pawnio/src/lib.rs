@@ -114,7 +114,7 @@ mod tests {
 
     #[test]
     fn status_non_empty() {
-        // Does not require hardware success — just that we produce text.
+        // Does not require hardware success - just that we produce text.
         let msg = status_message();
         assert!(!msg.is_empty());
     }

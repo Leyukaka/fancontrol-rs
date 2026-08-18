@@ -25,9 +25,9 @@ You are the sole release decision-maker: even after a tag exists, the Release wo
 | Mechanism | What it does |
 |-----------|----------------|
 | **Secret scanning** | GitHub scans public repos for known credential patterns (free on public repos). Enable **push protection** in repo Settings → Code security if available. |
-| **CodeQL** | `.github/workflows/codeql.yml` — semantic analysis (Rust + Actions workflows). Alerts under the **Security** tab. |
-| **cargo audit** | `.github/workflows/security.yml` — RustSec advisory DB vs `Cargo.lock`. Config: `.cargo/audit.toml`. |
-| **Dependabot** | `.github/dependabot.yml` — weekly PRs for Cargo crates and GitHub Actions. |
+| **CodeQL** | `.github/workflows/codeql.yml` - semantic analysis (Rust + Actions workflows). Alerts under the **Security** tab. |
+| **cargo audit** | `.github/workflows/security.yml` - RustSec advisory DB vs `Cargo.lock`. Config: `.cargo/audit.toml`. |
+| **Dependabot** | `.github/dependabot.yml` - weekly PRs for Cargo crates and GitHub Actions. |
 | **CI** | `fmt` / `clippy -D warnings` / `test` / release build on Windows (`.github/workflows/ci.yml`). |
 
 These reduce risk; they do **not** prove the binary is free of bugs or malware.
@@ -54,7 +54,7 @@ The hex digests must match (case-insensitive). Prefer downloads only from:
 
 **https://github.com/Leyukaka/fancontrol-rs/releases**
 
-### What SHA256 is — and is not
+### What SHA256 is - and is not
 
 | SHA256 checksum | Authenticode code signing |
 |-----------------|---------------------------|
@@ -69,16 +69,16 @@ A matching SHA256 from the official Release is a strong check against a corrupte
 Binaries are **not** Authenticode-signed today. Do not claim otherwise.  
 When signing is added (SignPath / Azure Trusted Signing / OV-EV cert), it will be documented here and in the release notes.
 
-## Updates (manual only — no auto-update)
+## Updates (manual only - no auto-update)
 
-**Product policy:** no background version check, no silent download, no installer replace. Updates are on-demand only — use the button (or the Releases page) when you want to.
+**Product policy:** no background version check, no silent download, no installer replace. Updates are on-demand only - use the button (or the Releases page) when you want to.
 
 | Behavior | Status |
 |----------|--------|
 | Background / periodic update check | **No** |
 | Auto-download or auto-install | **No** (and not planned as default) |
-| Options → **Check for updates** button | **Yes** — one GET to this repo's GitHub Releases API, compare tag, show a **link** |
-| Download + SHA256 verify + install | **Not implemented** — optional later; until then download the Release yourself and verify `.sha256` |
+| Options → **Check for updates** button | **Yes** - one GET to this repo's GitHub Releases API, compare tag, show a **link** |
+| Download + SHA256 verify + install | **Not implemented** - optional later; until then download the Release yourself and verify `.sha256` |
 
 Use the button (or open Releases in a browser), grab the assets, verify the checksum, replace the exe.
 
@@ -105,16 +105,16 @@ Examples reported against early builds:
 
 | Behavioral rule (examples) | Likely trigger |
 |----------------------------|----------------|
-| PowerShell / **SolarMarker**-style (older builds) | Early builds spawned PowerShell for SSD temps — **removed**; storage uses native `DeviceIoControl` now |
-| **Change PowerShell Policies…** (older builds) | Was `-ExecutionPolicy Bypass` — **gone** with PowerShell removal for host storage |
+| PowerShell / **SolarMarker**-style (older builds) | Early builds spawned PowerShell for SSD temps - **removed**; storage uses native `DeviceIoControl` now |
+| **Change PowerShell Policies…** (older builds) | Was `-ExecutionPolicy Bypass` - **gone** with PowerShell removal for host storage |
 | **Unsigned image loaded into LSASS** | Often sandbox / third-party noise; our app does not inject into LSASS. **Code signing** later reduces this class of alerts |
-| **PowerShell deleted mounted share** (older builds) | Sandbox FP around storage cmdlets — no longer applicable to storage path |
+| **PowerShell deleted mounted share** (older builds) | Sandbox FP around storage cmdlets - no longer applicable to storage path |
 
 ### What we do / don’t do
 
 - We **do not** download remote scripts, open reverse shells, or disable Defender.
 - Prefer official [GitHub Releases](https://github.com/Leyukaka/fancontrol-rs/releases) + **SHA256** verify ([above](#release-integrity-sha256)).
-- **Code signing** (when configured) is the main long-term fix for reputation / SmartScreen — see [SIGNING_AND_DISTRIBUTION.md](./SIGNING_AND_DISTRIBUTION.md).
+- **Code signing** (when configured) is the main long-term fix for reputation / SmartScreen - see [SIGNING_AND_DISTRIBUTION.md](./SIGNING_AND_DISTRIBUTION.md).
 
 If a vendor flags a release, open an issue with the VT link and the release tag; maintainers can submit false-positive reports once signing exists.
 
@@ -122,6 +122,6 @@ If a vendor flags a release, open an issue with the VT link and the release tag;
 
 - Prefer **PawnIO** only; never ship WinRing0 or known-vulnerable ring-0 drivers.
 - Hardware PWM writes are **on by default**; pass `--read-only` to stay read-only.
-- Running elevated is required for Super I/O access — treat the binary as privileged software.
+- Running elevated is required for Super I/O access - treat the binary as privileged software.
 
 See [SUPPORTED_HARDWARE.md](./SUPPORTED_HARDWARE.md) and [CONTRIBUTING.md](../CONTRIBUTING.md).

@@ -23,7 +23,7 @@
                 └─────────────────┘  └─────────────┘
 ```
 
-## Crates (workspace — current)
+## Crates (workspace - current)
 
 | Crate | Responsibility |
 |-------|----------------|
@@ -41,7 +41,7 @@ Workspace version: **0.5.1** (see root `Cargo.toml`).
 ### 1. Backend: PawnIO (not custom driver)
 
 - Refuse to ship WinRing0-style vulnerable drivers.
-- PawnIO is a system prerequisite (install from https://pawnio.eu/) — **not** embedded in the exe.
+- PawnIO is a system prerequisite (install from https://pawnio.eu/) - **not** embedded in the exe.
 - Super I/O / EC access via vendored LpcIO module blobs + Rust control plane.
 
 ### 2. Plugin / provider system
@@ -55,7 +55,7 @@ Workspace version: **0.5.1** (see root `Cargo.toml`).
 - **egui + eframe 0.35** (see `specs/04-ui.md`).
 - Hardware PWM writes **on by default** (product UI/CLI); UI reflects read-only vs write-enabled. Use `--read-only` to disable.
 - Localization: 8 languages via `rust-i18n` (`crates/fancontrol-ui/locales/`), OS-locale default, live switch.
-- First custom wgpu rendering: the optional fractal-fun panel (`crates/fancontrol-ui/src/fractal.rs`) uses `egui_wgpu::CallbackTrait` to run its own render pipeline inside an egui panel, rather than egui's own 2D vector painter used everywhere else. This is a precedent for any future GPU-accelerated widget — reuse the same `FractalResources`-in-`callback_resources` pattern (one-time pipeline setup via `cc.wgpu_render_state`, per-frame `prepare`/`paint`) rather than inventing a new one.
+- First custom wgpu rendering: the optional fractal-fun panel (`crates/fancontrol-ui/src/fractal.rs`) uses `egui_wgpu::CallbackTrait` to run its own render pipeline inside an egui panel, rather than egui's own 2D vector painter used everywhere else. This is a precedent for any future GPU-accelerated widget - reuse the same `FractalResources`-in-`callback_resources` pattern (one-time pipeline setup via `cc.wgpu_render_state`, per-frame `prepare`/`paint`) rather than inventing a new one.
 
 ### 4. Concurrency
 

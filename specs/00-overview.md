@@ -1,4 +1,4 @@
-# fancontrol-rs — Overview
+# fancontrol-rs - Overview
 
 **Spiritual successor to FanControl (Rem0o), rewritten in Rust.**
 
@@ -17,11 +17,11 @@ A modern, secure, full-featured desktop fan control application for Windows that
 
 ## Core Principles
 
-1. **Security first** — Never ship a custom unsigned/vulnerable ring-0 driver. Prefer PawnIO. Never bundle WinRing0.
-2. **Spec-driven** — Major decisions and features are documented in `/specs` (and public `docs/` for users) and kept in sync with reality.
-3. **Plugin-first architecture** — Core stays thin; hardware support and advanced features live in providers/plugins when possible.
-4. **Full-featured, not minimal** — Target feature parity (and beyond) with the original FanControl over time.
-5. **User control** — The user is always in control of curves, profiles, and automation. Product default: **PWM writes on** (use `--read-only` for diagnostics).
+1. **Security first** - Never ship a custom unsigned/vulnerable ring-0 driver. Prefer PawnIO. Never bundle WinRing0.
+2. **Spec-driven** - Major decisions and features are documented in `/specs` (and public `docs/` for users) and kept in sync with reality.
+3. **Plugin-first architecture** - Core stays thin; hardware support and advanced features live in providers/plugins when possible.
+4. **Full-featured, not minimal** - Target feature parity (and beyond) with the original FanControl over time.
+5. **User control** - The user is always in control of curves, profiles, and automation. Product default: **PWM writes on** (use `--read-only` for diagnostics).
 
 ## Target Platform
 

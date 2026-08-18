@@ -31,7 +31,7 @@ We use **[PawnIO](https://pawnio.eu/)** as the sole privileged hardware access l
 | Chip id / rev | `0xD5` / `0x92` | `0xD4` / `0x2B` |
 | HWM base | `0x0A20` | `0x0290` |
 | Super I/O | slot @ `0x4E` (board-dependent) | slot @ `0x2E` |
-| PWM | **ctrl0–3** reliable; higher may use DR / BIOS reclaim | Owner-confirmed PWM writes |
+| PWM | **ctrl0-3** reliable; higher may use DR / BIOS reclaim | Owner-confirmed PWM writes |
 
 Full user-facing matrix: **[docs/SUPPORTED_HARDWARE.md](../docs/SUPPORTED_HARDWARE.md)**.
 
@@ -53,7 +53,7 @@ If PawnIO is missing or not openable:
 | Source | Method | Notes |
 |--------|--------|-------|
 | NVIDIA GPU multi-metric | `nvidia-smi` at **fixed install paths** (no PATH walk): temp, power, util, clocks, fan %, VRAM | Read-only |
-| NVIDIA Hot Spot | Not via smi/NVML public; would need NvAPI (not shipped) | — |
+| NVIDIA Hot Spot | Not via smi/NVML public; would need NvAPI (not shipped) | - |
 | Storage temp | `DeviceIoControl` + `StorageDeviceTemperatureProperty` on `\\.\PhysicalDriveN` | No PowerShell; often needs elevation |
 | CPU package / DRAM power | PawnIO MSR modules only (`AMDFamily17` first, then `IntelMSR`) | Read-only; ΔE/Δt → W; ids `host.cpu.power.*`, `host.ram.power`; elevated PawnIO |
 | DIMM temperature (DDR5 SPD hub) | PawnIO SMBus modules (`SmbusPIIX4` first, then `SmbusI801`) | **Experimental**; read-only, no SPD writes; ids `host.dimm{N}.temp`; elevated PawnIO. See `docs/DIMM_TEMP.md`. |

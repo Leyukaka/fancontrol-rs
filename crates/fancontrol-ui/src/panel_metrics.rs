@@ -48,7 +48,7 @@ pub fn metric_bar(ui: &mut egui::Ui, frac: f32, color: Color32) {
     }
 }
 
-/// Boxed temperature readout (`"—"` when unavailable).
+/// Boxed temperature readout (`"-"` when unavailable).
 pub fn temp_chip(ui: &mut egui::Ui, label: String, value: Option<f64>, colorize: bool) -> Response {
     ui.group(|ui| {
         ui.set_min_width(72.0);
@@ -72,7 +72,7 @@ pub fn temp_chip(ui: &mut egui::Ui, label: String, value: Option<f64>, colorize:
                 }
                 None => {
                     ui.label(
-                        RichText::new("—")
+                        RichText::new("-")
                             .monospace()
                             .strong()
                             .size(18.0)
@@ -104,7 +104,7 @@ pub fn load_chip(ui: &mut egui::Ui, label: String, value: Option<f64>) {
                 }
                 None => {
                     ui.label(
-                        RichText::new("—")
+                        RichText::new("-")
                             .monospace()
                             .strong()
                             .size(18.0)
@@ -139,8 +139,8 @@ pub fn power_metric_row(
     let text = match (power_w, limit_w) {
         (Some(d), Some(l)) => format!("{d:.0} / {l:.0} W"),
         (Some(d), None) => format!("{d:.0} W"),
-        (None, Some(l)) => format!("— / {l:.0} W"),
-        (None, None) => "—".into(),
+        (None, Some(l)) => format!("- / {l:.0} W"),
+        (None, None) => "-".into(),
     };
     let color = if power_w.is_some() {
         power_color(frac)
@@ -188,7 +188,7 @@ pub fn power_history_block(
         ui.painter().text(
             rect.center(),
             egui::Align2::CENTER_CENTER,
-            "—",
+            "-",
             egui::FontId::proportional(12.0),
             Color32::DARK_GRAY,
         );

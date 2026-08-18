@@ -3,7 +3,7 @@
 //! Register map / fan-config protocol adapted from LibreHardwareMonitor `Nct677X` (MPL-2.0).
 //! Owner board: id=0xD5 rev=0x92 → NCT6687DR-class EC.
 //!
-//! **Note:** System-fan headers (ctrl9–15) are often driven by the motherboard
+//! **Note:** System-fan headers (ctrl9-15) are often driven by the motherboard
 //! SmartFan engine. Without the DR fan-config phase (request → manual bit →
 //! command → done), writes look like they "snap back" to a BIOS curve (e.g. 60%).
 
@@ -56,7 +56,7 @@ struct DrChannel {
     rpm_idx: Option<usize>,
 }
 
-/// Indices 0–15; slot 8 unused (0xFFF).
+/// Indices 0-15; slot 8 unused (0xFFF).
 const DR_CHANNELS: [DrChannel; 16] = [
     // 0 CPU
     DrChannel {
@@ -134,7 +134,7 @@ const DR_CHANNELS: [DrChannel; 16] = [
         mode_bit: 1,
         rpm_idx: Some(9),
     },
-    // 10–15 SYSFAN1–6 (LHM order)
+    // 10-15 SYSFAN1-6 (LHM order)
     DrChannel {
         out: 0xE05,
         cmd: 0x265,
@@ -515,7 +515,7 @@ impl Nct668Device {
                     control_slot,
                     percent,
                     actual,
-                    "duty readback differs — EC/BIOS may still drive this header (SmartFan)"
+                    "duty readback differs - EC/BIOS may still drive this header (SmartFan)"
                 );
             }
         }
@@ -583,7 +583,7 @@ impl Nct668Device {
                 control_slot,
                 "EC did not confirm fan-config for ctrl{control_slot}; \
                  BIOS SmartFan may reclaim duty (often ~60%). \
-                 Prefer ctrl0–ctrl3 if possible, or set this header to 'manual/full speed' in BIOS."
+                 Prefer ctrl0-ctrl3 if possible, or set this header to 'manual/full speed' in BIOS."
             );
         }
         Ok(())

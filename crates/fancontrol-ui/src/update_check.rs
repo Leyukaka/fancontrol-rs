@@ -38,7 +38,7 @@ impl UpdateChecker {
     }
 
     /// Kick off a one-shot background check. Safe to call repeatedly (e.g. on every
-    /// button click) — this is not a polling loop.
+    /// button click) - this is not a polling loop.
     pub fn check_now(&self) {
         {
             let mut g = self.state.lock().unwrap_or_else(|e| e.into_inner());

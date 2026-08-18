@@ -1,6 +1,6 @@
 # Contributing to fancontrol-rs
 
-Thanks for your interest. This project controls **real hardware fans** on Windows via **PawnIO**. Mistakes can leave systems hot, noisy, or stuck at wrong duty cycles — contributions are welcome, but the bar for quality and intent is **strict**.
+Thanks for your interest. This project controls **real hardware fans** on Windows via **PawnIO**. Mistakes can leave systems hot, noisy, or stuck at wrong duty cycles - contributions are welcome, but the bar for quality and intent is **strict**.
 
 ## License
 
@@ -82,7 +82,7 @@ AI tools are allowed. Unreviewed AI dumps are **not**.
 - Shipping secrets, certs, or personal absolute paths unrelated to docs examples
 - **AI commit trailers** (`Co-Authored-By: Claude/GPT/…`, `Generated-by:`, model `Signed-off-by:`, etc.). Commits are human-authored only; disclose AI tools in the PR body if/when PRs are used, not in git metadata.
 
-Maintainers may **reject or rewrite** any contribution whose intent, quality, or safety story is weak — AI-assisted or not.
+Maintainers may **reject or rewrite** any contribution whose intent, quality, or safety story is weak - AI-assisted or not.
 
 ## Quality bar
 
@@ -92,7 +92,7 @@ Maintainers may **reject or rewrite** any contribution whose intent, quality, or
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` |
 | Tests | `cargo test --workspace` |
 | Specs | Non-trivial product/arch changes should update `specs/` and/or `AGENTS.md` Status when reality changes |
-| Hardware | Prefer `sample` / `list-sensors` / `list-controls`; writes are on by default — use `--read-only` unless you have a stated plan |
+| Hardware | Prefer `sample` / `list-sensors` / `list-controls`; writes are on by default - use `--read-only` unless you have a stated plan |
 
 ## Local development (Windows host)
 
@@ -117,4 +117,4 @@ Hardware needs **PawnIO installed**, an **elevated** process for `pawnio_open`, 
 
 ## Questions
 
-Open an issue. For security-sensitive hardware write bugs, still use issues unless a private channel is published later — do not open public PoCs that deliberately brick machines.
+Open an issue. For security-sensitive hardware write bugs, still use issues unless a private channel is published later - do not open public PoCs that deliberately brick machines.

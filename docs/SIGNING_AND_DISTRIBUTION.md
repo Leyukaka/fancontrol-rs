@@ -1,6 +1,6 @@
 # Signing and distribution
 
-Practical guide for maintainers. Goal: ship **Windows binaries** users can download without needlessly fighting SmartScreen — without committing secrets or over-engineering CI.
+Practical guide for maintainers. Goal: ship **Windows binaries** users can download without needlessly fighting SmartScreen - without committing secrets or over-engineering CI.
 
 ## Why sign?
 
@@ -48,7 +48,7 @@ Signing does **not** replace:
               GitHub Release assets: fancontrol-rs.exe + .sha256
 ```
 
-Implementation today: **[`.github/workflows/release.yml`](../.github/workflows/release.yml)** — build + upload only. Signing steps are **not** wired yet (no secrets required to land the workflow).
+Implementation today: **[`.github/workflows/release.yml`](../.github/workflows/release.yml)** - build + upload only. Signing steps are **not** wired yet (no secrets required to land the workflow).
 
 ### Who can release (maintainer control)
 
@@ -62,7 +62,7 @@ So a random collaborator (if ever granted write) cannot silently ship a tagged e
 
 ### GitHub Actions format note
 
-GitHub Actions **requires YAML** under `.github/workflows/`. That is the native platform format — not optional and not a “generator” like cargo-dist. Keep workflows **minimal**: checkout → toolchain → cache → build → artifact/release. Prefer small, readable YAML over large generated matrices until packaging needs grow.
+GitHub Actions **requires YAML** under `.github/workflows/`. That is the native platform format - not optional and not a “generator” like cargo-dist. Keep workflows **minimal**: checkout → toolchain → cache → build → artifact/release. Prefer small, readable YAML over large generated matrices until packaging needs grow.
 
 ---
 
@@ -97,13 +97,13 @@ Never put signing material in the repo, even “temporarily”.
 
 1. Install **[PawnIO](https://pawnio.eu/)** separately.  
 2. Run with **Administrator** rights for Super I/O.  
-3. Accept that early releases may be **unsigned** — SmartScreen warnings are expected until reputation/signing exists.  
+3. Accept that early releases may be **unsigned** - SmartScreen warnings are expected until reputation/signing exists.  
 4. Prefer official **GitHub Releases** over random mirrors; verify SHA256 when published.
 
 ---
 
 ## Related
 
-- [README.md](../README.md) — Defender / build from source  
-- [CONTRIBUTING.md](../CONTRIBUTING.md) — PR and AI policy  
-- [docs/SUPPORTED_HARDWARE.md](./SUPPORTED_HARDWARE.md) — chip matrix  
+- [README.md](../README.md) - Defender / build from source  
+- [CONTRIBUTING.md](../CONTRIBUTING.md) - PR and AI policy  
+- [docs/SUPPORTED_HARDWARE.md](./SUPPORTED_HARDWARE.md) - chip matrix  

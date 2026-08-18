@@ -19,7 +19,7 @@ impl LpcIo {
 
     /// Slot 0 = ports 0x2E/0x2F, slot 1 = 0x4E/0x4F.
     ///
-    /// Resets BAR allow-list — must call `find_bars` again before HWM PIO.
+    /// Resets BAR allow-list - must call `find_bars` again before HWM PIO.
     pub fn select_slot(&self, slot: u32) -> Result<(), String> {
         self.session
             .execute("ioctl_select_slot", &[slot as u64], 0)?;
@@ -47,7 +47,7 @@ impl LpcIo {
         {
             let _ = self.superio_outb(0x28, options & !0x10);
         }
-        // Exit config — BARs stay in module memory
+        // Exit config - BARs stay in module memory
         let _ = self.write_port(register_port, 0xAA);
         Ok(())
     }

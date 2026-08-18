@@ -63,7 +63,7 @@ trait MetricSink: Send {
 
 ## CPU / DRAM package power (PawnIO MSR)
 
-**Backend rule:** PawnIO modules only — no WinRing0, no WMI/PowerShell, no EMI fallback in v1.
+**Backend rule:** PawnIO modules only - no WinRing0, no WMI/PowerShell, no EMI fallback in v1.
 
 | Sensor id | Meaning | Source (read-only) |
 |-----------|---------|---------------------|
@@ -71,7 +71,7 @@ trait MetricSink: Send {
 | `host.cpu.power.limit` | TDP / package power info (W) | Power-info MSR when available |
 | `host.ram.power` | DRAM power (W) | DRAM energy domain when available |
 
-**Vendor order:** try **AMD** (`AMDFamily17` — Zen fam 17h–1Ah) then **Intel** (`IntelMSR` RAPL).
+**Vendor order:** try **AMD** (`AMDFamily17` - Zen fam 17h-1Ah) then **Intel** (`IntelMSR` RAPL).
 
 | Domain | AMD | Intel |
 |--------|-----|--------|
@@ -80,9 +80,9 @@ trait MetricSink: Send {
 | DRAM W | no | `MSR_DRAM_ENERGY_STATUS` when readable |
 
 - Requires elevated PawnIO session (same as Super I/O).
-- Monitoring only — **no** write of PL1/PL2 or undervolt MSRs.
+- Monitoring only - **no** write of PL1/PL2 or undervolt MSRs.
 - If a domain is missing on a CPU, omit the sensor (do not invent values).
-- Fan **curves still use CPU-like temperatures only** — power series are graph/metrics only.
+- Fan **curves still use CPU-like temperatures only** - power series are graph/metrics only.
 
 ## Local SQLite store
 

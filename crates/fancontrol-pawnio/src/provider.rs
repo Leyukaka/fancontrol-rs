@@ -19,7 +19,7 @@ const RAM_POWER_ID: &str = "host.ram.power";
 const CPU_POWER_SAMPLE_TTL: Duration = Duration::from_millis(200);
 
 /// DIMM SMBus reads are slow (bus arbitration, per-byte transactions) and the
-/// value barely moves — cache aggressively.
+/// value barely moves - cache aggressively.
 const DIMM_TEMP_SAMPLE_TTL: Duration = Duration::from_secs(3);
 
 /// (index, temperature °C) pairs from the last DIMM SMBus sample.

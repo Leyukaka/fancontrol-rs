@@ -1,7 +1,7 @@
 //! CPU package (and optional DRAM) power via PawnIO MSR modules.
 //!
-//! - **AMD** Zen 17h–1Ah: `AMDFamily17` — `MSR_PWR_UNIT` / `MSR_PKG_ENERGY_STAT`
-//! - **Intel** RAPL: `IntelMSR` — unit / PKG energy / PKG power info / DRAM energy
+//! - **AMD** Zen 17h-1Ah: `AMDFamily17` - `MSR_PWR_UNIT` / `MSR_PKG_ENERGY_STAT`
+//! - **Intel** RAPL: `IntelMSR` - unit / PKG energy / PKG power info / DRAM energy
 //!
 //! Power is Δ energy / Δt. Read-only; no PL1/PL2 writes.
 
@@ -9,7 +9,7 @@ use crate::session::PawnSession;
 use std::sync::Mutex;
 use std::time::Instant;
 
-/// Below this interval a delta is too noisy — reuse previous watts.
+/// Below this interval a delta is too noisy - reuse previous watts.
 const MIN_SAMPLE_INTERVAL_SECS: f64 = 0.05;
 
 // AMD

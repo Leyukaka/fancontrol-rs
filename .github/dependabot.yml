@@ -9,7 +9,7 @@ updates:
     labels:
       - dependencies
     groups:
-      # More specific first — Dependabot assigns a crate to the first match.
+      # More specific first - Dependabot assigns a crate to the first match.
       egui:
         patterns:
           - "egui"

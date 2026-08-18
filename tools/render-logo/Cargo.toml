@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
-# Standalone tool — not part of the app workspace
+# Standalone tool - not part of the app workspace
 [workspace]
 
 [dependencies]

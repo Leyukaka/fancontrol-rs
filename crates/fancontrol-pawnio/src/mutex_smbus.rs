@@ -29,7 +29,7 @@ fn smbus_mutex_handle() -> Option<HANDLE> {
             .chain(std::iter::once(0))
             .collect();
         // SAFETY: null security attributes, valid name. Creates the object if
-        // no other tool has it yet, or opens the existing one — either way
+        // no other tool has it yet, or opens the existing one - either way
         // it becomes a shared cross-process handle.
         let handle = unsafe { CreateMutexW(std::ptr::null(), FALSE, wide.as_ptr()) };
         if handle.is_null() {
@@ -45,7 +45,7 @@ fn smbus_mutex_handle() -> Option<HANDLE> {
 }
 
 /// Best-effort SMBus mutex guard. Not holding it is never treated as an error
-/// by callers — it only reduces the chance of colliding with another tool.
+/// by callers - it only reduces the chance of colliding with another tool.
 pub struct SmbusGuard {
     _process: MutexGuard<'static, ()>,
     held: bool,

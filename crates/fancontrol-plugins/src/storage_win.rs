@@ -1,9 +1,9 @@
-//! Windows storage temperatures via `DeviceIoControl` — **no PowerShell**.
+//! Windows storage temperatures via `DeviceIoControl` - **no PowerShell**.
 //!
-//! Priority (live NVMe first — avoids a stuck/stale first TemperatureInfo slot):
+//! Priority (live NVMe first - avoids a stuck/stale first TemperatureInfo slot):
 //! 1. NVMe health-info log page (composite temp, Kelvin → °C)
-//! 2. `StorageDeviceTemperatureProperty` — scan **all** `TemperatureInfo` entries
-//! 3. `StorageAdapterTemperatureProperty` — same scan
+//! 2. `StorageDeviceTemperatureProperty` - scan **all** `TemperatureInfo` entries
+//! 3. `StorageAdapterTemperatureProperty` - same scan
 //!
 //! Opening `\\.\PhysicalDriveN` usually needs elevation.
 
@@ -187,7 +187,7 @@ fn query_temperature_property(handle: HANDLE, property_id: i32) -> Option<f64> {
             ptr::null_mut(),
         )
     };
-    // Flexible array starts at TemperatureInfo — not `size_of(desc) - size_of(info)`,
+    // Flexible array starts at TemperatureInfo - not `size_of(desc) - size_of(info)`,
     // which can be wrong if the trailing [1] is padded into the parent size.
     let info_offset = std::mem::offset_of!(STORAGE_TEMPERATURE_DATA_DESCRIPTOR, TemperatureInfo);
     let entry_size = std::mem::size_of::<STORAGE_TEMPERATURE_INFO>();

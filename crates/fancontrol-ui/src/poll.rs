@@ -32,7 +32,7 @@ pub struct Snapshot {
 
 /// CPU package metrics for the CPU detail panel (`cpu_panel.rs`).
 ///
-/// `load_pct` is left `None` here — it comes from the Activity deck sampler, which
+/// `load_pct` is left `None` here - it comes from the Activity deck sampler, which
 /// runs independently of the poll thread; the UI layer fills it in per frame.
 #[derive(Debug, Clone, Default)]
 pub struct CpuSnap {
@@ -208,7 +208,7 @@ fn take_snapshot(
                     fans.push((id.to_string(), label, rpm));
                     continue;
                 }
-                // absent fan — skip without error
+                // absent fan - skip without error
                 continue;
             }
         }

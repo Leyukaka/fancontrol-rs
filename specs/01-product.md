@@ -63,7 +63,7 @@ Replace FanControl with a modern, secure, open-source alternative written in Rus
 |------------|--------|
 | Graph non-temp series (GPU power/util/clocks/…) | **Done** (dual unit plots; W axis uses GPU power.limit) |
 | CPU package / DRAM power (W) on graph | **Done** (AMD + Intel RAPL via PawnIO MSR; DRAM/limit when hardware exposes them) |
-| Auto-update | **No** — manual "Check for updates" link only; no background poll / download |
+| Auto-update | **No** - manual "Check for updates" link only; no background poll / download |
 | Local SQLite metrics store + CSV export (Options) | **Done** (opt-in) |
 | Start with Windows | **Done** (Options + first-run prompt; HKCU Run) |
 | OpenTelemetry metrics export (opt-in) | **Partial** (endpoint/settings saved; OTLP export next) |
@@ -75,14 +75,14 @@ See `specs/07-metrics-telemetry.md`.
 - Multi-sensor curves (e.g. max of CPU + GPU)
 - External sensor sources (HWInfo shared memory, more plugins)
 - Scheduling / time-based profiles
-- **In-app auto-update**: download + SHA256 verify + install (manual "check for updates" already shipped — see UI table above)
+- **In-app auto-update**: download + SHA256 verify + install (manual "check for updates" already shipped - see UI table above)
 - Remote monitoring beyond opt-in OTEL (optional)
 - Linux support
 - Authenticode **code signing** (docs ready; not wired)
 
 ## Non-goals (for now)
 
-- RGB control (**planned later** — separate subsystem, not Super I/O)
+- RGB control (**planned later** - separate subsystem, not Super I/O)
 - Overclocking
 - Cross-platform parity in v1
 - Bundling PawnIO inside the app binary

@@ -1,4 +1,4 @@
-# AGENTS.md — fancontrol-rs
+# AGENTS.md - fancontrol-rs
 
 Instructions for **coding agents** and maintainers working in this repository.
 Read this file, [`CONTRIBUTING.md`](./CONTRIBUTING.md), and `specs/` before non-trivial changes.
@@ -7,7 +7,7 @@ A maintainer-only private context checkout may exist as a sibling of this repo. 
 
 ## What this project is
 
-Modern Windows fan control app in Rust — spiritual successor to [FanControl (Rem0o)](https://github.com/Rem0o/FanControl.Releases).
+Modern Windows fan control app in Rust - spiritual successor to [FanControl (Rem0o)](https://github.com/Rem0o/FanControl.Releases).
 Hardware access via **PawnIO only** (never WinRing0 / unsigned vulnerable drivers).
 Spec-Driven Design: product and architecture decisions live in `specs/`.
 
@@ -64,10 +64,10 @@ Rust edition 2024, stable toolchain pinned via `rust-toolchain.toml` (rustfmt + 
 
 1. Broader chip validation (ITE IT87 still experimental; more banked NCT boards).
 2. SSD/NVMe temp validation on more drives.
-3. Code signing (SmartScreen) — see `docs/SIGNING_AND_DISTRIBUTION.md`.
-4. Optional later: download + SHA256 after **manual** check only (no silent auto-update) — see `docs/SECURITY.md`.
-5. AMD/Intel GPU sensors — blocked on hardware; see `docs/GPU_VENDOR_APIS.md`. Optional later: experimental NvAPI Hot Spot (not shipped).
-6. RGB (future — not Super I/O).
+3. Code signing (SmartScreen) - see `docs/SIGNING_AND_DISTRIBUTION.md`.
+4. Optional later: download + SHA256 after **manual** check only (no silent auto-update) - see `docs/SECURITY.md`.
+5. AMD/Intel GPU sensors - blocked on hardware; see `docs/GPU_VENDOR_APIS.md`. Optional later: experimental NvAPI Hot Spot (not shipped).
+6. RGB (future - not Super I/O).
 7. Mock is **opt-in** (`--mock`); product default is hardware/host only.
 
 ## Safety product rules

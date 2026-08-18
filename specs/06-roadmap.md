@@ -2,7 +2,7 @@
 
 Last aligned with product reality: **v0.5.1** (GPU N/A captions beside chips; domain panels; CPU package power AMD+Intel; DDR5 DIMM temps via SMBus; OTEL OTLP/HTTP export). See `specs/07-metrics-telemetry.md`, `specs/04-ui.md`, `docs/DIMM_TEMP.md`.
 
-## Phase 0 — Foundation
+## Phase 0 - Foundation
 
 - [x] Repository + Spec-Driven Design documents (`specs/`)
 - [x] Workspace structure (`crates/`)
@@ -12,7 +12,7 @@ Last aligned with product reality: **v0.5.1** (GPU N/A captions beside chips; do
 - [x] CLI harness (`list-sensors`, `set-duty`, `demo`, …)
 - [x] CI (GitHub Actions)
 
-## Phase 1 — Hardware & Core
+## Phase 1 - Hardware & Core
 
 - [x] `fancontrol-pawnio` FFI + embedded LpcIO/Echo modules
 - [x] Super I/O detect + Nuvoton NCT668x EC HWM (temps/fans/PWM)
@@ -25,7 +25,7 @@ Last aligned with product reality: **v0.5.1** (GPU N/A captions beside chips; do
 - [ ] Broader chip productization (ITE IT87, more banked NCT boards; experimental until certified)
 - [ ] Confirm SSD/NVMe temps broadly (owner path live; more drives / SATA edge cases)
 
-## Phase 2 — UI MVP
+## Phase 2 - UI MVP
 
 - [x] Main window: sensors + controls (egui 0.35)
 - [x] Manual duty sliders (write-gated / product default writes on)
@@ -34,36 +34,36 @@ Last aligned with product reality: **v0.5.1** (GPU N/A captions beside chips; do
 - [x] Multi-sensor graph (`egui_plot`) + sensor picker + per-control curve binding
 - [x] Graph window 10/20/30/60 min + sample interval
 - [x] Shader / gallery graph styles (`shaders/`)
-- [x] Activity deck (CPU load + top processes CPU/RAM, filter; opt-in Options) — v0.3.0
+- [x] Activity deck (CPU load + top processes CPU/RAM, filter; opt-in Options) - v0.3.0
 - [x] PawnIO install/admin dialog
-- [x] Restart as Administrator (UAC `runas` button) — v0.4.1
+- [x] Restart as Administrator (UAC `runas` button) - v0.4.1
 - [x] Profile UX (switch / last-used / startup)
 - [x] System tray
 - [x] i18n (8 languages)
 
-## Phase 3 — Polish, packaging, security
+## Phase 3 - Polish, packaging, security
 
 - [x] Public GitHub repo + CONTRIBUTING + hardware/security docs
 - [x] Release workflow (`v*.*.*` → exe + SHA256; environment approval for owner)
 - [x] CodeQL, cargo-audit, Dependabot
 - [x] Branch protection + tag ruleset + release environment
 - [x] Manual update check (GitHub latest-release compare + link)
-- [ ] Code signing (SignPath / Azure / cert — **not** enabled)
+- [ ] Code signing (SignPath / Azure / cert - **not** enabled)
 - [ ] Installer / end-user packaging polish
 - [ ] Full curve editor polish (multi-curve UX)
 - [ ] Dynamic plugin loading infrastructure
 - [ ] Decide mock-in-default-UI vs `--hw-only` product default
 
-## Phase 4 — Advanced
+## Phase 4 - Advanced
 
 - [ ] Multi-sensor curves (e.g. max CPU+GPU as single input)
 - [ ] Additional official plugins
 - [ ] Auto-update: download + SHA256 verify + install
 - [x] NVIDIA multi-metric + GPU panel (v0.3.5; Hot Spot not via smi)
-- [ ] AMD/Intel GPU sensors — see `docs/GPU_VENDOR_APIS.md`
+- [ ] AMD/Intel GPU sensors - see `docs/GPU_VENDOR_APIS.md`
 - [ ] Optional: NVML in-process; experimental NvAPI Hot Spot
 
-## Phase 5 — Metrics & telemetry (v0.4.0)
+## Phase 5 - Metrics & telemetry (v0.4.0)
 
 Spec: `specs/07-metrics-telemetry.md`.
 
@@ -75,10 +75,10 @@ Spec: `specs/07-metrics-telemetry.md`.
 - [x] Start with Windows (Options + first-run prompt; HKCU Run)
 - [x] Docs `docs/METRICS_AND_OTEL.md` + Options i18n
 - [x] OpenTelemetry OTLP/HTTP metrics export (opt-in Options; `fancontrol.sensor` gauges)
-- [x] **CPU / DRAM power (W)** via PawnIO MSR only — see `07-metrics-telemetry.md`
+- [x] **CPU / DRAM power (W)** via PawnIO MSR only - see `07-metrics-telemetry.md`
   - [x] AMD (`AMDFamily17`): `host.cpu.power.package`
   - [x] Intel (`IntelMSR` RAPL): package + limit + DRAM when present
-- [x] **DIMM temperature (DDR5 SPD hub)** via PawnIO SMBus (`SmbusPIIX4` / `SmbusI801`) — `host.dimm{N}.temp`; owner-validated AMD — see `docs/DIMM_TEMP.md`
+- [x] **DIMM temperature (DDR5 SPD hub)** via PawnIO SMBus (`SmbusPIIX4` / `SmbusI801`) - `host.dimm{N}.temp`; owner-validated AMD - see `docs/DIMM_TEMP.md`
   - [x] Graph default seed includes package power; W axis ceiling max(GPU limit, CPU limit)
 
 ## Next priorities (order)

@@ -107,7 +107,7 @@ impl MetricSink for SqliteMetricsStore {
         if batch.is_empty() {
             return;
         }
-        // Drop if channel full — never block poll/UI.
+        // Drop if channel full - never block poll/UI.
         if self.tx.try_send(StoreCmd::Batch(batch.to_vec())).is_err() {
             tracing::debug!("metrics sqlite channel full; dropping batch");
         }

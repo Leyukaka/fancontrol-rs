@@ -39,7 +39,7 @@
 - **Security**: [PawnIO](https://pawnio.eu/) only for Super I/O / EC. Never ships WinRing0 or other known-vulnerable ring-0 drivers
 - **Host sensors**: NVIDIA GPU multi-metric via fixed-path `nvidia-smi` (temp, power W, util, clocks, VRAM, fan %) + GPU detail panel; SSD/NVMe temps via DeviceIoControl (no PowerShell); **DDR5 DIMM temps** via PawnIO SMBus (`host.dimm{N}.temp`, owner-validated on AMD)
 - **Metrics**: graph multi-kind series (GPU power/util/…; CPU package W via PawnIO MSR on **AMD + Intel**; optional DRAM/limit on Intel RAPL), optional local SQLite store + CSV export, optional OTLP/HTTP export; see `docs/METRICS_AND_OTEL.md`
-- **Updates**: **manual only** — Options → **Check for updates** (GitHub Releases API link). No background check, no auto-download, no silent install
+- **Updates**: **manual only** - Options → **Check for updates** (GitHub Releases API link). No background check, no auto-download, no silent install
 - **Start with Windows**: Options + first-run prompt (current-user Run key, no admin)
 - **Admin elevation**: Needs-admin dialog + top bar **Restart as Administrator** (UAC via `runas`; no silent elevation)
 - **UI**: egui 0.36 desktop app, system tray, first-run write consent, 8 languages (en/fr/de/es/it/zh/ja/lb)
@@ -77,7 +77,7 @@ Rough map of the Windows landscape. Support always depends on your board and EC.
 | MSI Afterburner | Free | **GPU** OC + GPU fans | GPU fan curve | Not a full motherboard fan suite | Mature (GPU) |
 | OEM apps (Armoury Crate, Gigabyte CC, …) | Free with board | Vendor board / RGB / fans | Varies | Heavy; brand-locked | Mature |
 | AIO / case apps (iCUE, CAM, …) | Free / freemium | Their pumps, fans, RGB | Good **inside** that ecosystem | Weak for random mobo headers | Mature niche |
-| **fancontrol-rs** (this repo) | MIT / Apache-2.0 | Fans + **GPU / CPU / RAM** monitoring | Curves, profiles, sliders, domain panels, multi-sensor graph, metrics store | **PawnIO only** (no WinRing0); AIO fans via mobo headers; egui UI; **all boards welcome** — certified list is short until you send logs; binaries unsigned | Early (v0.5.x) |
+| **fancontrol-rs** (this repo) | MIT / Apache-2.0 | Fans + **GPU / CPU / RAM** monitoring | Curves, profiles, sliders, domain panels, multi-sensor graph, metrics store | **PawnIO only** (no WinRing0); AIO fans via mobo headers; egui UI; **all boards welcome** - certified list is short until you send logs; binaries unsigned | Early (v0.5.x) |
 
 **Quick pick**
 

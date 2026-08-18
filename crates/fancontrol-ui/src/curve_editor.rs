@@ -98,7 +98,7 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
     }
 
     // Live temp marker, plus (when the curve has points) the duty % the curve
-    // would currently apply at that temperature — the intersection of the
+    // would currently apply at that temperature - the intersection of the
     // vertical temp line with the curve, so it's obvious what the fan is
     // actually being told to do right now.
     if let Some(t) = live_temp {

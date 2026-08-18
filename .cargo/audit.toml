@@ -2,5 +2,5 @@
 # See docs/SECURITY.md.
 
 [advisories]
-# Currently no ignored IDs — keep empty unless a Windows-only false positive reappears.
+# Currently no ignored IDs - keep empty unless a Windows-only false positive reappears.
 ignore = []

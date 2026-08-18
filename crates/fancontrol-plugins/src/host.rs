@@ -1,7 +1,7 @@
 //! Best-effort host sensors (GPU / storage) without privileged drivers.
 //!
 //! - NVIDIA GPU: fixed-path `nvidia-smi` multi-metric query (no PATH walk on Windows)
-//! - Storage (Windows): `DeviceIoControl` temperature property — **no PowerShell**
+//! - Storage (Windows): `DeviceIoControl` temperature property - **no PowerShell**
 //!
 //! Hot Spot is **not** exposed by `nvidia-smi` / public NVML; LibreHardwareMonitor
 //! gets it via reverse-engineered NvAPI. We intentionally do not fake it here.
@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
-/// CREATE_NO_WINDOW — avoid flashing a console when spawning nvidia-smi.
+/// CREATE_NO_WINDOW - avoid flashing a console when spawning nvidia-smi.
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 

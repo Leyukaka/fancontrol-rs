@@ -32,7 +32,7 @@ pub struct AppTray {
 
 impl AppTray {
     /// Build the tray icon. Must run on the same thread as the (already-started)
-    /// event loop — call this from inside the eframe app-creation closure.
+    /// event loop - call this from inside the eframe app-creation closure.
     pub fn new() -> Result<Self, String> {
         let icons = build_state_icons()?;
 

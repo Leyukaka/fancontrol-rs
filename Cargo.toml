@@ -34,7 +34,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 clap = { version = "4", features = ["derive"] }
 directories = "6"
 
-# UI (egui + eframe) — 0.36 pairs with egui_plot 0.37
+# UI (egui + eframe) - 0.36 pairs with egui_plot 0.37
 egui = "0.36"
 eframe = "0.36"
 egui_plot = "0.37"
@@ -78,7 +78,7 @@ winresource = "0.1"
 
 # Read automatically by winresource (default "toml" feature) to fill in PE version-resource
 # fields that WindowsResource::new() otherwise leaves blank. Incomplete publisher metadata on
-# an unsigned PE is itself a mild heuristic signal for some AV engines — this is pure build-time
+# an unsigned PE is itself a mild heuristic signal for some AV engines - this is pure build-time
 # metadata, no functional/runtime change.
 [package.metadata.winresource]
 CompanyName = "Leyukaka"

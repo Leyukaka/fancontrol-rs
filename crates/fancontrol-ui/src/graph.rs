@@ -89,7 +89,7 @@ impl TempHistory {
     ///
     /// X is anchored to `epoch` (usually the newest sample across series), **not**
     /// paint-frame `Instant::now()`. That keeps the grid frozen between samples;
-    /// only a new sample scrolls the trace (Task Manager–style).
+    /// only a new sample scrolls the trace (Task Manager-style).
     pub fn plot_points_since(&self, epoch: Instant) -> Vec<[f64; 2]> {
         self.samples
             .iter()
@@ -108,7 +108,7 @@ impl TempHistory {
         }
     }
 
-    /// Configured rolling window, in (fractional) minutes — for sizing a plot's X axis.
+    /// Configured rolling window, in (fractional) minutes - for sizing a plot's X axis.
     pub fn window_minutes(&self) -> f64 {
         self.window.as_secs_f64() / 60.0
     }
@@ -128,7 +128,7 @@ const AXIS_MAX_HALF_LIFE_SECS: f32 = 1.5;
 /// One plotted line on the multi-sensor graph.
 pub struct GraphSeries<'a> {
     pub label: &'a str,
-    /// Position in the user's ordered sensor selection — used both as the
+    /// Position in the user's ordered sensor selection - used both as the
     /// stable (restart-proof) color-palette index and to mark the "primary"
     /// series (index 0) that gets the full glow/fill/head-pulse treatment.
     pub palette_index: usize,
@@ -146,7 +146,7 @@ impl GraphSeries<'_> {
 /// Categorical palette for identifying series by color once ≥2 sensors are
 /// plotted (validated for pairwise contrast on this dark UI and colorblind
 /// safety up to 8 concurrent series; cycles and relies on the legend text
-/// beyond that — a deliberate tradeoff, not an oversight, since a 9th
+/// beyond that - a deliberate tradeoff, not an oversight, since a 9th
 /// generated/hashed hue would be less distinguishable, not more).
 const SERIES_PALETTE: [Color32; 8] = [
     Color32::from_rgb(0x39, 0x87, 0xe5), // blue
@@ -266,7 +266,7 @@ pub fn show_metric_graph(
                         .history
                         .last()
                         .map(|t| format!("{t:.1} {u}"))
-                        .unwrap_or_else(|| "—".to_string());
+                        .unwrap_or_else(|| "-".to_string());
                     ui.label(egui::RichText::new("●").color(color));
                     ui.label(egui::RichText::new(format!("{} {val}", s.label)).weak());
                     ui.add_space(10.0);
@@ -465,7 +465,7 @@ const NEUTRAL_FALLBACK_C: f32 = 40.0;
 pub struct ThermalSignal {
     /// (label, celsius, heat01) per currently-selected, currently-live sensor.
     pub readings: Vec<(String, f32, f32)>,
-    /// max(heat01) across readings — the single scalar that can drive a shader.
+    /// max(heat01) across readings - the single scalar that can drive a shader.
     pub heat01_max: f32,
 }
 
@@ -474,7 +474,7 @@ impl ThermalSignal {
         if readings.is_empty() {
             let heat01 = temp_heat01(NEUTRAL_FALLBACK_C);
             return Self {
-                readings: vec![("—".to_string(), NEUTRAL_FALLBACK_C, heat01)],
+                readings: vec![("-".to_string(), NEUTRAL_FALLBACK_C, heat01)],
                 heat01_max: heat01,
             };
         }
@@ -547,7 +547,7 @@ mod tests {
         // Force two samples at known stamps via push_if_due with spaced times.
         h.push_if_due(40.0, t0);
         // Bypass interval by using a later Instant directly on a second history path:
-        // push_if_due respects sample_interval — configure 1s then sleep is flaky in tests.
+        // push_if_due respects sample_interval - configure 1s then sleep is flaky in tests.
         // Instead stamp via two histories' public API: only last sample at x=0 matters.
         let pts_a = h.plot_points();
         let pts_b = h.plot_points_since(t0 + Duration::from_secs(30));

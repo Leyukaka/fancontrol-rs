@@ -172,11 +172,11 @@ mod tests {
         let d1 = evaluate_curve(&c, 60.0, Some(&mut state));
         assert!(d1 > 50);
 
-        // Small drop 2°C — should hold previous duty
+        // Small drop 2°C - should hold previous duty
         let d2 = evaluate_curve(&c, 58.0, Some(&mut state));
         assert_eq!(d2, d1);
 
-        // Large drop beyond hysteresis — allow decrease
+        // Large drop beyond hysteresis - allow decrease
         let d3 = evaluate_curve(&c, 50.0, Some(&mut state));
         assert!(d3 <= d1);
         assert_eq!(d3, 50);

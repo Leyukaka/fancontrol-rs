@@ -41,7 +41,7 @@ pub struct UiSettings {
     /// User saw the first-run “PWM writes enabled” dialog and accepted fan control.
     #[serde(default)]
     pub writes_risk_acknowledged: bool,
-    /// Last profile switched to / saved in the UI — auto-loaded on next startup.
+    /// Last profile switched to / saved in the UI - auto-loaded on next startup.
     #[serde(default)]
     pub last_profile_id: Option<String>,
     /// UI language code (e.g. "en", "fr"). `None` = not yet chosen → OS-locale detection.
@@ -83,7 +83,7 @@ pub struct UiSettings {
     #[serde(default = "default_true")]
     pub show_activity_deck: bool,
     /// GPU detail panel (power, util, clocks, VRAM). Shares the top visualization area.
-    /// **Default on** — empty/placeholder when no host GPU is present.
+    /// **Default on** - empty/placeholder when no host GPU is present.
     #[serde(default = "default_true")]
     pub show_gpu_panel: bool,
     /// CPU detail panel (package power vs. limit, temp, load %). Shares the top

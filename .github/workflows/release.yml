@@ -1,10 +1,10 @@
 # Minimal Windows release build.
 # GitHub Actions requires YAML under .github/workflows/ (platform native format).
-# Not a cargo-dist / generator setup — keep this file small on purpose.
+# Not a cargo-dist / generator setup - keep this file small on purpose.
 # Signing is intentionally out of scope here; see docs/SIGNING_AND_DISTRIBUTION.md.
 #
 # Gate: environment `release` requires maintainer approval (owner only) before
-# building/publishing — so tag push alone does not publish an exe without you.
+# building/publishing - so tag push alone does not publish an exe without you.
 
 name: Release
 
