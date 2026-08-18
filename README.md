@@ -5,7 +5,7 @@
 <h1 align="center">Fancontrol-RS</h1>
 
 <p align="center">
-  <strong>Windows fan control and system activity (CPU / RAM) in Rust.</strong><br>
+  <strong>Windows fan control and monitoring for GPU CPU RAM activity written in Rust</strong><br>
   Open-source option next to tools like FanControl and Argus Monitor.<br>
   Inspired by <a href="https://github.com/Rem0o/FanControl.Releases">FanControl</a> (Rem0o). Not affiliated.<br>
   PawnIO only (no WinRing0) · profiles & curves · live UI
