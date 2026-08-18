@@ -22,17 +22,19 @@ Options → Graph sensors lists:
 
 If you select two different units (for example °C and W), the UI stacks two plots (shared time window). More than two units: only the first two unit groups are drawn.
 
-## OpenTelemetry (v0.4.0: settings only)
+## OpenTelemetry (OTLP/HTTP)
 
-- Options can save **endpoint** and an enable flag.
-- **OTLP export is not wired yet** in v0.4.0; prefer **OTLP/HTTP** to a collector you run when it lands (e.g. Grafana Alloy or OpenTelemetry Collector on `http://127.0.0.1:4318`).
+- **Off by default.** Options → enable + endpoint (default `http://127.0.0.1:4318`).
+- Export is **OTLP/HTTP JSON** to `{endpoint}/v1/metrics` (the `/v1/metrics` suffix is added if missing).
+- One gauge family: `fancontrol.sensor` with attributes `sensor_id`, `kind`, `unit`, `label`.
+- Failures log and back off (2s → 60s). The fan loop never waits on the network.
 - No project-operated cloud. Metrics leave the machine only if you enable export and point at an endpoint you control.
 
-### Suggested local collector (when OTEL export ships)
+### Suggested local collector
 
 1. Run Grafana Alloy or `otelcol` with an OTLP HTTP receiver on port 4318.
 2. Enable OTEL in Options and set the endpoint.
-3. Confirm gauges appear in your backend (Prometheus/Grafana optional).
+3. Confirm `fancontrol.sensor` gauges in your backend (Prometheus/Grafana optional).
 
 ## Security
 

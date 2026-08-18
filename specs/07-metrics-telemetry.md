@@ -24,7 +24,7 @@ Poll snapshot
     → MultiSink
          ├── (implicit) UI histories / GPU panel from same poll values
          ├── LocalSqliteSink   (opt-in)
-         └── OtlpSink          (opt-in, after protocol decision)
+         └── OtlpSink          (opt-in, OTLP/HTTP JSON)
 ```
 
 ### MetricSample (domain)
@@ -118,7 +118,7 @@ CREATE INDEX idx_samples_id_ts ON samples(sensor_id, ts_ms);
 - Disabled by default.
 - User provides endpoint (e.g. `http://127.0.0.1:4318`).
 - Export gauges under a stable metric name family (e.g. `fancontrol.sensor` with attributes `sensor_id`, `kind`, `unit`).
-- **Protocol**: decide after SQLite sink is stable; prefer **OTLP/HTTP** unless a hard requirement for gRPC appears.
+- **Protocol**: **OTLP/HTTP JSON** (`POST /v1/metrics`). gRPC is out of scope.
 - Failure mode: log and backoff; no modal spam.
 
 Document smoke setup in `docs/METRICS_AND_OTEL.md` (collector → Prometheus/Grafana optional).
@@ -134,7 +134,7 @@ Document smoke setup in `docs/METRICS_AND_OTEL.md` (collector → Prometheus/Gra
 | Piece | Crate |
 |-------|--------|
 | `MetricSample`, `SensorKind` reuse | `fancontrol-core` |
-| Sinks (SQLite, CSV export, later OTEL) | `fancontrol-metrics` (new) |
+| Sinks (SQLite, CSV export, OTLP/HTTP) | `fancontrol-metrics` |
 | Wire poll → sinks; Options | `fancontrol-ui` |
 
 ## Acceptance (v0.4.0)
@@ -143,7 +143,7 @@ Document smoke setup in `docs/METRICS_AND_OTEL.md` (collector → Prometheus/Gra
 - [x] Power (W) axis uses GPU power.limit when available.
 - [x] Store off by default; enable → SQLite grows; retention purges; CSV export works.
 - [x] Start with Windows opt-in (Options + first-run prompt).
-- [ ] OTEL off by default; enable + local collector → metrics visible (export still TODO).
+- [x] OTEL off by default; enable + local collector → `fancontrol.sensor` gauges over OTLP/HTTP.
 - [x] CI green; no regression on PWM / GPU panel.
 
 ## Acceptance (CPU / DRAM power)

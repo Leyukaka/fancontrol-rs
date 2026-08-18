@@ -193,7 +193,7 @@ impl SensorProvider for MockProvider {
             },
             SensorDescriptor {
                 id: SensorId::new("mock.dimm0.temp"),
-                name: "DIMM 0 Temp (experimental)".into(),
+                name: "DIMM 0 Temp".into(),
                 kind: SensorKind::Temperature,
                 provider: self.name.clone(),
                 unit: Some("°C".into()),

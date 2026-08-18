@@ -1,9 +1,9 @@
-# DIMM (RAM) temperature — experimental (owner-validated path)
+# DIMM (RAM) temperature
 
-**Status: Experimental** for general hardware; **owner-validated** on AMD
-(SmbusPIIX4) + NCT668x (`0xD5`) + 4× DDR5 SPD hubs (`host.dimm0..3.temp`,
-idle ~35–38 °C). Other chipsets/DIMMs remain unproven. Sensor-only,
-read-only — never writes to SPD.
+**Status: shipped.** Owner-validated on AMD (SmbusPIIX4) + NCT668x (`0xD5`) +
+4× DDR5 SPD hubs (`host.dimm0..3.temp`, idle ~35–38 °C). Other chipsets/DIMMs
+are unproven until someone sends logs. Sensor-only, read-only — never writes
+to SPD.
 
 ## What it does
 

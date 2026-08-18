@@ -1,6 +1,6 @@
 # Roadmap
 
-Last aligned with product reality: **v0.5.1** (GPU N/A captions beside chips; domain panels; CPU package power AMD+Intel; DDR5 DIMM temps via SMBus; OTEL export deferred). See `specs/07-metrics-telemetry.md`, `specs/04-ui.md`, `docs/DIMM_TEMP.md`.
+Last aligned with product reality: **v0.5.1** (GPU N/A captions beside chips; domain panels; CPU package power AMD+Intel; DDR5 DIMM temps via SMBus; OTEL OTLP/HTTP export). See `specs/07-metrics-telemetry.md`, `specs/04-ui.md`, `docs/DIMM_TEMP.md`.
 
 ## Phase 0 — Foundation
 
@@ -74,18 +74,16 @@ Spec: `specs/07-metrics-telemetry.md`.
 - [x] Manual CSV export from store
 - [x] Start with Windows (Options + first-run prompt; HKCU Run)
 - [x] Docs `docs/METRICS_AND_OTEL.md` + Options i18n
-- [ ] OpenTelemetry OTLP metrics export (endpoint settings present; export not wired)
+- [x] OpenTelemetry OTLP/HTTP metrics export (opt-in Options; `fancontrol.sensor` gauges)
 - [x] **CPU / DRAM power (W)** via PawnIO MSR only — see `07-metrics-telemetry.md`
   - [x] AMD (`AMDFamily17`): `host.cpu.power.package`
   - [x] Intel (`IntelMSR` RAPL): package + limit + DRAM when present
-- [x] **DIMM temperature (DDR5 SPD hub)** via PawnIO SMBus (`SmbusPIIX4` / `SmbusI801`) — `host.dimm{N}.temp`; experimental; owner-validated AMD — see `docs/DIMM_TEMP.md`
+- [x] **DIMM temperature (DDR5 SPD hub)** via PawnIO SMBus (`SmbusPIIX4` / `SmbusI801`) — `host.dimm{N}.temp`; owner-validated AMD — see `docs/DIMM_TEMP.md`
   - [x] Graph default seed includes package power; W axis ceiling max(GPU limit, CPU limit)
 
 ## Next priorities (order)
 
-1. **GPU panel layout**: move Hot Spot / Memory-temp *unavailable via nvidia-smi* captions **right of the temp chips** (they currently stack under the chips and shift the card). See `specs/04-ui.md`.
-2. OTEL OTLP/HTTP metrics export
-3. Broader chip validation (community logs + experimental paths)
+1. Broader chip validation (community logs + experimental paths)
 4. SSD/NVMe temp validation on real hardware
 5. Code signing when ready for wider audience
 5. Optional: download + SHA256 after manual check (still no silent auto-update)

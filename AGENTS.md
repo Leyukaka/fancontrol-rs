@@ -57,19 +57,18 @@ Rust edition 2024, stable toolchain pinned via `rust-toolchain.toml` (rustfmt + 
 - Product line: **v0.5.1**. Roadmap and feature checklist: `specs/06-roadmap.md`.
 - Hardware backend: PawnIO + NCT668x (validated `0xD5` / banked `0xD4`) + host GPU/storage + CPU package power + DDR5 DIMM temps. Details: `docs/SUPPORTED_HARDWARE.md`, `docs/DIMM_TEMP.md`, `specs/03-hardware-backend.md`.
 - UI: egui 0.36, domain panels, multi-kind graph, activity deck, i18n (8 locales), manual update check only. `specs/04-ui.md`.
-- Metrics store (SQLite/CSV) shipped; OTLP export not wired. `specs/07-metrics-telemetry.md`.
+- Metrics store (SQLite/CSV) shipped; OTLP/HTTP export opt-in. `specs/07-metrics-telemetry.md`.
 - PawnIO is a prerequisite (not bundled). Elevation via UAC **Restart as Administrator** only (no silent elevation). PWM writes on by default; `--read-only` for diagnostics.
 
 ## Next priorities (order)
 
-1. OpenTelemetry OTLP/HTTP metrics export (endpoint already in Options; see `specs/07-metrics-telemetry.md`).
-2. Broader chip validation (ITE IT87 still experimental; more banked NCT boards).
+1. Broader chip validation (ITE IT87 still experimental; more banked NCT boards).
+2. SSD/NVMe temp validation on more drives.
 3. Code signing (SmartScreen) — see `docs/SIGNING_AND_DISTRIBUTION.md`.
 4. Optional later: download + SHA256 after **manual** check only (no silent auto-update) — see `docs/SECURITY.md`.
 5. AMD/Intel GPU sensors — blocked on hardware; see `docs/GPU_VENDOR_APIS.md`. Optional later: experimental NvAPI Hot Spot (not shipped).
 6. RGB (future — not Super I/O).
-7. SSD/NVMe temps: more drives; EVO SATA may report no temp.
-8. Mock is **opt-in** (`--mock`); product default is hardware/host only.
+7. Mock is **opt-in** (`--mock`); product default is hardware/host only.
 
 ## Safety product rules
 

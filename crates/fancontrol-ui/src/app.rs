@@ -20,7 +20,7 @@ use fancontrol_core::{
     is_cpu_temp_candidate, list_profiles, load_profile, save_profile,
 };
 use fancontrol_metrics::{
-    MetricSink, SqliteMetricsStore, SqliteStoreConfig, default_metrics_db_path,
+    MetricSink, OtlpSink, SqliteMetricsStore, SqliteStoreConfig, default_metrics_db_path,
 };
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -143,6 +143,11 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
     } else {
         None
     };
+    let otel_sink = if settings.otel_enabled {
+        OtlpSink::spawn(settings.otel_endpoint.clone())
+    } else {
+        None
+    };
 
     // Keep HKCU Run path in sync if the user already opted in.
     if settings.launch_on_startup {
@@ -178,6 +183,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         graph_axis_max: None,
         graph_axis_max_secondary: None,
         metrics_sink,
+        otel_sink,
         last_metrics_record: Instant::now() - Duration::from_secs(60),
         load_history,
         cpu_power_history,
@@ -303,6 +309,8 @@ struct FanApp {
     graph_axis_max_secondary: Option<f32>,
     /// Optional local SQLite metrics store (background writer).
     metrics_sink: Option<SqliteMetricsStore>,
+    /// Optional OTLP/HTTP export (background sender).
+    otel_sink: Option<OtlpSink>,
     last_metrics_record: Instant,
     /// CPU load % history for the Activity deck.
     load_history: TempHistory,
@@ -465,31 +473,34 @@ impl eframe::App for FanApp {
             self.gpu_power_history.push_if_due(w as f32, Instant::now());
         }
 
-        // Metrics store (best-effort, separate cadence).
-        if self.settings.metrics_store_enabled {
+        // Metrics store / OTEL (best-effort, separate cadence).
+        if self.settings.metrics_store_enabled || self.settings.otel_enabled {
             let every = Duration::from_secs(u64::from(self.settings.metrics_sample_secs.max(1)));
             if self.last_metrics_record.elapsed() >= every {
-                if let Some(store) = self.metrics_sink.as_mut() {
-                    let ts_ms = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map(|d| d.as_millis() as i64)
-                        .unwrap_or(0);
-                    let batch: Vec<MetricSample> = snap
-                        .plottable
-                        .iter()
-                        .map(|p| {
-                            MetricSample::new(
-                                p.id.clone(),
-                                p.label.clone(),
-                                p.kind,
-                                p.unit.clone(),
-                                p.value,
-                                ts_ms,
-                            )
-                        })
-                        .collect();
-                    if !batch.is_empty() {
+                let ts_ms = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as i64)
+                    .unwrap_or(0);
+                let batch: Vec<MetricSample> = snap
+                    .plottable
+                    .iter()
+                    .map(|p| {
+                        MetricSample::new(
+                            p.id.clone(),
+                            p.label.clone(),
+                            p.kind,
+                            p.unit.clone(),
+                            p.value,
+                            ts_ms,
+                        )
+                    })
+                    .collect();
+                if !batch.is_empty() {
+                    if let Some(store) = self.metrics_sink.as_mut() {
                         store.record(&batch);
+                    }
+                    if let Some(otel) = self.otel_sink.as_mut() {
+                        otel.record(&batch);
                     }
                 }
                 self.last_metrics_record = Instant::now();
@@ -1227,13 +1238,23 @@ impl eframe::App for FanApp {
                                     .changed()
                                 {
                                     dirty = true;
+                                    self.otel_sink = if self.settings.otel_enabled {
+                                        OtlpSink::spawn(self.settings.otel_endpoint.clone())
+                                    } else {
+                                        None
+                                    };
                                 }
                                 if self.settings.otel_enabled {
                                     ui.horizontal(|ui| {
                                         ui.label(t!("options.otel_endpoint").to_string());
-                                        dirty |= ui
+                                        if ui
                                             .text_edit_singleline(&mut self.settings.otel_endpoint)
-                                            .changed();
+                                            .changed()
+                                        {
+                                            dirty = true;
+                                            self.otel_sink =
+                                                OtlpSink::spawn(self.settings.otel_endpoint.clone());
+                                        }
                                     });
                                     ui.small(t!("options.otel_deferred_note").to_string());
                                 }

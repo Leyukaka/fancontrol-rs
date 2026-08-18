@@ -1,12 +1,11 @@
-//! Metric sinks for fancontrol-rs: local SQLite, CSV export, multi-sink fan-out.
-//!
-//! OpenTelemetry export lands after the local store path is stable
-//! (`specs/07-metrics-telemetry.md`).
+//! Metric sinks for fancontrol-rs: local SQLite, CSV export, OTLP/HTTP.
 
 mod multi;
+mod otlp;
 mod sqlite;
 
 pub use multi::{MultiSink, NullSink};
+pub use otlp::OtlpSink;
 pub use sqlite::{
     CsvExportOptions, SqliteMetricsStore, SqliteStoreConfig, default_metrics_db_path,
 };

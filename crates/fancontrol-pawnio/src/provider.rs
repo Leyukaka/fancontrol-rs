@@ -82,12 +82,12 @@ impl PawnioProvider {
         };
         let dimm_temp_note = match &dimm_temp {
             Some(d) if d.dimm_count() > 0 => format!(
-                "host.dimm.temp: {} DDR5 DIMM(s) via {} (experimental)",
+                "host.dimm.temp: {} DDR5 DIMM(s) via {}",
                 d.dimm_count(),
                 d.module_label()
             ),
             Some(d) => format!(
-                "host.dimm.temp: {} opened, no DDR5 SPD hub answered (experimental)",
+                "host.dimm.temp: {} opened, no DDR5 SPD hub answered",
                 d.module_label()
             ),
             None => "host.dimm.temp: unavailable (no SMBus module opened)".into(),
@@ -297,7 +297,7 @@ impl SensorProvider for PawnioProvider {
             for i in 0..dimm_temp.dimm_count() {
                 out.push(SensorDescriptor {
                     id: SensorId::new(format!("host.dimm{i}.temp")),
-                    name: format!("DIMM {i} Temp (experimental)"),
+                    name: format!("DIMM {i} Temp"),
                     kind: SensorKind::Temperature,
                     provider: "host".into(),
                     unit: Some("°C".into()),

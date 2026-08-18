@@ -37,8 +37,8 @@
 - **Fan control**: curves, profiles, live duty sliders, multi-sensor temperature graph. Works for case fans and **AIO fans on motherboard headers** (not a pump/RGB vendor app)
 - **Activity deck**: CPU load history + top processes (CPU % and RAM), filter and sort (default on, can be turned off in Options)
 - **Security**: [PawnIO](https://pawnio.eu/) only for Super I/O / EC. Never ships WinRing0 or other known-vulnerable ring-0 drivers
-- **Host sensors**: NVIDIA GPU multi-metric via fixed-path `nvidia-smi` (temp, power W, util, clocks, VRAM, fan %) + GPU detail panel; SSD/NVMe temps via DeviceIoControl (no PowerShell); **DDR5 DIMM temps** via PawnIO SMBus (`host.dimm{N}.temp`, experimental / owner-validated on AMD)
-- **Metrics**: graph multi-kind series (GPU power/util/…; CPU package W via PawnIO MSR on **AMD + Intel**; optional DRAM/limit on Intel RAPL), optional local SQLite store + CSV export; see `docs/METRICS_AND_OTEL.md`
+- **Host sensors**: NVIDIA GPU multi-metric via fixed-path `nvidia-smi` (temp, power W, util, clocks, VRAM, fan %) + GPU detail panel; SSD/NVMe temps via DeviceIoControl (no PowerShell); **DDR5 DIMM temps** via PawnIO SMBus (`host.dimm{N}.temp`, owner-validated on AMD)
+- **Metrics**: graph multi-kind series (GPU power/util/…; CPU package W via PawnIO MSR on **AMD + Intel**; optional DRAM/limit on Intel RAPL), optional local SQLite store + CSV export, optional OTLP/HTTP export; see `docs/METRICS_AND_OTEL.md`
 - **Updates**: **manual only** — Options → **Check for updates** (GitHub Releases API link). No background check, no auto-download, no silent install
 - **Start with Windows**: Options + first-run prompt (current-user Run key, no admin)
 - **Admin elevation**: Needs-admin dialog + top bar **Restart as Administrator** (UAC via `runas`; no silent elevation)
@@ -114,7 +114,7 @@ Rough map of the Windows landscape. Support always depends on your board and EC.
 
 ## Status
 
-**v0.5.1**. NCT668x + banked NCT (ROG B550-A) **certified**; other boards should work - **send logs to certify**. Domain panels (Sensors / GPU / CPU), multi-kind graph, CPU package power (AMD + Intel RAPL), **DDR5 DIMM temps** (SMBus, experimental), Activity deck, metrics store, Start with Windows, **Restart as Administrator** (UAC). Updates are **manual only**.  
+**v0.5.1**. NCT668x + banked NCT (ROG B550-A) **certified**; other boards should work - **send logs to certify**. Domain panels (Sensors / GPU / CPU), multi-kind graph, CPU package power (AMD + Intel RAPL), **DDR5 DIMM temps** (SMBus), Activity deck, metrics store, Start with Windows, **Restart as Administrator** (UAC). Updates are **manual only**.  
 Public source of truth: this repo ([Releases](https://github.com/Leyukaka/fancontrol-rs/releases), issues, PRs).
 
 | Crate | Role |
