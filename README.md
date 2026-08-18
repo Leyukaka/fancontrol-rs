@@ -5,10 +5,10 @@
 <h1 align="center">Fancontrol-RS</h1>
 
 <p align="center">
-  <strong>Windows fan control and monitoring for GPU CPU RAM activity written in Rust</strong><br>
+  <strong>Windows fan control and monitoring for GPU, CPU and RAM activity, written in Rust.</strong><br>
   Open-source option next to tools like FanControl and Argus Monitor.<br>
   Inspired by <a href="https://github.com/Rem0o/FanControl.Releases">FanControl</a> (Rem0o). Not affiliated.<br>
-  PawnIO only (no WinRing0) · profiles & curves · live UI
+  PawnIO only (no WinRing0) · profiles &amp; curves · AIO fans on motherboard headers · live UI
 </p>
 
 <p align="center">
@@ -20,12 +20,21 @@
 </p>
 
 <p align="center">
-  <img src="assets/screenshot.jpg" alt="fancontrol-rs UI: temps, fans, Activity deck, curves" width="920">
+  <img src="assets/screenshot.jpg" alt="fancontrol-rs: temperature graph, GPU/CPU panels, Activity deck" width="920">
+</p>
+
+<p align="center">
+  <img src="assets/screenshot-gpu.jpg" alt="GPU panel: NVIDIA core temp, power, utilization, VRAM" width="450">
+  <img src="assets/screenshot-cpu.jpg" alt="CPU panel: package power, temperature, load" width="450">
+</p>
+
+<p align="center">
+  <img src="assets/screenshot-curves.jpg" alt="Curve editor: temperature-to-duty profiles" width="920">
 </p>
 
 ## Features
 
-- **Fan control**: curves, profiles, live duty sliders, multi-sensor temperature graph
+- **Fan control**: curves, profiles, live duty sliders, multi-sensor temperature graph. Works for case fans and **AIO fans on motherboard headers** (not a pump/RGB vendor app)
 - **Activity deck**: CPU load history + top processes (CPU % and RAM), filter and sort (default on, can be turned off in Options)
 - **Security**: [PawnIO](https://pawnio.eu/) only for Super I/O / EC. Never ships WinRing0 or other known-vulnerable ring-0 drivers
 - **Host sensors**: NVIDIA GPU multi-metric via fixed-path `nvidia-smi` (temp, power W, util, clocks, VRAM, fan %) + GPU detail panel; SSD/NVMe temps via DeviceIoControl (no PowerShell); **DDR5 DIMM temps** via PawnIO SMBus (`host.dimm{N}.temp`, experimental / owner-validated on AMD)
@@ -68,7 +77,7 @@ Rough map of the Windows landscape. Support always depends on your board and EC.
 | MSI Afterburner | Free | **GPU** OC + GPU fans | GPU fan curve | Not a full motherboard fan suite | Mature (GPU) |
 | OEM apps (Armoury Crate, Gigabyte CC, …) | Free with board | Vendor board / RGB / fans | Varies | Heavy; brand-locked | Mature |
 | AIO / case apps (iCUE, CAM, …) | Free / freemium | Their pumps, fans, RGB | Good **inside** that ecosystem | Weak for random mobo headers | Mature niche |
-| **fancontrol-rs** (this repo) | MIT / Apache-2.0 | Fans + **Activity** (CPU load, top processes) | Curves, profiles, sliders, multi-sensor graph, metrics store | **PawnIO only** (no WinRing0); egui UI; **all boards welcome** - certified list is short until you send logs; binaries unsigned | Early (v0.5.x) |
+| **fancontrol-rs** (this repo) | MIT / Apache-2.0 | Fans + **GPU / CPU / RAM** monitoring | Curves, profiles, sliders, domain panels, multi-sensor graph, metrics store | **PawnIO only** (no WinRing0); AIO fans via mobo headers; egui UI; **all boards welcome** — certified list is short until you send logs; binaries unsigned | Early (v0.5.x) |
 
 **Quick pick**
 
@@ -80,7 +89,7 @@ Rough map of the Windows landscape. Support always depends on your board and EC.
 | Laptop EC control | NBFC |
 | GPU fans only | Afterburner |
 | Brand AIO / RGB ecosystem | iCUE, CAM, etc. |
-| Open source, PawnIO-only I/O, fan UI + CPU/RAM activity; help certify more boards with logs | **fancontrol-rs** |
+| Open source, PawnIO-only I/O, fan UI + GPU/CPU/RAM activity (including AIO fans on mobo headers); help certify more boards with logs | **fancontrol-rs** |
 
 ## Specs
 

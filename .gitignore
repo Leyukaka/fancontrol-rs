@@ -22,6 +22,8 @@ Thumbs.db
 # Maintainer / agent notes (not for public tree)
 AGENTS.local.md
 CLAUDE.local.md
+CLAUDE.md
+.claude/
 .grok/
 
 # Build artifacts

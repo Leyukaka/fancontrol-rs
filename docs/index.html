@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>fancontrol-rs: Windows fan control &amp; system activity in Rust</title>
-<meta name="description" content="Open-source Windows fan control and CPU/RAM activity monitor written in Rust. PawnIO only, no WinRing0. Curves, profiles, live UI.">
+<title>fancontrol-rs: Windows fan control and GPU / CPU / RAM monitoring in Rust</title>
+<meta name="description" content="Open-source Windows fan control and monitoring for GPU, CPU and RAM activity, written in Rust. PawnIO only, no WinRing0. Curves, profiles, live UI.">
 <link rel="icon" href="assets/icon.png">
 <style>
   :root {
@@ -115,6 +115,7 @@
     max-width: 100%;
     border-radius: var(--radius);
     border: 1px solid var(--border);
+    margin: 0 0 12px;
   }
 
   section { padding: 48px 0; border-top: 1px solid var(--border); }
@@ -203,8 +204,8 @@
   <img class="logo" src="assets/logo.svg" alt="fancontrol-rs logo">
   <h1>Fancontrol-RS</h1>
   <p class="tagline">
-    Windows fan control and system activity (CPU / RAM) monitoring, written in Rust.<br>
-    PawnIO only, no WinRing0. Curves, profiles, live UI.
+    Windows fan control and monitoring for GPU, CPU and RAM activity, written in Rust.<br>
+    PawnIO only, no WinRing0. Curves, profiles, AIO fans on motherboard headers.
   </p>
 
   <div class="badges">
@@ -221,7 +222,10 @@
   </div>
 
   <div class="shot">
-    <img src="assets/screenshot.jpg" alt="fancontrol-rs UI: temps, fans, Activity deck, curves">
+    <img src="assets/screenshot.jpg" alt="fancontrol-rs: temperature graph, GPU/CPU panels, Activity deck">
+    <img src="assets/screenshot-gpu.jpg" alt="GPU panel: NVIDIA core temp, power, utilization, VRAM">
+    <img src="assets/screenshot-cpu.jpg" alt="CPU panel: package power, temperature, load">
+    <img src="assets/screenshot-curves.jpg" alt="Curve editor: temperature-to-duty profiles">
   </div>
 </div>
 
@@ -230,7 +234,7 @@
   <div class="grid">
     <div class="card">
       <h3>Fan control</h3>
-      <p>Curves, profiles, live duty sliders, multi-sensor temperature graph.</p>
+      <p>Curves, profiles, live duty sliders, multi-sensor temperature graph. Case fans and AIO fans on motherboard headers (not a pump/RGB vendor app).</p>
     </div>
     <div class="card">
       <h3>Activity deck</h3>
@@ -242,7 +246,7 @@
     </div>
     <div class="card">
       <h3>Host sensors</h3>
-      <p>NVIDIA GPU temp via fixed-path <code>nvidia-smi</code>, SSD/NVMe temps via native DeviceIoControl (no PowerShell).</p>
+      <p>NVIDIA GPU multi-metric via fixed-path <code>nvidia-smi</code> (temp, power, util, clocks, VRAM) plus CPU package watts and optional DDR5 DIMM temps. SSD/NVMe via native DeviceIoControl (no PowerShell).</p>
     </div>
     <div class="card">
       <h3>Desktop UI</h3>

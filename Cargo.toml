@@ -43,7 +43,7 @@ egui_plot = "0.37"
 name = "fancontrol-rs"
 version.workspace = true
 edition.workspace = true
-description = "Windows fan control and CPU/RAM activity monitor in Rust (PawnIO)"
+description = "Windows fan control and GPU/CPU/RAM activity monitor in Rust (PawnIO)"
 license.workspace = true
 repository.workspace = true
 readme = "README.md"
@@ -84,7 +84,7 @@ winresource = "0.1"
 CompanyName = "Leyukaka"
 LegalCopyright = "Copyright (c) 2026 Leyukaka"
 OriginalFilename = "fancontrol-rs.exe"
-FileDescription = "Windows fan control and CPU/RAM activity (PawnIO)"
+FileDescription = "Windows fan control and GPU/CPU/RAM activity (PawnIO)"
 
 [profile.release]
 lto = true
