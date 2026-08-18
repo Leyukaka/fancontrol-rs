@@ -1,6 +1,6 @@
 # Roadmap
 
-Last aligned with product reality: **v0.5.1** (GPU N/A captions beside chips; domain panels; CPU package power AMD+Intel; DDR5 DIMM temps via SMBus; OTEL OTLP/HTTP export). See `specs/07-metrics-telemetry.md`, `specs/04-ui.md`, `docs/DIMM_TEMP.md`.
+Last aligned with product reality: **v0.5.2** (DIMM labels without experimental; OTEL OTLP/HTTP; domain panels; CPU package power AMD+Intel). See `specs/07-metrics-telemetry.md`, `specs/04-ui.md`, `docs/DIMM_TEMP.md`.
 
 ## Phase 0 - Foundation
 
