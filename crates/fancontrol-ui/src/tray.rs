@@ -117,7 +117,7 @@ fn build_state_icons() -> Result<[Icon; 3], String> {
 /// Blend every opaque-ish pixel toward `(r, g, b)`, keeping alpha untouched.
 fn tint(rgba: &[u8], r: u8, g: u8, b: u8) -> Vec<u8> {
     let mut out = rgba.to_vec();
-    for px in out.chunks_exact_mut(4) {
+    for px in out.as_chunks_mut::<4>().0 {
         if px[3] == 0 {
             continue;
         }

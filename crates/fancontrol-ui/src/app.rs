@@ -38,6 +38,12 @@ fn clamp_ui_height(v: f32, lo: f32, hi: f32) -> f32 {
     v.clamp(min_b, max_b)
 }
 
+/// ComboBox label: stored curve name, fallback to id if the name is empty.
+fn curve_combo_label(curve: &FanCurve) -> &str {
+    let n = curve.name.trim();
+    if n.is_empty() { curve.id.as_str() } else { n }
+}
+
 /// Default curve sensor: live CPU seed, else first CPU-like temp, else NCT668x-style id.
 fn default_cpu_curve_sensor(snap: &crate::poll::Snapshot) -> String {
     if let Some(id) = &snap.cpu_temp_id {
@@ -1677,7 +1683,15 @@ impl FanApp {
                             .profile
                             .assignments
                             .get(&c.id)
-                            .cloned()
+                            .map(|aid| {
+                                self.profile
+                                    .curves
+                                    .iter()
+                                    .find(|cv| cv.id.as_str() == aid)
+                                    .map(curve_combo_label)
+                                    .unwrap_or(aid.as_str())
+                                    .to_string()
+                            })
                             .unwrap_or_else(|| t!("dashboard.none").to_string());
                         egui::ComboBox::from_id_salt(format!("asg-{}", c.id))
                             .selected_text(cur)
@@ -1692,20 +1706,25 @@ impl FanApp {
                                     self.profile.assignments.remove(&c.id);
                                     self.profile.sensor_bindings.remove(&c.id);
                                 }
-                                let curve_ids: Vec<String> = self
+                                let curve_opts: Vec<(String, String)> = self
                                     .profile
                                     .curves
                                     .iter()
-                                    .map(|cv| cv.id.as_str().to_string())
+                                    .map(|cv| {
+                                        (
+                                            cv.id.as_str().to_string(),
+                                            curve_combo_label(cv).to_string(),
+                                        )
+                                    })
                                     .collect();
-                                for cid in curve_ids {
+                                for (cid, label) in curve_opts {
                                     let selected = self
                                         .profile
                                         .assignments
                                         .get(&c.id)
                                         .map(|x| x == &cid)
                                         .unwrap_or(false);
-                                    if ui.selectable_label(selected, &cid).clicked() {
+                                    if ui.selectable_label(selected, label).clicked() {
                                         self.profile.assignments.insert(c.id.clone(), cid);
                                         self.profile
                                             .sensor_bindings
@@ -2398,5 +2417,23 @@ impl FanApp {
         // Optimistic UI skip only after queue success drain; clear on failure.
         self.last_applied_duty.remove(id);
         self.writes.enqueue(id, percent);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::curve_combo_label;
+    use fancontrol_core::FanCurve;
+
+    #[test]
+    fn combo_label_uses_name_not_id() {
+        let cv = FanCurve::linear("curve2", "Full Speed", 30.0, 80.0, 20, 100);
+        assert_eq!(curve_combo_label(&cv), "Full Speed");
+    }
+
+    #[test]
+    fn combo_label_falls_back_to_id_when_name_blank() {
+        let cv = FanCurve::linear("curve3", "   ", 30.0, 80.0, 20, 100);
+        assert_eq!(curve_combo_label(&cv), "curve3");
     }
 }
