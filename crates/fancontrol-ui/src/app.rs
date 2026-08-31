@@ -1710,7 +1710,12 @@ impl FanApp {
                                     .profile
                                     .curves
                                     .iter()
-                                    .map(|cv| (cv.id.as_str().to_string(), curve_combo_label(cv).to_string()))
+                                    .map(|cv| {
+                                        (
+                                            cv.id.as_str().to_string(),
+                                            curve_combo_label(cv).to_string(),
+                                        )
+                                    })
                                     .collect();
                                 for (cid, label) in curve_opts {
                                     let selected = self
