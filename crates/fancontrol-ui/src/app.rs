@@ -41,11 +41,7 @@ fn clamp_ui_height(v: f32, lo: f32, hi: f32) -> f32 {
 /// ComboBox label: stored curve name, fallback to id if the name is empty.
 fn curve_combo_label(curve: &FanCurve) -> &str {
     let n = curve.name.trim();
-    if n.is_empty() {
-        curve.id.as_str()
-    } else {
-        n
-    }
+    if n.is_empty() { curve.id.as_str() } else { n }
 }
 
 /// Default curve sensor: live CPU seed, else first CPU-like temp, else NCT668x-style id.
