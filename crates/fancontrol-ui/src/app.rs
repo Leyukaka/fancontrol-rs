@@ -1687,7 +1687,7 @@ impl FanApp {
                                 self.profile
                                     .curves
                                     .iter()
-                                    .find(|cv| cv.id == *aid)
+                                    .find(|cv| cv.id.as_str() == aid)
                                     .map(curve_combo_label)
                                     .unwrap_or(aid.as_str())
                                     .to_string()
@@ -1710,7 +1710,7 @@ impl FanApp {
                                     .profile
                                     .curves
                                     .iter()
-                                    .map(|cv| (cv.id.clone(), curve_combo_label(cv).to_string()))
+                                    .map(|cv| (cv.id.as_str().to_string(), curve_combo_label(cv).to_string()))
                                     .collect();
                                 for (cid, label) in curve_opts {
                                     let selected = self
