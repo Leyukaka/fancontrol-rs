@@ -34,7 +34,7 @@
 | `fancontrol-ui` | Desktop UI (egui + eframe **0.36**): live view, sliders, curves, graph, options |
 | `fancontrol-rs` | Binary: CLI harness + `ui` subcommand |
 
-Workspace version: **0.5.2** (see root `Cargo.toml`).
+Workspace version: **0.5.3** (see root `Cargo.toml`).
 
 ## Key design decisions
 

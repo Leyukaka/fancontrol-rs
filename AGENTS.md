@@ -54,7 +54,7 @@ Rust edition 2024, stable toolchain pinned via `rust-toolchain.toml` (rustfmt + 
 
 ## Status (keep updated)
 
-- Product line: **v0.5.2**. Roadmap and feature checklist: `specs/06-roadmap.md`.
+- Product line: **v0.5.3**. Roadmap and feature checklist: `specs/06-roadmap.md`.
 - Hardware backend: PawnIO + NCT668x (validated `0xD5` / banked `0xD4`) + host GPU/storage + CPU package power + DDR5 DIMM temps. Details: `docs/SUPPORTED_HARDWARE.md`, `docs/DIMM_TEMP.md`, `specs/03-hardware-backend.md`.
 - UI: egui 0.36, domain panels, multi-kind graph, activity deck, i18n (8 locales), manual update check only. `specs/04-ui.md`.
 - Metrics store (SQLite/CSV) shipped; OTLP/HTTP export opt-in. `specs/07-metrics-telemetry.md`.
