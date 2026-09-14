@@ -34,7 +34,7 @@ Last aligned with product reality: **v0.5.3** (Controls combo shows curve name; 
 - [x] Multi-sensor graph (`egui_plot`) + sensor picker + per-control curve binding
 - [x] Graph window 10/20/30/60 min + sample interval
 - [x] Shader / gallery graph styles (`shaders/`)
-- [x] Activity deck (CPU load + top processes CPU/RAM, filter; opt-in Options) - v0.3.0
+- [x] Activity deck (CPU load + top processes CPU/RAM, filter; top bar + Options) - v0.3.0
 - [x] PawnIO install/admin dialog
 - [x] Restart as Administrator (UAC `runas` button) - v0.4.1
 - [x] Profile UX (switch / last-used / startup)

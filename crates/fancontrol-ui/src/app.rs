@@ -619,6 +619,18 @@ impl eframe::App for FanApp {
                     }
                     if ui
                         .selectable_label(
+                            self.settings.show_activity_deck,
+                            t!("top_bar.activity_toggle").to_string(),
+                        )
+                        .on_hover_text(t!("top_bar.activity_toggle_tooltip").to_string())
+                        .clicked()
+                    {
+                        self.settings.show_activity_deck = !self.settings.show_activity_deck;
+                        self.apply_activity_deck_gate();
+                        self.settings.save();
+                    }
+                    if ui
+                        .selectable_label(
                             self.settings.show_cpu_panel,
                             t!("top_bar.cpu_toggle").to_string(),
                         )
@@ -1070,16 +1082,7 @@ impl eframe::App for FanApp {
                                         )
                                         .changed()
                                     {
-                                        fancontrol_plugins::cpu_activity::set_enabled(
-                                            self.settings.show_activity_deck,
-                                        );
-                                        fancontrol_plugins::cpu_activity::set_sample_processes(
-                                            self.settings.show_activity_deck
-                                                && !matches!(
-                                                    self.settings.activity_mode,
-                                                    ActivityMode::LoadOnly
-                                                ),
-                                        );
+                                        self.apply_activity_deck_gate();
                                         dirty = true;
                                     }
                                     if self.settings.show_activity_deck {
@@ -1578,6 +1581,15 @@ impl eframe::App for FanApp {
 }
 
 impl FanApp {
+    /// Gate the CPU-activity worker from `show_activity_deck` + mode.
+    fn apply_activity_deck_gate(&self) {
+        let on = self.settings.show_activity_deck;
+        fancontrol_plugins::cpu_activity::set_enabled(on);
+        fancontrol_plugins::cpu_activity::set_sample_processes(
+            on && !matches!(self.settings.activity_mode, ActivityMode::LoadOnly),
+        );
+    }
+
     fn ui_temps_column(&mut self, ui: &mut egui::Ui, snap: &crate::poll::Snapshot) {
         ui.heading(t!("dashboard.temperatures").to_string());
         ui.separator();

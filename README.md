@@ -35,7 +35,7 @@
 ## Features
 
 - **Fan control**: curves, profiles, live duty sliders, multi-sensor temperature graph. Works for case fans and **AIO fans on motherboard headers** (not a pump/RGB vendor app)
-- **Activity deck**: CPU load history + top processes (CPU % and RAM), filter and sort (default on, can be turned off in Options)
+- **Activity deck**: CPU load history + top processes (CPU % and RAM), filter and sort (default on; toggle from the top bar or Options)
 - **Security**: [PawnIO](https://pawnio.eu/) only for Super I/O / EC. Never ships WinRing0 or other known-vulnerable ring-0 drivers
 - **Host sensors**: NVIDIA GPU multi-metric via fixed-path `nvidia-smi` (temp, power W, util, clocks, VRAM, fan %) + GPU detail panel; SSD/NVMe temps via DeviceIoControl (no PowerShell); **DDR5 DIMM temps** via PawnIO SMBus (`host.dimm{N}.temp`, owner-validated on AMD)
 - **Metrics**: graph multi-kind series (GPU power/util/…; CPU package W via PawnIO MSR on **AMD + Intel**; optional DRAM/limit on Intel RAPL), optional local SQLite store + CSV export, optional OTLP/HTTP export; see `docs/METRICS_AND_OTEL.md`

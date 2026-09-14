@@ -79,7 +79,7 @@ pub struct UiSettings {
     /// until the poller runs.
     #[serde(default)]
     pub graph_sensor_ids_seeded: bool,
-    /// Activity deck (CPU load + top processes). Toggle in Options; **default on**.
+    /// Activity deck (CPU load + top processes). Top bar + Options; **default on**.
     #[serde(default = "default_true")]
     pub show_activity_deck: bool,
     /// GPU detail panel (power, util, clocks, VRAM). Shares the top visualization area.
