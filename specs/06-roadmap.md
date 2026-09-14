@@ -1,6 +1,6 @@
 # Roadmap
 
-Last aligned with product reality: **v0.5.3** (Controls combo shows curve name; DIMM labels without experimental; OTEL OTLP/HTTP). See `specs/07-metrics-telemetry.md`, `specs/04-ui.md`, `docs/DIMM_TEMP.md`.
+Last aligned with product reality: **v0.5.4** (Activity top-bar toggle; UI card/table polish). See `specs/07-metrics-telemetry.md`, `specs/04-ui.md`, `docs/DIMM_TEMP.md`.
 
 ## Phase 0 - Foundation
 
