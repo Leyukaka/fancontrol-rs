@@ -268,15 +268,19 @@ fn show_process_table(
         .max(1.0);
     let max_ram = rows.iter().map(|r| r.ram_bytes).max().unwrap_or(1).max(1) as f64;
 
-    egui::ScrollArea::vertical()
+    let col_spacing = 10.0;
+    let metrics_w = COL_CPU_W + COL_RAM_W + COL_PID_W + col_spacing * 3.0;
+    let name_w = (ui.available_width() - metrics_w).clamp(80.0, COL_NAME_W);
+
+    egui::ScrollArea::both()
         .auto_shrink([false, true])
         .show(ui, |ui| {
             egui::Grid::new("activity_proc_grid")
                 .num_columns(4)
-                .spacing([10.0, 6.0])
+                .spacing([col_spacing, 6.0])
                 .striped(true)
                 .show(ui, |ui| {
-                    cell(ui, COL_NAME_W, |ui| {
+                    cell(ui, name_w, |ui| {
                         ui.small(RichText::new(t!("activity.col_name").to_string()).strong());
                     });
                     cell(ui, COL_CPU_W, |ui| {
@@ -297,7 +301,7 @@ fn show_process_table(
                         } else {
                             ui.visuals().text_color()
                         };
-                        cell(ui, COL_NAME_W, |ui| {
+                        cell(ui, name_w, |ui| {
                             ui.add(
                                 egui::Label::new(
                                     RichText::new(truncate_name(&r.name, 28)).color(name_color),
