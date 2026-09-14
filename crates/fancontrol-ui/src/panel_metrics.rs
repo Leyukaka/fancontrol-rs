@@ -7,13 +7,26 @@ use egui_plot::{Line, Plot};
 /// Fixed sparkline height so GPU and CPU power graphs align.
 pub const POWER_SPARKLINE_HEIGHT: f32 = 72.0;
 
+/// Chip box size, shared by every GPU/CPU metric chip so the rows line up.
+const CHIP_MIN_WIDTH: f32 = 84.0;
+const CHIP_MIN_HEIGHT: f32 = 46.0;
+/// Padding inside a chip, between the box border and the label/value.
+const CHIP_MARGIN: Margin = Margin {
+    left: 8,
+    right: 8,
+    top: 6,
+    bottom: 6,
+};
+const CHIP_VALUE_SIZE: f32 = 18.0;
+const CHIP_NA_SIZE: f32 = 14.0;
+
 /// Card frame around a domain panel (GPU / CPU) so headers and plots share padding.
 /// Expands to the full **available height** of the parent (equal Sensors/GPU/CPU slots).
 pub fn domain_card(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui)) {
     let fill = egui::vec2(ui.available_width(), ui.available_height().max(40.0));
     ui.allocate_ui(fill, |ui| {
         Frame::group(ui.style())
-            .inner_margin(Margin::same(8))
+            .inner_margin(Margin::symmetric(12, 10))
             .stroke(Stroke::new(
                 1.0,
                 ui.visuals().widgets.noninteractive.bg_stroke.color,
@@ -48,77 +61,59 @@ pub fn metric_bar(ui: &mut egui::Ui, frac: f32, color: Color32) {
     }
 }
 
-/// Boxed temperature readout (`"-"` when unavailable).
+/// Boxed metric readout: caption on top, value below, uniform padding and box size.
+/// Missing values print the localized `n/a` instead of leaving the box empty.
+fn metric_chip(ui: &mut egui::Ui, label: String, value: Option<(String, Color32)>) -> Response {
+    Frame::group(ui.style())
+        .inner_margin(CHIP_MARGIN)
+        .show(ui, |ui| {
+            ui.set_min_width(CHIP_MIN_WIDTH);
+            ui.set_min_height(CHIP_MIN_HEIGHT);
+            ui.vertical(|ui| {
+                ui.small(label);
+                ui.add_space(2.0);
+                match value {
+                    Some((text, color)) => {
+                        ui.label(
+                            RichText::new(text)
+                                .monospace()
+                                .strong()
+                                .size(CHIP_VALUE_SIZE)
+                                .color(color),
+                        );
+                    }
+                    None => {
+                        let dim = ui.visuals().weak_text_color();
+                        ui.label(
+                            RichText::new(t!("common.na").to_string())
+                                .monospace()
+                                .size(CHIP_NA_SIZE)
+                                .color(dim),
+                        );
+                    }
+                }
+            });
+        })
+        .response
+}
+
+/// Boxed temperature readout (`n/a` when unavailable).
 pub fn temp_chip(ui: &mut egui::Ui, label: String, value: Option<f64>, colorize: bool) -> Response {
-    ui.group(|ui| {
-        ui.set_min_width(72.0);
-        ui.set_min_height(48.0);
-        ui.vertical(|ui| {
-            ui.small(label);
-            match value {
-                Some(t) => {
-                    let c = if colorize {
-                        temp_color(t as f32)
-                    } else {
-                        Color32::LIGHT_GRAY
-                    };
-                    ui.label(
-                        RichText::new(format!("{t:.0}°C"))
-                            .monospace()
-                            .strong()
-                            .size(18.0)
-                            .color(c),
-                    );
-                }
-                None => {
-                    ui.label(
-                        RichText::new("-")
-                            .monospace()
-                            .strong()
-                            .size(18.0)
-                            .color(Color32::DARK_GRAY),
-                    );
-                }
-            }
-        });
-    })
-    .response
-}
-
-/// Boxed percentage readout.
-pub fn load_chip(ui: &mut egui::Ui, label: String, value: Option<f64>) {
-    ui.group(|ui| {
-        ui.set_min_width(72.0);
-        ui.set_min_height(48.0);
-        ui.vertical(|ui| {
-            ui.small(label);
-            match value {
-                Some(p) => {
-                    ui.label(
-                        RichText::new(format!("{p:.0}%"))
-                            .monospace()
-                            .strong()
-                            .size(18.0)
-                            .color(load_color(p as f32 / 100.0)),
-                    );
-                }
-                None => {
-                    ui.label(
-                        RichText::new("-")
-                            .monospace()
-                            .strong()
-                            .size(18.0)
-                            .color(Color32::DARK_GRAY),
-                    );
-                }
-            }
-        });
+    let value = value.map(|t| {
+        let c = if colorize {
+            temp_color(t as f32)
+        } else {
+            Color32::LIGHT_GRAY
+        };
+        (format!("{t:.0}°C"), c)
     });
+    metric_chip(ui, label, value)
 }
 
-/// Empty chip slot to keep a 3-chip row aligned across panels.
-pub fn empty_chip(ui: &mut egui::Ui, label: String) {
-    temp_chip(ui, label, None, false);
+/// Boxed percentage readout (`n/a` when unavailable).
+pub fn load_chip(ui: &mut egui::Ui, label: String, value: Option<f64>) {
+    let value = value.map(|p| (format!("{p:.0}%"), load_color(p as f32 / 100.0)));
+    metric_chip(ui, label, value);
 }
 
 /// Power row + bar. Always allocates bar space (grey if no value) so layout height is stable.
@@ -139,8 +134,8 @@ pub fn power_metric_row(
     let text = match (power_w, limit_w) {
         (Some(d), Some(l)) => format!("{d:.0} / {l:.0} W"),
         (Some(d), None) => format!("{d:.0} W"),
-        (None, Some(l)) => format!("- / {l:.0} W"),
-        (None, None) => "-".into(),
+        (None, Some(l)) => format!("{} / {l:.0} W", t!("common.na")),
+        (None, None) => t!("common.na").to_string(),
     };
     let color = if power_w.is_some() {
         power_color(frac)
@@ -172,8 +167,9 @@ pub fn power_history_block(
     history: Option<&TempHistory>,
     limit_w: Option<f32>,
 ) {
-    ui.add_space(6.0);
+    ui.add_space(8.0);
     ui.small(title.to_string());
+    ui.add_space(2.0);
     if let Some(history) = history
         && !history.is_empty()
     {
@@ -184,13 +180,14 @@ pub fn power_history_block(
             egui::vec2(ui.available_width(), POWER_SPARKLINE_HEIGHT),
             egui::Sense::hover(),
         );
+        let dim = ui.visuals().weak_text_color();
         ui.painter().rect_filled(rect, 2.0, Color32::from_gray(25));
         ui.painter().text(
             rect.center(),
             egui::Align2::CENTER_CENTER,
-            "-",
+            t!("common.na").to_string(),
             egui::FontId::proportional(12.0),
-            Color32::DARK_GRAY,
+            dim,
         );
     }
 }

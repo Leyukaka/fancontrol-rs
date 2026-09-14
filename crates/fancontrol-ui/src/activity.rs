@@ -91,6 +91,7 @@ pub fn show_activity_deck(ui: &mut egui::Ui, view: ActivityDeckView<'_>) {
             }
         });
     });
+    ui.add_space(4.0);
 
     let show_load = matches!(mode, ActivityMode::Both | ActivityMode::LoadOnly);
     let show_procs = matches!(mode, ActivityMode::Both | ActivityMode::ProcessesOnly);
@@ -149,6 +150,46 @@ fn show_load_plot(
         });
 }
 
+/// Fixed process-table column widths: headers stay over their values and the
+/// columns stop jumping as process names / RAM figures change between samples.
+const COL_NAME_W: f32 = 150.0;
+const COL_CPU_W: f32 = 104.0;
+const COL_RAM_W: f32 = 122.0;
+const COL_PID_W: f32 = 56.0;
+/// Inline bar drawn in the CPU / RAM cells.
+const BAR_SIZE: egui::Vec2 = egui::vec2(48.0, 10.0);
+
+/// One fixed-width, left-aligned grid cell.
+fn cell(ui: &mut egui::Ui, width: f32, add_contents: impl FnOnce(&mut egui::Ui)) {
+    ui.allocate_ui_with_layout(
+        egui::vec2(width, ui.spacing().interact_size.y),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            ui.set_min_width(width);
+            add_contents(ui);
+        },
+    );
+}
+
+/// Small filled bar used as an inline gauge in the CPU / RAM columns.
+fn bar_cell(ui: &mut egui::Ui, frac: f32, fill: Color32) {
+    let (rect, _) = ui.allocate_exact_size(BAR_SIZE, Sense::hover());
+    ui.painter().rect_filled(
+        egui::Rect::from_min_size(
+            rect.min,
+            egui::vec2(rect.width() * frac.clamp(0.0, 1.0), rect.height()),
+        ),
+        2.0,
+        fill,
+    );
+    ui.painter().rect_stroke(
+        rect,
+        2.0,
+        egui::Stroke::new(1.0, Color32::from_gray(60)),
+        egui::StrokeKind::Outside,
+    );
+}
+
 fn show_process_table(
     ui: &mut egui::Ui,
     processes: &[ProcessRow],
@@ -156,16 +197,19 @@ fn show_process_table(
     filter: &mut String,
     top_n: usize,
 ) {
+    // Filter sits right after the "Processes" caption instead of floating against
+    // the far edge of the deck (where it used to clip on narrow windows).
     ui.horizontal(|ui| {
         ui.small(t!("activity.processes").to_string());
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.add(
-                egui::TextEdit::singleline(filter)
-                    .desired_width(120.0)
-                    .hint_text(t!("activity.filter_hint").to_string()),
-            );
-        });
+        ui.add_space(6.0);
+        let filter_w = ui.available_width().clamp(80.0, 140.0);
+        ui.add(
+            egui::TextEdit::singleline(filter)
+                .desired_width(filter_w)
+                .hint_text(t!("activity.filter_hint").to_string()),
+        );
     });
+    ui.add_space(2.0);
 
     ui.horizontal(|ui| {
         ui.small(t!("activity.sort").to_string());
@@ -229,13 +273,21 @@ fn show_process_table(
         .show(ui, |ui| {
             egui::Grid::new("activity_proc_grid")
                 .num_columns(4)
-                .spacing([8.0, 4.0])
+                .spacing([10.0, 6.0])
                 .striped(true)
                 .show(ui, |ui| {
-                    ui.small(RichText::new(t!("activity.col_name").to_string()).strong());
-                    ui.small(RichText::new(t!("activity.col_cpu").to_string()).strong());
-                    ui.small(RichText::new(t!("activity.col_ram").to_string()).strong());
-                    ui.small(RichText::new("PID").strong());
+                    cell(ui, COL_NAME_W, |ui| {
+                        ui.small(RichText::new(t!("activity.col_name").to_string()).strong());
+                    });
+                    cell(ui, COL_CPU_W, |ui| {
+                        ui.small(RichText::new(t!("activity.col_cpu").to_string()).strong());
+                    });
+                    cell(ui, COL_RAM_W, |ui| {
+                        ui.small(RichText::new(t!("activity.col_ram").to_string()).strong());
+                    });
+                    cell(ui, COL_PID_W, |ui| {
+                        ui.small(RichText::new("PID").strong());
+                    });
                     ui.end_row();
 
                     for r in rows {
@@ -245,53 +297,32 @@ fn show_process_table(
                         } else {
                             ui.visuals().text_color()
                         };
-                        ui.colored_label(name_color, truncate_name(&r.name, 28));
+                        cell(ui, COL_NAME_W, |ui| {
+                            ui.add(
+                                egui::Label::new(
+                                    RichText::new(truncate_name(&r.name, 28)).color(name_color),
+                                )
+                                .truncate(),
+                            )
+                            .on_hover_text(&r.name);
+                        });
 
                         // CPU bar + %
                         let cpu_frac = (r.cpu_pct / max_cpu).clamp(0.0, 1.0) as f32;
-                        ui.horizontal(|ui| {
-                            let (rect, _) =
-                                ui.allocate_exact_size(egui::vec2(48.0, 10.0), Sense::hover());
-                            let fill = load_color(r.cpu_pct as f32);
-                            ui.painter().rect_filled(
-                                egui::Rect::from_min_size(
-                                    rect.min,
-                                    egui::vec2(rect.width() * cpu_frac, rect.height()),
-                                ),
-                                2.0,
-                                fill,
-                            );
-                            ui.painter().rect_stroke(
-                                rect,
-                                2.0,
-                                egui::Stroke::new(1.0, Color32::from_gray(60)),
-                                egui::StrokeKind::Outside,
-                            );
+                        cell(ui, COL_CPU_W, |ui| {
+                            bar_cell(ui, cpu_frac, load_color(r.cpu_pct as f32));
                             ui.monospace(format!("{:.0}%", r.cpu_pct));
                         });
 
                         let ram_frac = (r.ram_bytes as f64 / max_ram).clamp(0.0, 1.0) as f32;
-                        ui.horizontal(|ui| {
-                            let (rect, _) =
-                                ui.allocate_exact_size(egui::vec2(48.0, 10.0), Sense::hover());
-                            ui.painter().rect_filled(
-                                egui::Rect::from_min_size(
-                                    rect.min,
-                                    egui::vec2(rect.width() * ram_frac, rect.height()),
-                                ),
-                                2.0,
-                                Color32::from_rgb(100, 140, 220),
-                            );
-                            ui.painter().rect_stroke(
-                                rect,
-                                2.0,
-                                egui::Stroke::new(1.0, Color32::from_gray(60)),
-                                egui::StrokeKind::Outside,
-                            );
+                        cell(ui, COL_RAM_W, |ui| {
+                            bar_cell(ui, ram_frac, Color32::from_rgb(100, 140, 220));
                             ui.monospace(format_bytes(r.ram_bytes));
                         });
 
-                        ui.monospace(format!("{}", r.pid));
+                        cell(ui, COL_PID_W, |ui| {
+                            ui.monospace(format!("{}", r.pid));
+                        });
                         ui.end_row();
                     }
                 });

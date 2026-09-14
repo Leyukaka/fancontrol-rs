@@ -1,5 +1,6 @@
 _version: 1
 
+common.na: "利用不可"
 common.close: "閉じる"
 common.save: "保存"
 common.cancel: "キャンセル"

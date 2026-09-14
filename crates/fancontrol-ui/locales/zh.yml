@@ -1,5 +1,6 @@
 _version: 1
 
+common.na: "不可用"
 common.close: "关闭"
 common.save: "保存"
 common.cancel: "取消"

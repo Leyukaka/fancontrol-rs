@@ -1,5 +1,6 @@
 _version: 1
 
+common.na: "k. A."
 common.close: "Schließen"
 common.save: "Speichern"
 common.cancel: "Abbrechen"

@@ -2,7 +2,7 @@
 
 use crate::graph::TempHistory;
 use crate::panel_metrics::{
-    domain_card, empty_chip, load_chip, power_history_block, power_metric_row, temp_chip,
+    domain_card, load_chip, power_history_block, power_metric_row, temp_chip,
 };
 use crate::poll::CpuSnap;
 use eframe::egui::{self, Color32, RichText};
@@ -16,6 +16,7 @@ pub fn show_cpu_panel(ui: &mut egui::Ui, cpu: &CpuSnap, power_history: Option<&T
                 ui.small(t!("cpu.read_only_note").to_string());
             });
         });
+        ui.add_space(4.0);
 
         if cpu.temp_c.is_none() && cpu.power_w.is_none() && cpu.load_pct.is_none() {
             ui.colored_label(Color32::GRAY, t!("cpu.none").to_string());
@@ -30,15 +31,15 @@ pub fn show_cpu_panel(ui: &mut egui::Ui, cpu: &CpuSnap, power_history: Option<&T
                 .size(16.0),
         );
 
-        // Chip row: Temp | Load | empty (3 slots like GPU Core|Hot Spot|Memory).
-        ui.add_space(4.0);
+        // Chip row: Temp | Load. No filler chip: an empty box reads as broken,
+        // and the GPU row's third chip now carries its own `n/a`.
+        ui.add_space(6.0);
         ui.horizontal(|ui| {
             temp_chip(ui, t!("cpu.temp").to_string(), cpu.temp_c, true);
             load_chip(ui, t!("cpu.load").to_string(), cpu.load_pct);
-            empty_chip(ui, " ".to_string());
         });
 
-        ui.add_space(6.0);
+        ui.add_space(8.0);
 
         // Power row + bar (always reserves height).
         power_metric_row(

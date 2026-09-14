@@ -31,6 +31,50 @@ const GRAPH_WINDOWS: [u16; 4] = [10, 20, 30, 60];
 const GRAPH_SAMPLES: [u16; 4] = [1, 2, 5, 10];
 const PAWNIO_URL: &str = "https://pawnio.eu";
 
+/// Width reserved for the right-hand value in the Temperatures / Fans lists.
+const LIST_VALUE_W: f32 = 76.0;
+/// Vertical padding around one list row, so labels never touch the row above.
+const LIST_ROW_MARGIN: egui::Margin = egui::Margin {
+    left: 2,
+    right: 2,
+    top: 3,
+    bottom: 3,
+};
+
+/// One `label … value` row of the Temperatures / Fans lists.
+///
+/// The value owns a fixed column on the right and the label truncates into what
+/// is left, so a long sensor name can no longer collide with its reading.
+/// Returns `true` when the label was clicked (rename).
+fn list_row(ui: &mut egui::Ui, label: &str, id: &str, value: impl FnOnce(&mut egui::Ui)) -> bool {
+    let mut clicked = false;
+    egui::Frame::NONE
+        .inner_margin(LIST_ROW_MARGIN)
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                let label_w = (ui.available_width() - LIST_VALUE_W - 8.0).max(48.0);
+                ui.allocate_ui_with_layout(
+                    egui::vec2(label_w, ui.spacing().interact_size.y),
+                    egui::Layout::left_to_right(egui::Align::Center),
+                    |ui| {
+                        ui.set_min_width(label_w);
+                        clicked = ui
+                            .add(
+                                egui::Label::new(label)
+                                    .truncate()
+                                    .sense(egui::Sense::click()),
+                            )
+                            .on_hover_text(format!("{label}\n{}", t!("dashboard.click_to_rename")))
+                            .clicked();
+                    },
+                );
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), value);
+            });
+            ui.small(id);
+        });
+    clicked
+}
+
 /// `f32::clamp` panics when `lo > hi`. Layout heights are dynamic; always order bounds.
 fn clamp_ui_height(v: f32, lo: f32, hi: f32) -> f32 {
     let min_b = lo.min(hi);
@@ -1600,19 +1644,12 @@ impl FanApp {
                     ui.label(t!("dashboard.none").to_string());
                 }
                 for (id, label, v) in &snap.temps {
-                    ui.horizontal(|ui| {
-                        if ui
-                            .add(egui::Label::new(label.as_str()).sense(egui::Sense::click()))
-                            .on_hover_text(t!("dashboard.click_to_rename").to_string())
-                            .clicked()
-                        {
-                            self.begin_rename(id, label, false);
-                        }
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            ui.monospace(format!("{v:5.1} °C"));
-                        });
+                    let clicked = list_row(ui, label, id, |ui| {
+                        ui.monospace(format!("{v:5.1} °C"));
                     });
-                    ui.small(id);
+                    if clicked {
+                        self.begin_rename(id, label, false);
+                    }
                 }
             });
     }
@@ -1630,23 +1667,16 @@ impl FanApp {
                 ui.label(t!("dashboard.none").to_string());
             }
             for (id, label, v) in fans {
-                ui.horizontal(|ui| {
-                    if ui
-                        .add(egui::Label::new(label.as_str()).sense(egui::Sense::click()))
-                        .on_hover_text(t!("dashboard.click_to_rename").to_string())
-                        .clicked()
-                    {
-                        self.begin_rename(id, label, false);
+                let clicked = list_row(ui, label, id, |ui| {
+                    if *v < 1.0 {
+                        ui.weak("0");
+                    } else {
+                        ui.monospace(format!("{v:6.0}"));
                     }
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if *v < 1.0 {
-                            ui.weak("0");
-                        } else {
-                            ui.monospace(format!("{v:6.0}"));
-                        }
-                    });
                 });
-                ui.small(id);
+                if clicked {
+                    self.begin_rename(id, label, false);
+                }
             }
         });
     }
@@ -1668,165 +1698,177 @@ impl FanApp {
                     ui.label(t!("dashboard.none").to_string());
                 }
                 for c in controls {
-                    ui.group(|ui| {
-                        if ui
-                            .add(egui::Label::new(c.label.as_str()).sense(egui::Sense::click()))
-                            .on_hover_text(t!("dashboard.click_to_rename").to_string())
-                            .clicked()
-                        {
-                            self.begin_rename(&c.id, &c.label, true);
-                        }
-                        ui.small(&c.id);
-                        let slot =
-                            c.id.rsplit("ctrl")
-                                .next()
-                                .and_then(|s| s.parse::<u32>().ok())
-                                .unwrap_or(0);
-                        if slot >= 9 {
-                            ui.small(t!("dashboard.ec_bios_warning").to_string());
-                        }
-                        if let Some(rpm) = c.rpm {
-                            ui.monospace(format!("RPM {rpm:.0}"));
-                        } else {
-                            ui.weak("RPM -");
-                        }
-
-                        let cur = self
-                            .profile
-                            .assignments
-                            .get(&c.id)
-                            .map(|aid| {
-                                self.profile
-                                    .curves
-                                    .iter()
-                                    .find(|cv| cv.id.as_str() == aid)
-                                    .map(curve_combo_label)
-                                    .unwrap_or(aid.as_str())
-                                    .to_string()
-                            })
-                            .unwrap_or_else(|| t!("dashboard.none").to_string());
-                        egui::ComboBox::from_id_salt(format!("asg-{}", c.id))
-                            .selected_text(cur)
-                            .show_ui(ui, |ui| {
-                                if ui
-                                    .selectable_label(
-                                        !self.profile.assignments.contains_key(&c.id),
-                                        t!("dashboard.none").to_string(),
-                                    )
-                                    .clicked()
-                                {
-                                    self.profile.assignments.remove(&c.id);
-                                    self.profile.sensor_bindings.remove(&c.id);
-                                }
-                                let curve_opts: Vec<(String, String)> = self
-                                    .profile
-                                    .curves
-                                    .iter()
-                                    .map(|cv| {
-                                        (
-                                            cv.id.as_str().to_string(),
-                                            curve_combo_label(cv).to_string(),
-                                        )
-                                    })
-                                    .collect();
-                                for (cid, label) in curve_opts {
-                                    let selected = self
-                                        .profile
-                                        .assignments
-                                        .get(&c.id)
-                                        .map(|x| x == &cid)
-                                        .unwrap_or(false);
-                                    if ui.selectable_label(selected, label).clicked() {
-                                        self.profile.assignments.insert(c.id.clone(), cid);
-                                        self.profile
-                                            .sensor_bindings
-                                            .entry(c.id.clone())
-                                            .or_insert_with(|| default_cpu_curve_sensor(snap));
-                                    }
-                                }
-                            });
-
-                        if self.profile.assignments.contains_key(&c.id) {
-                            // Curves regulate on CPU-like temps only (not SYSTIN/VRM/GPU).
-                            let cpu_temps: Vec<_> = snap
-                                .temps
-                                .iter()
-                                .filter(|(id, _, _)| is_cpu_temp_candidate(id))
-                                .collect();
-                            let stored = self.profile.sensor_bindings.get(&c.id).cloned();
-                            let bound_id = stored
-                                .filter(|id| is_cpu_temp_candidate(id))
-                                .filter(|id| cpu_temps.iter().any(|(sid, _, _)| sid == id))
-                                .unwrap_or_else(|| default_cpu_curve_sensor(snap));
-                            if self.profile.sensor_bindings.get(&c.id) != Some(&bound_id) {
-                                self.profile
-                                    .sensor_bindings
-                                    .insert(c.id.clone(), bound_id.clone());
+                    egui::Frame::group(ui.style())
+                        .inner_margin(egui::Margin::symmetric(10, 8))
+                        .show(ui, |ui| {
+                            if ui
+                                .add(
+                                    egui::Label::new(c.label.as_str())
+                                        .truncate()
+                                        .sense(egui::Sense::click()),
+                                )
+                                .on_hover_text(t!("dashboard.click_to_rename").to_string())
+                                .clicked()
+                            {
+                                self.begin_rename(&c.id, &c.label, true);
                             }
-                            let bound_label = cpu_temps
-                                .iter()
-                                .find(|(id, _, _)| *id == bound_id)
-                                .map(|(_, label, _)| (*label).clone())
-                                .unwrap_or_else(|| bound_id.clone());
-                            let bind_resp = egui::ComboBox::from_id_salt(format!("bind-{}", c.id))
-                                .selected_text(bound_label)
+                            ui.small(&c.id);
+                            let slot =
+                                c.id.rsplit("ctrl")
+                                    .next()
+                                    .and_then(|s| s.parse::<u32>().ok())
+                                    .unwrap_or(0);
+                            if slot >= 9 {
+                                ui.small(t!("dashboard.ec_bios_warning").to_string());
+                            }
+                            ui.add_space(4.0);
+                            if let Some(rpm) = c.rpm {
+                                ui.monospace(format!("RPM {rpm:.0}"));
+                            } else {
+                                ui.weak(format!("RPM {}", t!("common.na")));
+                            }
+                            ui.add_space(4.0);
+
+                            let cur = self
+                                .profile
+                                .assignments
+                                .get(&c.id)
+                                .map(|aid| {
+                                    self.profile
+                                        .curves
+                                        .iter()
+                                        .find(|cv| cv.id.as_str() == aid)
+                                        .map(curve_combo_label)
+                                        .unwrap_or(aid.as_str())
+                                        .to_string()
+                                })
+                                .unwrap_or_else(|| t!("dashboard.none").to_string());
+                            egui::ComboBox::from_id_salt(format!("asg-{}", c.id))
+                                .selected_text(cur)
                                 .show_ui(ui, |ui| {
-                                    for (id, label, _) in &cpu_temps {
-                                        let selected = *id == bound_id;
-                                        if ui.selectable_label(selected, label.as_str()).clicked()
-                                            && !selected
-                                        {
+                                    if ui
+                                        .selectable_label(
+                                            !self.profile.assignments.contains_key(&c.id),
+                                            t!("dashboard.none").to_string(),
+                                        )
+                                        .clicked()
+                                    {
+                                        self.profile.assignments.remove(&c.id);
+                                        self.profile.sensor_bindings.remove(&c.id);
+                                    }
+                                    let curve_opts: Vec<(String, String)> = self
+                                        .profile
+                                        .curves
+                                        .iter()
+                                        .map(|cv| {
+                                            (
+                                                cv.id.as_str().to_string(),
+                                                curve_combo_label(cv).to_string(),
+                                            )
+                                        })
+                                        .collect();
+                                    for (cid, label) in curve_opts {
+                                        let selected = self
+                                            .profile
+                                            .assignments
+                                            .get(&c.id)
+                                            .map(|x| x == &cid)
+                                            .unwrap_or(false);
+                                        if ui.selectable_label(selected, label).clicked() {
+                                            self.profile.assignments.insert(c.id.clone(), cid);
                                             self.profile
                                                 .sensor_bindings
-                                                .insert(c.id.clone(), (*id).clone());
+                                                .entry(c.id.clone())
+                                                .or_insert_with(|| default_cpu_curve_sensor(snap));
                                         }
                                     }
                                 });
-                            bind_resp
-                                .response
-                                .on_hover_text(t!("dashboard.curve_sensor_hover").to_string());
-                        }
 
-                        let locked = self.is_user_locked(&c.id);
-                        let hw_duty = c.duty.unwrap_or(0);
-                        if !locked && let Some(d) = c.duty {
-                            self.slider_state.insert(c.id.clone(), f32::from(d));
-                        }
-                        let mut value =
-                            *self.slider_state.get(&c.id).unwrap_or(&f32::from(hw_duty));
-
-                        let enabled = c.writable
-                            && !self.show_writes_consent
-                            && (self.options.allow_hw_write || c.id.starts_with("mock."));
-
-                        if c.duty.is_none() {
-                            ui.weak("duty -");
-                        }
-
-                        let mut changed = false;
-                        ui.add_enabled_ui(enabled, |ui| {
-                            let resp = ui.add(
-                                egui::Slider::new(&mut value, 0.0..=100.0)
-                                    .suffix("%")
-                                    .integer()
-                                    .clamping(egui::SliderClamping::Always),
-                            );
-                            changed = resp.changed();
-                            if resp.dragged() || resp.has_focus() {
-                                self.lock_user(&c.id, Duration::from_millis(2000));
+                            if self.profile.assignments.contains_key(&c.id) {
+                                // Curves regulate on CPU-like temps only (not SYSTIN/VRM/GPU).
+                                let cpu_temps: Vec<_> = snap
+                                    .temps
+                                    .iter()
+                                    .filter(|(id, _, _)| is_cpu_temp_candidate(id))
+                                    .collect();
+                                let stored = self.profile.sensor_bindings.get(&c.id).cloned();
+                                let bound_id = stored
+                                    .filter(|id| is_cpu_temp_candidate(id))
+                                    .filter(|id| cpu_temps.iter().any(|(sid, _, _)| sid == id))
+                                    .unwrap_or_else(|| default_cpu_curve_sensor(snap));
+                                if self.profile.sensor_bindings.get(&c.id) != Some(&bound_id) {
+                                    self.profile
+                                        .sensor_bindings
+                                        .insert(c.id.clone(), bound_id.clone());
+                                }
+                                let bound_label = cpu_temps
+                                    .iter()
+                                    .find(|(id, _, _)| *id == bound_id)
+                                    .map(|(_, label, _)| (*label).clone())
+                                    .unwrap_or_else(|| bound_id.clone());
+                                let bind_resp =
+                                    egui::ComboBox::from_id_salt(format!("bind-{}", c.id))
+                                        .selected_text(bound_label)
+                                        .show_ui(ui, |ui| {
+                                            for (id, label, _) in &cpu_temps {
+                                                let selected = *id == bound_id;
+                                                if ui
+                                                    .selectable_label(selected, label.as_str())
+                                                    .clicked()
+                                                    && !selected
+                                                {
+                                                    self.profile
+                                                        .sensor_bindings
+                                                        .insert(c.id.clone(), (*id).clone());
+                                                }
+                                            }
+                                        });
+                                bind_resp
+                                    .response
+                                    .on_hover_text(t!("dashboard.curve_sensor_hover").to_string());
                             }
-                            // Write on release, or keyboard/click step without drag.
-                            if resp.drag_stopped() || (changed && !resp.dragged()) {
-                                self.lock_user(&c.id, Duration::from_millis(1500));
-                                self.queue_write(&c.id, value);
+
+                            let locked = self.is_user_locked(&c.id);
+                            let hw_duty = c.duty.unwrap_or(0);
+                            if !locked && let Some(d) = c.duty {
+                                self.slider_state.insert(c.id.clone(), f32::from(d));
+                            }
+                            let mut value =
+                                *self.slider_state.get(&c.id).unwrap_or(&f32::from(hw_duty));
+
+                            let enabled = c.writable
+                                && !self.show_writes_consent
+                                && (self.options.allow_hw_write || c.id.starts_with("mock."));
+
+                            if c.duty.is_none() {
+                                ui.weak(format!("duty {}", t!("common.na")));
+                            }
+                            ui.add_space(2.0);
+
+                            let mut changed = false;
+                            ui.add_enabled_ui(enabled, |ui| {
+                                let resp = ui.add(
+                                    egui::Slider::new(&mut value, 0.0..=100.0)
+                                        .suffix("%")
+                                        .integer()
+                                        .clamping(egui::SliderClamping::Always),
+                                );
+                                changed = resp.changed();
+                                if resp.dragged() || resp.has_focus() {
+                                    self.lock_user(&c.id, Duration::from_millis(2000));
+                                }
+                                // Write on release, or keyboard/click step without drag.
+                                if resp.drag_stopped() || (changed && !resp.dragged()) {
+                                    self.lock_user(&c.id, Duration::from_millis(1500));
+                                    self.queue_write(&c.id, value);
+                                }
+                            });
+
+                            self.slider_state.insert(c.id.clone(), value);
+                            if !enabled {
+                                ui.small(t!("dashboard.locked").to_string());
                             }
                         });
-
-                        self.slider_state.insert(c.id.clone(), value);
-                        if !enabled {
-                            ui.small(t!("dashboard.locked").to_string());
-                        }
-                    });
                     ui.add_space(6.0);
                 }
             });
