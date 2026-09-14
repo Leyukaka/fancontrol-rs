@@ -516,12 +516,6 @@ checksum = "cd637ac531c60eb7fbc4684dc061c2d7d90d73d758181aa02eeff0464b9eee4b"
 
 [[package]]
 name = "base64"
-version = "0.22.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
-
-[[package]]
-name = "base64"
 version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
@@ -1545,11 +1539,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "899def5c37c4fd7b2664648c28120ecec138e4d395b459e5ca34f9cce2dd77fd"
 dependencies = [
  "cfg-if",
- "js-sys",
  "libc",
  "r-efi 5.3.0",
  "wasip2",
- "wasm-bindgen",
 ]
 
 [[package]]
@@ -1714,9 +1706,9 @@ dependencies = [
 
 [[package]]
 name = "granit-parser"
-version = "0.0.7"
+version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d03f81ad4732830d85cfd417a9f62cde6dadda4354d37d078a6084a19560aa2d"
+checksum = "48aa83cc6ac4dc610adf5501a5392b4bcc543b2c1f24eaf77469a96e31ec9abe"
 dependencies = [
  "arraydeque",
  "smallvec",
@@ -3184,9 +3176,9 @@ dependencies = [
 
 [[package]]
 name = "rust-i18n"
-version = "4.2.1"
+version = "4.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f10cee36dd3b1f7929ea12b759de9eea9eff83bfccbc71f387ef4d41a57c64a4"
+checksum = "7c43fd69c20da13756643a5bf51ae799965465c78e05c57a1242a736aaa56527"
 dependencies = [
  "globwalk",
  "regex",
@@ -3197,9 +3189,9 @@ dependencies = [
 
 [[package]]
 name = "rust-i18n-macro"
-version = "4.2.1"
+version = "4.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0bb1ed4e04fe26c2a2652cad1c6595efaf7196f4445c0d6e13c67154347fb7e"
+checksum = "086ec8a9eaa6afda33919b9bc1661c1f4e017c40e99bbd33ca98f6e1cb6ca91f"
 dependencies = [
  "glob",
  "proc-macro2",
@@ -3212,9 +3204,9 @@ dependencies = [
 
 [[package]]
 name = "rust-i18n-support"
-version = "4.2.1"
+version = "4.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba1c083408a2733180ae0acf2897612f8ceec7b0c0dcd065a0a87103bfb3b1d9"
+checksum = "ac02dcb9a01ec145d0a5534ea9554a966050ca250b346bb2a9ab0fcdafab5979"
 dependencies = [
  "arc-swap",
  "base62",
@@ -3375,15 +3367,13 @@ dependencies = [
 
 [[package]]
 name = "serde-saphyr"
-version = "0.0.29"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7bd22781911de0ca6debda95f073c8f18bec65d1a94f1fa9573f3102e514cea4"
+checksum = "3afb591f9cdb6223c88ba39269aff895620c7f0716dc42b705b5733d5c7c0823"
 dependencies = [
- "ahash",
  "annotate-snippets",
- "base64 0.22.1",
+ "base64",
  "encoding_rs_io",
- "getrandom 0.3.4",
  "granit-parser",
  "nohash-hasher",
  "num-traits",
@@ -4054,11 +4044,11 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "ureq"
-version = "3.4.0"
+version = "3.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "972d7902c8735f2695410b8aed7df6ed12a47394aa1c8d7af49f0497b731a94d"
+checksum = "af5546be8f5378d5414f83733f5c9a2526f4645829edbc1c41790aeef1b38e8b"
 dependencies = [
- "base64 0.23.1",
+ "base64",
  "flate2",
  "log",
  "percent-encoding",
@@ -4071,11 +4061,11 @@ dependencies = [
 
 [[package]]
 name = "ureq-proto"
-version = "0.6.1"
+version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da5f78b09e6941e1a0f2e30e695e4b120377b54d5e0aec11b594bb57b3971613"
+checksum = "fabc3e92916c89c95b20eef7b06b00b066bc217ef9ea3a4ac9bf1a7e35261e10"
 dependencies = [
- "base64 0.23.1",
+ "base64",
  "http",
  "httparse",
  "log",
