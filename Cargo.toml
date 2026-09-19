@@ -11,9 +11,9 @@ members = [
 default-members = ["."]
 
 [workspace.package]
-version = "0.5.4"
+version = "0.5.5"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.90"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Leyukaka/fancontrol-rs"
 authors = ["Leyukaka"]

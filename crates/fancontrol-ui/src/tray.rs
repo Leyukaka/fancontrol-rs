@@ -5,6 +5,12 @@ use tray_icon::{Icon, TrayIcon, TrayIconBuilder, TrayIconEvent};
 
 const ICON_BYTES: &[u8] = include_bytes!("../../../assets/icon.png");
 
+/// Frozen Windows `NOTIFYICONDATA.guidItem`. Do not change: Explorer keys
+/// "always show" / overflow on this GUID. Unsigned builds still bind the GUID
+/// to the exe path; Authenticode later makes it portable across paths.
+/// UUID v5 of `https://github.com/Leyukaka/fancontrol-rs#tray`.
+const TRAY_GUID: u128 = 0x0a7d5a53_a5ab_52ee_b862_e3c6c2812cc3;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrayState {
     Normal,
@@ -47,6 +53,7 @@ impl AppTray {
             .with_tooltip("fancontrol-rs")
             .with_icon(icons[0].clone())
             .with_menu(Box::new(menu))
+            .with_guid(TRAY_GUID)
             .build()
             .map_err(|e| format!("tray icon: {e}"))?;
 
