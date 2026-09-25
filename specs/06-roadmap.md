@@ -48,7 +48,7 @@ Last aligned with product reality: **v0.5.5** (tray-icon 0.25 + Windows tray GUI
 - [x] CodeQL, cargo-audit, Dependabot
 - [x] Branch protection + tag ruleset + release environment
 - [x] Manual update check (GitHub latest-release compare + link)
-- [ ] Code signing (SignPath / Azure / cert - **not** enabled)
+- [ ] Code signing (Certum Open Source, SimplySign cloud chosen - **not** enabled yet)
 - [ ] Installer / end-user packaging polish
 - [ ] Full curve editor polish (multi-curve UX)
 - [ ] Dynamic plugin loading infrastructure

@@ -29,7 +29,28 @@ Signing does **not** replace:
 
 **Recommendation for early public tags:** ship **unsigned** release artifacts with a **SHA256** file, document PawnIO + admin + SmartScreen honestly, then add Trusted Signing or SignPath when ready for broader audience.
 
-**Current project choice:** remain **unsigned + SHA256** until a maintainer configures a signing provider. Integrity checks and scanning are documented in [SECURITY.md](./SECURITY.md).
+**Current project choice:** **Certum Open Source Code Signing, SimplySign cloud variant** (selected 2026-09-25, not purchased/wired yet). Until the first signed release actually ships, releases stay **unsigned + SHA256** and docs must not claim otherwise. Integrity checks and scanning are documented in [SECURITY.md](./SECURITY.md).
+
+### Why Certum Open Source
+
+| Point | Notes |
+|-------|-------|
+| Cost | Cheapest publicly trusted Authenticode option (tens of USD/year) |
+| Trust | OV certificate, Certum root trusted by Microsoft. **Not EV**: SmartScreen reputation starts at zero and builds with downloads |
+| Eligibility | Natural person + non-commercial open source project (MIT/Apache on GitHub qualifies). ID + address proof |
+| Publisher shown | `Open Source Developer, <maintainer legal name>`: the real name is visible in the exe signature (accepted) |
+| Validity | Max 460 days (CA/B Forum, since March 2026): plan a yearly renewal |
+| Key storage | SimplySign cloud HSM (no USB token), usable from GitHub-hosted runners |
+
+Rejected: Azure Artifact Signing (individuals limited to US/Canada), SignPath Foundation (signs as "SignPath Foundation", heavier onboarding), smart card variant (no CI signing).
+
+### Planned signing flow
+
+1. Buy **[Open Source Code Signing in the Cloud](https://shop.certum.eu/open-source-code-signing-on-simplysign.html)** (49 EUR as of 2026-09, often out of stock; **not** the 25 EUR card variant). Identity check + project link, then activate SimplySign. **Keep the TOTP QR code/seed shown at activation**: CI login needs it as a secret.
+2. Local dry run: `signtool sign /fd sha256 /tr http://time.certum.pl /td sha256 /n "Open Source Developer" fancontrol-rs.exe` then `signtool verify /pa /v fancontrol-rs.exe`.
+3. CI: add a **Sign** step in `release.yml` between build and SHA256 staging. SimplySign credentials (login + TOTP seed) live only in the `release` environment secrets. `signtool verify /pa` must fail the job before publishing. If secrets are absent (forks, test dispatch), skip signing with an explicit warning.
+4. Compute SHA256 **after** signing.
+5. Test via `workflow_dispatch` before the first signed tag, then update README / SECURITY.md to state that releases are signed.
 
 ---
 
