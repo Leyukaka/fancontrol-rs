@@ -417,6 +417,19 @@ impl ControlProvider for PawnioProvider {
             .ok_or_else(|| PluginError::ControlNotFound(id.to_string()))?;
         dev.read_duty_percent(slot).map_err(PluginError::Io)
     }
+
+    fn restore_auto(&self) -> Result<()> {
+        if !self.write_enabled {
+            return Ok(());
+        }
+        let mut first_err = None;
+        for (di, dev) in self.devices.iter().enumerate() {
+            if let Err(e) = dev.restore_auto() {
+                first_err.get_or_insert(PluginError::Io(format!("device {di}: {e}")));
+            }
+        }
+        first_err.map_or(Ok(()), Err)
+    }
 }
 
 fn parse_ctrl(s: &str) -> Result<(usize, usize)> {

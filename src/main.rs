@@ -15,6 +15,7 @@ use fancontrol_core::{
 };
 use fancontrol_plugins::{HostSensorProvider, MockProvider, ProviderRegistry};
 use std::collections::HashMap;
+use std::sync::{Arc, OnceLock};
 use std::thread;
 use std::time::Duration;
 
@@ -160,6 +161,45 @@ enum Commands {
     Ui,
 }
 
+/// Registry the console Ctrl+C / close handler hands back to firmware.
+static CTRL_HANDLER_REGISTRY: OnceLock<Arc<ProviderRegistry>> = OnceLock::new();
+
+/// Hands every written control back to BIOS SmartFan when dropped (normal end,
+/// `?` early return, panic unwind) and on Ctrl+C / console close, so a CLI write
+/// session never leaves a fan pinned at a manual duty.
+struct FirmwareRestoreGuard(Arc<ProviderRegistry>);
+
+impl FirmwareRestoreGuard {
+    fn install(reg: &Arc<ProviderRegistry>) -> Self {
+        #[cfg(windows)]
+        if CTRL_HANDLER_REGISTRY.set(Arc::clone(reg)).is_ok() {
+            use windows_sys::Win32::System::Console::SetConsoleCtrlHandler;
+            use windows_sys::core::BOOL;
+
+            unsafe extern "system" fn on_console_ctrl(_ctrl_type: u32) -> BOOL {
+                if let Some(reg) = CTRL_HANDLER_REGISTRY.get() {
+                    reg.restore_all();
+                }
+                // FALSE: fall through to the default handler (process exit).
+                0
+            }
+            // SAFETY: registers a plain `extern "system"` fn with no captured state.
+            if unsafe { SetConsoleCtrlHandler(Some(on_console_ctrl), 1) } == 0 {
+                tracing::warn!(
+                    "could not install Ctrl+C handler; fans restore only on normal exit"
+                );
+            }
+        }
+        Self(Arc::clone(reg))
+    }
+}
+
+impl Drop for FirmwareRestoreGuard {
+    fn drop(&mut self) {
+        self.0.restore_all();
+    }
+}
+
 fn build_registry(include_mock: bool, include_hw: bool, allow_hw_write: bool) -> ProviderRegistry {
     let mut reg = ProviderRegistry::new();
     if include_mock {
@@ -215,6 +255,9 @@ impl fancontrol_plugins::ControlProvider for ArcControl {
     }
     fn get_duty(&self, id: &ControlId) -> fancontrol_plugins::Result<u8> {
         self.0.get_duty(id)
+    }
+    fn restore_auto(&self) -> fancontrol_plugins::Result<()> {
+        self.0.restore_auto()
     }
 }
 
@@ -434,7 +477,12 @@ fn main() -> anyhow::Result<()> {
                 eprintln!("WARNING: profile apply will write hardware duties. 1.5s to abort…");
                 thread::sleep(Duration::from_millis(1500));
             }
-            let reg = build_registry(include_mock, include_hw, allow_hw_write && do_apply);
+            let reg = Arc::new(build_registry(
+                include_mock,
+                include_hw,
+                allow_hw_write && do_apply,
+            ));
+            let _restore = do_apply.then(|| FirmwareRestoreGuard::install(&reg));
             let profile = load_profile(&profile)?;
             let mut states: HashMap<String, CurveEvalState> = HashMap::new();
             let steps = seconds.max(1);
@@ -747,7 +795,9 @@ fn run_test_duty(
         );
     }
     let percent = percent.min(100);
-    let reg = build_registry(include_mock, include_hw, allow_hw_write);
+    let reg = Arc::new(build_registry(include_mock, include_hw, allow_hw_write));
+    // Declared before any write: also covers `?` returns and Ctrl+C mid-hold.
+    let _restore = FirmwareRestoreGuard::install(&reg);
     let cid = ControlId::new(control);
 
     let ctrl_meta = reg

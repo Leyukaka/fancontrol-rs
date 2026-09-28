@@ -175,7 +175,7 @@ cargo run -- sample
 
 ### Optional PWM write (only if you accept risk)
 
-Restores are your responsibility. Prefer a single control and return to the previous duty.
+`test-duty` sets the duty, holds it, restores the previous duty, then hands the header back to BIOS SmartFan when it ends (including on error or Ctrl+C). A hard kill cannot restore; reboot resets fan control. Prefer a single control.
 
 ```bat
 fancontrol-rs --hw-only test-duty --control <control-id> --percent 40

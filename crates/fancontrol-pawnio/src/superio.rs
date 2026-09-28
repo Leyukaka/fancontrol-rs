@@ -186,9 +186,15 @@ pub struct NctBankedDevice {
     chip: SuperIoChip,
     /// Last known duties 0..=100 (software cache; HW may differ until written).
     duties: Mutex<Vec<u8>>,
+    /// Firmware (mode, pwm command) bytes saved before our first write per control,
+    /// written back by [`Self::restore_auto`].
+    initial: Mutex<Vec<Option<(u8, u8)>>>,
     fan_count: usize,
     control_count: usize,
 }
+
+const BANKED_MODE_REGS: [u16; 7] = [0x102, 0x202, 0x302, 0x802, 0x902, 0xA02, 0xB02];
+const BANKED_CMD_REGS: [u16; 7] = [0x109, 0x209, 0x309, 0x809, 0x909, 0xA09, 0xB09];
 
 impl NctBankedDevice {
     pub fn try_open(detected: &DetectedChip) -> Result<Self, String> {
@@ -223,6 +229,7 @@ impl NctBankedDevice {
             slot: detected.slot,
             chip: detected.chip,
             duties: Mutex::new(vec![0u8; control_count]),
+            initial: Mutex::new(vec![None; control_count]),
             fan_count,
             control_count,
         })
@@ -321,13 +328,19 @@ impl NctBankedDevice {
         }
         let percent = percent.min(100);
         let pwm = ((f64::from(percent) * 2.55).round() as u16).min(255) as u8;
-        let mode_regs: [u16; 7] = [0x102, 0x202, 0x302, 0x802, 0x902, 0xA02, 0xB02];
-        let cmd_regs: [u16; 7] = [0x109, 0x209, 0x309, 0x809, 0x909, 0xA09, 0xB09];
+        let (mode_reg, cmd_reg) = (BANKED_MODE_REGS[index], BANKED_CMD_REGS[index]);
 
         let _g = IsaBusGuard::acquire(Duration::from_millis(1000));
+        {
+            let mut initial = self.initial.lock().unwrap_or_else(|e| e.into_inner());
+            if initial[index].is_none() {
+                // Save firmware state before the first manual write (restored on exit).
+                initial[index] = Some((self.read_byte(mode_reg)?, self.read_byte(cmd_reg)?));
+            }
+        }
         // Do not select_slot (clears BARs).
-        self.write_byte(mode_regs[index], 0)?;
-        self.write_byte(cmd_regs[index], pwm)?;
+        self.write_byte(mode_reg, 0)?;
+        self.write_byte(cmd_reg, pwm)?;
         if let Ok(mut d) = self.duties.lock() {
             d[index] = percent;
         }
@@ -338,6 +351,27 @@ impl NctBankedDevice {
             NUVOTON_IO_SPACE_LOCK,
         );
         Ok(())
+    }
+
+    /// Write back the firmware mode / command bytes saved before our first write,
+    /// returning every touched control to BIOS SmartFan. **Writes hardware.**
+    pub fn restore_auto(&self) -> Result<(), String> {
+        let _g = IsaBusGuard::acquire(Duration::from_millis(1000));
+        let mut initial = self.initial.lock().unwrap_or_else(|e| e.into_inner());
+        let mut first_err = None;
+        for (index, saved) in initial.iter_mut().enumerate() {
+            let Some((mode, cmd)) = *saved else { continue };
+            let res = self
+                .write_byte(BANKED_CMD_REGS[index], cmd)
+                .and_then(|()| self.write_byte(BANKED_MODE_REGS[index], mode));
+            match res {
+                Ok(()) => *saved = None,
+                Err(e) => {
+                    first_err.get_or_insert(format!("ctrl{index}: {e}"));
+                }
+            }
+        }
+        first_err.map_or(Ok(()), Err)
     }
 
     /// Named temperature sources (common NCT679x).

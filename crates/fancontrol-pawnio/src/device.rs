@@ -103,6 +103,14 @@ impl SuperIoDevice {
         }
     }
 
+    /// Hand every control we wrote back to BIOS SmartFan. **Writes hardware.**
+    pub fn restore_auto(&self) -> Result<(), String> {
+        match self {
+            Self::Banked(d) => d.restore_auto(),
+            Self::Nct668(d) => d.restore_auto(),
+        }
+    }
+
     /// Batch sample when supported (NCT668x). Banked falls back to sequential reads.
     pub fn sample_all(&self) -> Result<HwmSample, String> {
         match self {

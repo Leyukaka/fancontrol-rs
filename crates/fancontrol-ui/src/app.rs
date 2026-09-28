@@ -22,6 +22,7 @@ use fancontrol_core::{
 use fancontrol_metrics::{
     MetricSink, OtlpSink, SqliteMetricsStore, SqliteStoreConfig, default_metrics_db_path,
 };
+use fancontrol_plugins::ProviderRegistry;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -73,6 +74,39 @@ fn list_row(ui: &mut egui::Ui, label: &str, id: &str, value: impl FnOnce(&mut eg
             ui.small(id);
         });
     clicked
+}
+
+/// Hand fans back to BIOS SmartFan if the UI or a hardware worker thread panics
+/// (the GUI build has no console, so a panic is otherwise a silent exit with fans
+/// pinned at the last manual duty). Panics in unrelated helper threads (update
+/// check, …) keep fan control.
+///
+/// The hook runs before unwinding, so a worker that panicked mid-write still
+/// holds the (non-reentrant) bus lock: restoring on this thread would deadlock.
+/// Restore on a fresh thread instead and wait a bounded time; if it is blocked on
+/// that lock it finishes once this thread unwinds and releases it.
+fn install_restore_on_panic(reg: Arc<ProviderRegistry>) {
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let thread = std::thread::current();
+        if matches!(
+            thread.name(),
+            Some("main" | "fancontrol-poll" | "fancontrol-write")
+        ) {
+            let reg = Arc::clone(&reg);
+            let (done_tx, done_rx) = std::sync::mpsc::channel();
+            let spawned = std::thread::Builder::new()
+                .name("fancontrol-restore".into())
+                .spawn(move || {
+                    reg.restore_all();
+                    let _ = done_tx.send(());
+                });
+            if spawned.is_ok() {
+                let _ = done_rx.recv_timeout(Duration::from_secs(3));
+            }
+        }
+        previous(info);
+    }));
 }
 
 /// `f32::clamp` panics when `lo > hi`. Layout heights are dynamic; always order bounds.
@@ -161,6 +195,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         Duration::from_millis(750),
     );
     let writes = WriteQueue::start(Arc::clone(&reg));
+    install_restore_on_panic(Arc::clone(&reg));
     let profile = load_or_create_default_profile(settings.last_profile_id.as_deref());
     if settings.last_profile_id.as_deref() != Some(profile.id.as_str()) {
         settings.last_profile_id = Some(profile.id.as_str().to_string());
@@ -216,6 +251,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
     let show_startup_prompt = !settings.startup_prompt_shown;
 
     let app = FanApp {
+        reg,
         options,
         map,
         snapshot,
@@ -333,6 +369,8 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
 }
 
 struct FanApp {
+    /// Kept to hand controls back to BIOS SmartFan on exit.
+    reg: Arc<ProviderRegistry>,
     options: UiOptions,
     map: SharedMap,
     snapshot: SharedSnapshot,
@@ -430,6 +468,10 @@ fn load_or_create_default_profile(preferred: Option<&str>) -> Profile {
 }
 
 impl eframe::App for FanApp {
+    fn on_exit(&mut self) {
+        self.reg.restore_all();
+    }
+
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Smooth shader animation needs a much faster repaint cadence than the
         // rest of the UI - only pay for it while a shader style is actually
@@ -444,6 +486,7 @@ impl eframe::App for FanApp {
         };
         ctx.request_repaint_after(repaint_interval);
         self.handle_tray(ctx);
+        self.background_tick();
 
         if self.tray.is_some() && !self.really_exit && ctx.input(|i| i.viewport().close_requested())
         {
@@ -458,104 +501,8 @@ impl eframe::App for FanApp {
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
-        // Drain write-queue outcomes before applying more curve steps.
-        for (id, duty) in self.writes.take_successes() {
-            self.last_applied_duty.insert(id, duty);
-            self.write_error = None;
-        }
-        for id in self.writes.take_failures() {
-            self.last_applied_duty.remove(&id);
-        }
-        if let Some(e) = self.writes.take_error() {
-            self.write_error = Some(e);
-        }
-
         let snap = self.snapshot.lock().map(|g| g.clone()).unwrap_or_default();
 
-        // One-shot seed: CPU/GPU (when known) as the initial multi-sensor graph selection.
-        // `graph_sensor_ids_seeded` must start false for new installs (see settings Default).
-        if !self.settings.graph_sensor_ids_seeded && (snap.tick > 0 || !snap.temps.is_empty()) {
-            let mut seed = Vec::new();
-            if let Some(id) = &snap.cpu_temp_id {
-                seed.push(id.clone());
-            }
-            if let Some(id) = &snap.gpu_temp_id {
-                seed.push(id.clone());
-            }
-            // Package power belongs to the CPU panel, not the Sensors (temperature)
-            // graph - do not seed `cpu_power_id` here (see `ui_thermal_graph_block`).
-            // Fallback: first available temp if CPU id not yet labeled
-            if seed.is_empty()
-                && let Some((id, _, _)) = snap.temps.first()
-            {
-                seed.push(id.clone());
-            }
-            self.settings.graph_sensor_ids = seed;
-            self.settings.graph_sensor_ids_seeded = true;
-            self.settings.save();
-        }
-
-        let live_plot: HashMap<&str, f64> = snap
-            .plottable
-            .iter()
-            .map(|p| (p.id.as_str(), p.value))
-            .collect();
-        let (win, samp) = (
-            self.settings.graph_window_minutes,
-            self.settings.graph_sample_secs,
-        );
-        for id in &self.settings.graph_sensor_ids {
-            if let Some(&v) = live_plot.get(id.as_str()) {
-                self.histories
-                    .entry(id.clone())
-                    .or_insert_with(|| {
-                        let mut h = TempHistory::default();
-                        h.configure(win, samp);
-                        h
-                    })
-                    .push_if_due(v as f32, Instant::now());
-            }
-        }
-        if let Some(w) = snap.cpu.power_w {
-            self.cpu_power_history.push_if_due(w as f32, Instant::now());
-        }
-        if let Some(w) = snap.gpus.first().and_then(|g| g.power_w) {
-            self.gpu_power_history.push_if_due(w as f32, Instant::now());
-        }
-
-        // Metrics store / OTEL (best-effort, separate cadence).
-        if self.settings.metrics_store_enabled || self.settings.otel_enabled {
-            let every = Duration::from_secs(u64::from(self.settings.metrics_sample_secs.max(1)));
-            if self.last_metrics_record.elapsed() >= every {
-                let ts_ms = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_millis() as i64)
-                    .unwrap_or(0);
-                let batch: Vec<MetricSample> = snap
-                    .plottable
-                    .iter()
-                    .map(|p| {
-                        MetricSample::new(
-                            p.id.clone(),
-                            p.label.clone(),
-                            p.kind,
-                            p.unit.clone(),
-                            p.value,
-                            ts_ms,
-                        )
-                    })
-                    .collect();
-                if !batch.is_empty() {
-                    if let Some(store) = self.metrics_sink.as_mut() {
-                        store.record(&batch);
-                    }
-                    if let Some(otel) = self.otel_sink.as_mut() {
-                        otel.record(&batch);
-                    }
-                }
-                self.last_metrics_record = Instant::now();
-            }
-        }
         // Activity: one snapshot per frame; history configure only when window settings change
         // (done in Options / graph controls). Here we only push samples.
         let activity_snap = if self.settings.show_activity_deck {
@@ -567,18 +514,6 @@ impl eframe::App for FanApp {
             && let Some(load) = act.load_pct
         {
             self.load_history.push_if_due(load as f32, Instant::now());
-        }
-        self.histories
-            .retain(|id, _| self.settings.graph_sensor_ids.contains(id));
-
-        // Auto-apply curves ~1 Hz when enabled + write allowed + consent accepted
-        if self.settings.auto_apply_curves
-            && self.options.allow_hw_write
-            && !self.show_writes_consent
-            && self.last_curve_apply.elapsed() >= Duration::from_millis(1000)
-        {
-            self.apply_curves_from_snapshot(&snap);
-            self.last_curve_apply = Instant::now();
         }
 
         egui::Panel::top("top").show(ui, |ui| {
@@ -1948,7 +1883,7 @@ impl FanApp {
             // Reserve plot height from remaining space after group header (~legend).
             // header_budget: multi-sensor legend can wrap; keep plot usable.
             let header_budget = if series.len() > 1 { 56.0 } else { 36.0 };
-            let plot_h = (ui.available_height() - header_budget).clamp(70.0, slot_h);
+            let plot_h = clamp_ui_height(ui.available_height() - header_budget, 70.0, slot_h);
 
             if style == GraphStyle::Classic || !self.shader_backend_available || !only_temps {
                 show_metric_graph(
@@ -2185,7 +2120,9 @@ impl FanApp {
     fn try_relaunch_elevated(&mut self) {
         match crate::elevation::relaunch_elevated() {
             Ok(()) => {
-                // Elevated child is running - leave the non-elevated process.
+                // Elevated child is running - leave the non-elevated process
+                // (`process::exit` skips `on_exit`, so hand fans back first).
+                self.reg.restore_all();
                 std::process::exit(0);
             }
             Err(crate::elevation::ElevateError::Cancelled) => {
@@ -2374,6 +2311,125 @@ impl FanApp {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
             }
+        }
+    }
+
+    /// Per-tick work that must keep running while the window is hidden to tray:
+    /// eframe skips `ui()` for a hidden root viewport and only calls `logic()`.
+    /// Drains write outcomes, records graph/metrics history and applies curves.
+    fn background_tick(&mut self) {
+        // Drain write-queue outcomes before applying more curve steps.
+        for (id, duty) in self.writes.take_successes() {
+            self.last_applied_duty.insert(id, duty);
+            self.write_error = None;
+        }
+        for id in self.writes.take_failures() {
+            self.last_applied_duty.remove(&id);
+        }
+        if let Some(e) = self.writes.take_error() {
+            self.write_error = Some(e);
+        }
+
+        let snap = self.snapshot.lock().map(|g| g.clone()).unwrap_or_default();
+
+        // One-shot seed: CPU/GPU (when known) as the initial multi-sensor graph selection.
+        // `graph_sensor_ids_seeded` must start false for new installs (see settings Default).
+        if !self.settings.graph_sensor_ids_seeded && (snap.tick > 0 || !snap.temps.is_empty()) {
+            let mut seed = Vec::new();
+            if let Some(id) = &snap.cpu_temp_id {
+                seed.push(id.clone());
+            }
+            if let Some(id) = &snap.gpu_temp_id {
+                seed.push(id.clone());
+            }
+            // Package power belongs to the CPU panel, not the Sensors (temperature)
+            // graph - do not seed `cpu_power_id` here (see `ui_thermal_graph_block`).
+            // Fallback: first available temp if CPU id not yet labeled
+            if seed.is_empty()
+                && let Some((id, _, _)) = snap.temps.first()
+            {
+                seed.push(id.clone());
+            }
+            self.settings.graph_sensor_ids = seed;
+            self.settings.graph_sensor_ids_seeded = true;
+            self.settings.save();
+        }
+
+        let live_plot: HashMap<&str, f64> = snap
+            .plottable
+            .iter()
+            .map(|p| (p.id.as_str(), p.value))
+            .collect();
+        let (win, samp) = (
+            self.settings.graph_window_minutes,
+            self.settings.graph_sample_secs,
+        );
+        for id in &self.settings.graph_sensor_ids {
+            if let Some(&v) = live_plot.get(id.as_str()) {
+                self.histories
+                    .entry(id.clone())
+                    .or_insert_with(|| {
+                        let mut h = TempHistory::default();
+                        h.configure(win, samp);
+                        h
+                    })
+                    .push_if_due(v as f32, Instant::now());
+            }
+        }
+        if let Some(w) = snap.cpu.power_w {
+            self.cpu_power_history.push_if_due(w as f32, Instant::now());
+        }
+        if let Some(w) = snap.gpus.first().and_then(|g| g.power_w) {
+            self.gpu_power_history.push_if_due(w as f32, Instant::now());
+        }
+
+        // Metrics store / OTEL (best-effort, separate cadence).
+        if self.settings.metrics_store_enabled || self.settings.otel_enabled {
+            let every = Duration::from_secs(u64::from(self.settings.metrics_sample_secs.max(1)));
+            if self.last_metrics_record.elapsed() >= every {
+                let ts_ms = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as i64)
+                    .unwrap_or(0);
+                let batch: Vec<MetricSample> = snap
+                    .plottable
+                    .iter()
+                    .map(|p| {
+                        MetricSample::new(
+                            p.id.clone(),
+                            p.label.clone(),
+                            p.kind,
+                            p.unit.clone(),
+                            p.value,
+                            ts_ms,
+                        )
+                    })
+                    .collect();
+                if !batch.is_empty() {
+                    if let Some(store) = self.metrics_sink.as_mut() {
+                        store.record(&batch);
+                    }
+                    if let Some(otel) = self.otel_sink.as_mut() {
+                        otel.record(&batch);
+                    }
+                }
+                self.last_metrics_record = Instant::now();
+            }
+        }
+        self.histories
+            .retain(|id, _| self.settings.graph_sensor_ids.contains(id));
+
+        // Auto-apply curves ~1 Hz when enabled + write allowed + consent accepted.
+        // Wait for the first real poll (tick 0 = empty default snapshot), else the
+        // missing-temperature failsafe would briefly blast every fan at startup.
+        if self.settings.auto_apply_curves
+            && snap.tick > 0
+            && self.options.allow_hw_write
+            && !self.show_writes_consent
+            && self.last_curve_apply.elapsed() >= Duration::from_millis(1000)
+        {
+            self.apply_curves_from_snapshot(&snap);
+            self.last_curve_apply = Instant::now();
         }
     }
 

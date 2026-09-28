@@ -1,6 +1,9 @@
 //! Provider traits for sensors and fan controls.
 
 use fancontrol_core::{ControlDescriptor, ControlId, SensorDescriptor, SensorId};
+use std::sync::RwLock;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, PluginError>;
@@ -55,6 +58,13 @@ pub trait ControlProvider: Send + Sync {
 
     /// Read last-set or reported duty cycle 0..=100 (%).
     fn get_duty(&self, id: &ControlId) -> Result<u8>;
+
+    /// Hand every control this provider has written back to firmware (BIOS
+    /// SmartFan / auto) control. Called on exit so fans never stay pinned at
+    /// the last manual duty. Default: nothing to restore.
+    fn restore_auto(&self) -> Result<()> {
+        Ok(())
+    }
 }
 
 /// Aggregates multiple providers for discovery and access.
@@ -62,6 +72,12 @@ pub trait ControlProvider: Send + Sync {
 pub struct ProviderRegistry {
     sensors: Vec<Box<dyn SensorProvider>>,
     controls: Vec<Box<dyn ControlProvider>>,
+    /// Set first thing in [`Self::restore_all`]; checked by writers under
+    /// `write_gate` so no duty can land after the hand-back to firmware.
+    released: AtomicBool,
+    /// Writers hold the read side for the whole write; `restore_all` takes the
+    /// write side to wait for an in-flight write to finish.
+    write_gate: RwLock<()>,
 }
 
 impl ProviderRegistry {
@@ -109,6 +125,12 @@ impl ProviderRegistry {
     }
 
     pub fn set_duty(&self, id: &ControlId, percent: u8) -> Result<()> {
+        let _gate = self.write_gate.read().unwrap_or_else(|e| e.into_inner());
+        if self.released.load(Ordering::SeqCst) {
+            return Err(PluginError::NotWritable(format!(
+                "{id}: controls were handed back to firmware (shutting down)"
+            )));
+        }
         let percent = percent.min(100);
         let mut last_err = PluginError::ControlNotFound(id.to_string());
         for p in &self.controls {
@@ -133,11 +155,31 @@ impl ProviderRegistry {
         Err(last_err)
     }
 
-    pub fn sensor_provider_names(&self) -> Vec<&str> {
-        self.sensors.iter().map(|p| p.name()).collect()
-    }
-
-    pub fn control_provider_names(&self) -> Vec<&str> {
-        self.controls.iter().map(|p| p.name()).collect()
+    /// Hand all controls back to firmware auto mode and refuse later writes.
+    ///
+    /// Later writes are refused as soon as this starts. Waits (bounded) for an
+    /// in-flight write to finish; past the timeout it restores anyway, and the
+    /// providers' own bus lock then orders the restore after that last write.
+    pub fn restore_all(&self) {
+        if self.released.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let _gate = loop {
+            match self.write_gate.try_write() {
+                Ok(g) => break Some(g),
+                Err(std::sync::TryLockError::Poisoned(e)) => break Some(e.into_inner()),
+                Err(std::sync::TryLockError::WouldBlock) if Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Err(std::sync::TryLockError::WouldBlock) => break None,
+            }
+        };
+        for p in &self.controls {
+            match p.restore_auto() {
+                Ok(()) => tracing::info!(provider = p.name(), "controls handed back to firmware"),
+                Err(e) => tracing::warn!(provider = p.name(), "restore to firmware failed: {e}"),
+            }
+        }
     }
 }

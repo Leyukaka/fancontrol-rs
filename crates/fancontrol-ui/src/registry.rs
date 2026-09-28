@@ -79,6 +79,9 @@ impl ControlProvider for ArcControl {
     fn get_duty(&self, id: &ControlId) -> Result<u8> {
         ControlProvider::get_duty(&*self.0, id)
     }
+    fn restore_auto(&self) -> Result<()> {
+        ControlProvider::restore_auto(&*self.0)
+    }
 }
 
 /// Backend hardware-probe status, translated fresh every frame by the caller

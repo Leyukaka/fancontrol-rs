@@ -218,6 +218,9 @@ pub struct Nct668Device {
     fan_rpm_regs: Vec<u16>,
     /// Last software-commanded duty (UI can prefer this while locked)
     duties: Mutex<Vec<u8>>,
+    /// Firmware (manual bit set, pwm command) saved before our first write per
+    /// control slot, written back by [`Self::restore_auto`].
+    initial: Mutex<Vec<Option<(bool, u8)>>>,
 }
 
 impl Nct668Device {
@@ -250,6 +253,7 @@ impl Nct668Device {
             control_rpm_idx: (0..8).map(Some).collect(),
             fan_rpm_regs: FAN_RPM_CLASSIC.to_vec(),
             duties: Mutex::new(vec![0u8; 8]),
+            initial: Mutex::new(vec![None; 8]),
         };
 
         {
@@ -297,6 +301,7 @@ impl Nct668Device {
 
         let n = dev.control_out.len();
         *dev.duties.lock().expect("duties") = vec![0u8; n];
+        *dev.initial.lock().expect("initial") = vec![None; n];
         Ok(dev)
     }
 
@@ -495,9 +500,18 @@ impl Nct668Device {
 
         let _g = IsaBusGuard::acquire(Duration::from_millis(1500));
 
+        if let Some((mode, bit_mask, cmd)) = self.slot_mode_cmd(control_slot) {
+            let mut initial = self.initial.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(saved @ None) = initial.get_mut(control_slot) {
+                // Save firmware state before the first manual write (restored on exit).
+                let manual = self.read_byte(mode)? & bit_mask != 0;
+                *saved = Some((manual, self.read_byte(cmd)?));
+            }
+        }
+
         match self.layout {
-            Layout::Classic => self.set_duty_classic(control_slot, pwm)?,
-            Layout::Dr => self.set_duty_dr(control_slot, pwm)?,
+            Layout::Classic => self.set_duty_classic(control_slot, true, pwm)?,
+            Layout::Dr => self.set_duty_dr(control_slot, true, pwm)?,
         }
 
         if let Ok(mut d) = self.duties.lock()
@@ -522,7 +536,42 @@ impl Nct668Device {
         Ok(())
     }
 
-    fn set_duty_classic(&self, control_slot: usize, pwm: u8) -> Result<(), String> {
+    /// Write back the firmware manual bit / command saved before our first write,
+    /// returning every touched control to BIOS SmartFan. **Writes hardware.**
+    pub fn restore_auto(&self) -> Result<(), String> {
+        let _g = IsaBusGuard::acquire(Duration::from_millis(1500));
+        let mut initial = self.initial.lock().unwrap_or_else(|e| e.into_inner());
+        let mut first_err = None;
+        for (slot, saved) in initial.iter_mut().enumerate() {
+            let Some((manual, cmd)) = *saved else {
+                continue;
+            };
+            let res = match self.layout {
+                Layout::Classic => self.set_duty_classic(slot, manual, cmd),
+                Layout::Dr => self.set_duty_dr(slot, manual, cmd),
+            };
+            match res {
+                Ok(()) => *saved = None,
+                Err(e) => {
+                    first_err.get_or_insert(format!("ctrl{slot}: {e}"));
+                }
+            }
+        }
+        first_err.map_or(Ok(()), Err)
+    }
+
+    /// (mode register, manual-bit mask, command register) for a software-mappable slot.
+    fn slot_mode_cmd(&self, control_slot: usize) -> Option<(u16, u8, u16)> {
+        let cmd = *self.control_cmd.get(control_slot)?;
+        let mode = *self.control_mode.get(control_slot)?;
+        let bit = *self.control_mode_bit.get(control_slot)?;
+        if cmd == 0xFFFF || mode == 0xFFFF || !(0..8).contains(&bit) {
+            return None;
+        }
+        Some((mode, 1u8 << bit, cmd))
+    }
+
+    fn set_duty_classic(&self, control_slot: usize, manual: bool, pwm: u8) -> Result<(), String> {
         if control_slot >= 8 {
             return Err("classic layout only has controls 0..7".into());
         }
@@ -530,7 +579,12 @@ impl Nct668Device {
         thread::sleep(Duration::from_millis(50));
         let mode = self.read_byte(FAN_CONTROL_MODE_PRIMARY)?;
         let bit_mask = 1u8 << control_slot;
-        self.write_byte(FAN_CONTROL_MODE_PRIMARY, mode | bit_mask)?;
+        let mode = if manual {
+            mode | bit_mask
+        } else {
+            mode & !bit_mask
+        };
+        self.write_byte(FAN_CONTROL_MODE_PRIMARY, mode)?;
         self.write_byte(FAN_PWM_CMD_PRIMARY[control_slot], pwm)?;
         self.write_byte(FAN_PWM_REQUEST, FAN_CFG_DONE)?;
         thread::sleep(Duration::from_millis(50));
@@ -538,7 +592,8 @@ impl Nct668Device {
     }
 
     /// LHM / Linux-style fan configuration phase for NCT6687DR.
-    fn set_duty_dr(&self, control_slot: usize, pwm: u8) -> Result<(), String> {
+    /// `manual = false` clears the manual bit (hands the header back to SmartFan).
+    fn set_duty_dr(&self, control_slot: usize, manual: bool, pwm: u8) -> Result<(), String> {
         let cmd = *self
             .control_cmd
             .get(control_slot)
@@ -565,8 +620,8 @@ impl Nct668Device {
             if !self.start_fan_cfg_update()? {
                 tracing::debug!(attempt, "fan cfg phase start timeout");
             }
-            // Set manual-mode bit, write PWM command (not the OUT sensor reg)
-            self.update_byte(mode, !bit_mask, bit_mask)?;
+            // Set (or clear) manual-mode bit, write PWM command (not the OUT sensor reg)
+            self.update_byte(mode, !bit_mask, if manual { bit_mask } else { 0 })?;
             self.write_byte(cmd, pwm)?;
             if self.complete_fan_cfg_update()? {
                 confirmed = true;

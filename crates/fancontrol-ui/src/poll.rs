@@ -98,7 +98,8 @@ pub fn spawn_poller(
     thread::Builder::new()
         .name("fancontrol-poll".into())
         .spawn(move || {
-            let mut tick = 0u64;
+            // Starts at 1: tick 0 marks the empty default snapshot before the first poll.
+            let mut tick = 1u64;
             // Re-list each tick so host provider enable/disable is live.
             loop {
                 let start = Instant::now();

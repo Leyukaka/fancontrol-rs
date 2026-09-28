@@ -39,6 +39,17 @@ Full user-facing matrix: **[docs/SUPPORTED_HARDWARE.md](../docs/SUPPORTED_HARDWA
 
 Fan curves use **CPU-like** Super I/O temps only (`CPU`, `PECI` / `PECI_0`, `CPUTIN`, package-style names). Runtime resolves stale `…temp.CPU` bindings on banked chips to a live CPU-like reading. **Not** used for regulation: SYSTIN / VRM / AUX / GPU (display-only in the UI graph).
 
+If a control's curve finds no CPU-like reading, it keeps its last duty for up to `FAILSAFE_AFTER_MISSING_STEPS` (3) control steps, then runs at `FAILSAFE_DUTY` (100 %) until a reading returns (`fancontrol-core` `control_loop.rs`). One transient read error does not cause a fan burst, and a lost sensor never leaves a fan idling.
+
+### Hand-back to firmware
+
+Before the first manual write to a control, the backend saves the firmware state of that header (banked NCT: mode + PWM command bytes; NCT668x: manual bit + command). `ControlProvider::restore_auto` / `ProviderRegistry::restore_all` write it back, returning every touched header to BIOS SmartFan, and the registry then refuses further writes. Triggers:
+
+- UI: normal exit (tray **Exit**, `on_exit`), before the UAC relaunch exits the non-elevated process, and on a panic in the UI / poll / write threads.
+- CLI `run --apply` and `test-duty`: end of command, error return, and Ctrl+C / console close.
+
+A hard kill (Task Manager, power loss) cannot restore; the BIOS resets fan control at next boot.
+
 ### Fallback behavior
 
 If PawnIO is missing or not openable:

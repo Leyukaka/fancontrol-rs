@@ -11,6 +11,9 @@ pub struct CurveEvalState {
     pub last_temp_for_down: Option<f64>,
     /// Last computed duty (0..=100).
     pub last_duty: Option<u8>,
+    /// Consecutive control steps without a usable temperature (see
+    /// [`crate::control_loop::FAILSAFE_AFTER_MISSING_STEPS`]).
+    pub missing_steps: u32,
 }
 
 /// Evaluate a fan curve at the given temperature (°C).
