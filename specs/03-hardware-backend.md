@@ -43,7 +43,7 @@ If a control's curve finds no CPU-like reading, it keeps its last duty for up to
 
 ### Hand-back to firmware
 
-Before the first manual write to a control, the backend saves the firmware state of that header (banked NCT: mode + PWM command bytes; NCT668x: manual bit + command). `ControlProvider::restore_auto` / `ProviderRegistry::restore_all` write it back, returning every touched header to BIOS SmartFan, and the registry then refuses further writes. Triggers:
+Before the first manual write to a control, the backend saves the firmware state of that header (banked NCT: mode + PWM command bytes; NCT668x: PWM command). `ControlProvider::restore_auto` / `ProviderRegistry::restore_all` write it back (NCT668x always clears the manual bit, since an earlier run killed without restoring may have left it set), returning every touched header to BIOS SmartFan, and the registry then refuses further writes. Triggers:
 
 - UI: normal exit (tray **Exit**, `on_exit`), before the UAC relaunch exits the non-elevated process, and on a panic in the UI / poll / write threads.
 - CLI `run --apply` and `test-duty`: end of command, error return, and Ctrl+C / console close.

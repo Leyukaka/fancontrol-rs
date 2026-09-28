@@ -218,9 +218,9 @@ pub struct Nct668Device {
     fan_rpm_regs: Vec<u16>,
     /// Last software-commanded duty (UI can prefer this while locked)
     duties: Mutex<Vec<u8>>,
-    /// Firmware (manual bit set, pwm command) saved before our first write per
-    /// control slot, written back by [`Self::restore_auto`].
-    initial: Mutex<Vec<Option<(bool, u8)>>>,
+    /// Firmware pwm command saved before our first write per control slot,
+    /// written back by [`Self::restore_auto`] (which always clears the manual bit).
+    initial: Mutex<Vec<Option<u8>>>,
 }
 
 impl Nct668Device {
@@ -503,9 +503,16 @@ impl Nct668Device {
         if let Some((mode, bit_mask, cmd)) = self.slot_mode_cmd(control_slot) {
             let mut initial = self.initial.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(saved @ None) = initial.get_mut(control_slot) {
-                // Save firmware state before the first manual write (restored on exit).
-                let manual = self.read_byte(mode)? & bit_mask != 0;
-                *saved = Some((manual, self.read_byte(cmd)?));
+                // Save firmware command before the first manual write (restored on exit).
+                if self.read_byte(mode)? & bit_mask != 0 {
+                    // Left manual by an earlier run that could not restore (crash,
+                    // kill, pre-v0.5.6 build): exit still hands it back to SmartFan.
+                    tracing::info!(
+                        control_slot,
+                        "header already in manual mode before first write"
+                    );
+                }
+                *saved = Some(self.read_byte(cmd)?);
             }
         }
 
@@ -536,22 +543,27 @@ impl Nct668Device {
         Ok(())
     }
 
-    /// Write back the firmware manual bit / command saved before our first write,
-    /// returning every touched control to BIOS SmartFan. **Writes hardware.**
+    /// Clear the manual bit and write back the command saved before our first
+    /// write, returning every touched control to BIOS SmartFan. The manual bit is
+    /// always cleared, not restored: an earlier run may have left it set, and
+    /// restoring that would keep the header pinned. **Writes hardware.**
     pub fn restore_auto(&self) -> Result<(), String> {
         let _g = IsaBusGuard::acquire(Duration::from_millis(1500));
         let mut initial = self.initial.lock().unwrap_or_else(|e| e.into_inner());
         let mut first_err = None;
         for (slot, saved) in initial.iter_mut().enumerate() {
-            let Some((manual, cmd)) = *saved else {
+            let Some(cmd) = *saved else {
                 continue;
             };
             let res = match self.layout {
-                Layout::Classic => self.set_duty_classic(slot, manual, cmd),
-                Layout::Dr => self.set_duty_dr(slot, manual, cmd),
+                Layout::Classic => self.set_duty_classic(slot, false, cmd),
+                Layout::Dr => self.set_duty_dr(slot, false, cmd),
             };
             match res {
-                Ok(()) => *saved = None,
+                Ok(()) => {
+                    tracing::info!(slot, "control handed back to SmartFan");
+                    *saved = None;
+                }
                 Err(e) => {
                     first_err.get_or_insert(format!("ctrl{slot}: {e}"));
                 }
