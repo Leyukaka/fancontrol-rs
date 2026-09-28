@@ -66,10 +66,6 @@ impl HostSensorProvider {
         p
     }
 
-    pub fn enabled_flag(&self) -> Arc<AtomicBool> {
-        Arc::clone(&self.enabled)
-    }
-
     pub fn set_enabled(&self, on: bool) {
         self.enabled.store(on, Ordering::Relaxed);
     }

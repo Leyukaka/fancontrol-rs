@@ -1281,10 +1281,8 @@ version = "0.5.5"
 dependencies = [
  "fancontrol-core",
  "rusqlite",
- "serde",
  "serde_json",
  "tempfile",
- "thiserror 2.0.20",
  "tracing",
  "ureq",
 ]
@@ -1296,7 +1294,6 @@ dependencies = [
  "fancontrol-core",
  "fancontrol-plugins",
  "libloading 0.9.0",
- "thiserror 2.0.20",
  "tracing",
  "windows-sys 0.61.2",
 ]
@@ -1321,7 +1318,6 @@ dependencies = [
  "fancontrol-pawnio",
  "fancontrol-plugins",
  "fancontrol-ui",
- "serde_json",
  "tracing",
  "tracing-subscriber",
  "windows-sys 0.61.2",

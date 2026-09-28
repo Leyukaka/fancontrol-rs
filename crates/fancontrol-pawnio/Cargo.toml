@@ -10,7 +10,6 @@ publish = false
 [dependencies]
 fancontrol-core = { workspace = true }
 fancontrol-plugins = { workspace = true }
-thiserror = { workspace = true }
 tracing = { workspace = true }
 libloading = "0.9"
 windows-sys = { version = "0.61", features = [
