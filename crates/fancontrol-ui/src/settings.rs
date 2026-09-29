@@ -2,6 +2,7 @@
 
 use crate::activity::{ActivityMode, ProcessSort};
 use crate::shaders::GraphStyle;
+use crate::theme::ThemeChoice;
 use fancontrol_core::config::{config_dir, ensure_config_dirs};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -47,6 +48,9 @@ pub struct UiSettings {
     /// UI language code (e.g. "en", "fr"). `None` = not yet chosen → OS-locale detection.
     #[serde(default)]
     pub language: Option<String>,
+    /// Light / dark / follow Windows.
+    #[serde(default)]
+    pub theme: ThemeChoice,
     /// Visual style for the graph panel: the classic line graph, or one of the
     /// "fun" shader-based visualizations. Shader styles are opt-in (default Classic).
     #[serde(default)]
@@ -183,6 +187,7 @@ impl Default for UiSettings {
             writes_risk_acknowledged: false,
             last_profile_id: None,
             language: None,
+            theme: ThemeChoice::default(),
             graph_style: GraphStyle::default(),
             shader_speed: default_shader_speed(),
             shader_color_a: default_shader_color_a(),

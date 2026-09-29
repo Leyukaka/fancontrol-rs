@@ -5,6 +5,7 @@ use crate::panel_metrics::{
     domain_card, load_color, metric_bar, power_history_block, power_metric_row, temp_chip,
 };
 use crate::poll::GpuSnap;
+use crate::theme;
 use eframe::egui::{self, Color32, RichText};
 
 /// Draw one or more GPU cards. First card may show a shared power history sparkline.
@@ -19,7 +20,7 @@ pub fn show_gpu_panel(ui: &mut egui::Ui, gpus: &[GpuSnap], power_history: Option
         ui.add_space(4.0);
 
         if gpus.is_empty() {
-            ui.colored_label(Color32::GRAY, t!("gpu.none").to_string());
+            ui.colored_label(ui.visuals().weak_text_color(), t!("gpu.none").to_string());
             ui.small(t!("gpu.none_hint").to_string());
             return;
         }
@@ -92,7 +93,7 @@ fn show_gpu_card(ui: &mut egui::Ui, gpu: &GpuSnap, power_history: Option<&TempHi
             ui.label(
                 RichText::new(format!("{u:.0}%"))
                     .monospace()
-                    .color(load_color(u as f32 / 100.0)),
+                    .color(theme::accent(ui.visuals(), load_color(u as f32 / 100.0))),
             );
             if let Some(m) = gpu.util_mem {
                 ui.separator();
@@ -129,7 +130,7 @@ fn show_gpu_card(ui: &mut egui::Ui, gpu: &GpuSnap, power_history: Option<&TempHi
             ui.label(
                 RichText::new(format!("{used:.0} / {total:.0} MiB"))
                     .monospace()
-                    .color(load_color(frac)),
+                    .color(theme::accent(ui.visuals(), load_color(frac))),
             );
         });
         metric_bar(ui, frac, load_color(frac));

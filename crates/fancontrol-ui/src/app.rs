@@ -11,6 +11,7 @@ use crate::poll::{SharedMap, SharedSnapshot, spawn_poller};
 use crate::registry::{BackendStatus, backend_status, build_registry};
 use crate::settings::{SHADER_FPS_ALLOWED, UiSettings};
 use crate::shaders::{GraphStyle, ShaderGallery, show_shader_panel};
+use crate::theme::{self, ThemeChoice};
 use crate::tray::{AppTray, TrayCommand, TrayState};
 use crate::update_check::{UpdateChecker, UpdateStatus};
 use crate::write_queue::WriteQueue;
@@ -204,6 +205,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
     let pawnio_dialog = detect_pawnio_dialog(options.include_hw);
     // First-run writes consent only when the process actually allows PWM.
     let show_writes_consent = options.allow_hw_write && !settings.writes_risk_acknowledged;
+    let theme_preference = settings.theme.preference();
 
     // Activity deck: sample only while the panel is enabled (default on).
     fancontrol_plugins::cpu_activity::set_enabled(settings.show_activity_deck);
@@ -315,7 +317,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         "Fancontrol-RS",
         native,
         Box::new(move |cc| {
-            cc.egui_ctx.set_visuals(egui::Visuals::dark());
+            cc.egui_ctx.set_theme(theme_preference);
 
             // CJK glyph fallback (egui's default fonts have no Chinese/Japanese coverage).
             // Pushed after the default fonts so Latin-script languages keep using those,
@@ -524,7 +526,7 @@ impl eframe::App for FanApp {
                     self.options.allow_hw_write && matches!(self.status, BackendStatus::Ok(_));
                 if write_capable {
                     ui.colored_label(
-                        egui::Color32::LIGHT_GREEN,
+                        theme::ok(ui.visuals()),
                         t!("top_bar.write_enabled").to_string(),
                     );
                 } else {
@@ -544,8 +546,8 @@ impl eframe::App for FanApp {
                             BackendStatus::Ok(_) => None,
                         }
                     };
-                    let resp = ui
-                        .colored_label(egui::Color32::YELLOW, t!("top_bar.read_only").to_string());
+                    let warn = theme::warn(ui.visuals());
+                    let resp = ui.colored_label(warn, t!("top_bar.read_only").to_string());
                     if let Some(hint) = hint {
                         resp.on_hover_text(hint);
                     }
@@ -561,7 +563,7 @@ impl eframe::App for FanApp {
                     }
                 }
                 if let Some(msg) = &self.elevate_status {
-                    ui.colored_label(egui::Color32::LIGHT_RED, msg);
+                    ui.colored_label(theme::error(ui.visuals()), msg);
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui
@@ -650,18 +652,17 @@ impl eframe::App for FanApp {
                     }
                     // Prominent Curve control toggle (auto-apply to hardware)
                     let curve_on = self.settings.auto_apply_curves;
-                    let (label, fill, text_color) = if curve_on {
-                        (
-                            t!("top_bar.curve_control_on").to_string(),
-                            egui::Color32::from_rgb(30, 90, 50),
-                            egui::Color32::from_rgb(140, 255, 170),
-                        )
+                    let rgb = egui::Color32::from_rgb;
+                    let (fill, text_color) = match (curve_on, ui.visuals().dark_mode) {
+                        (true, true) => (rgb(30, 90, 50), rgb(140, 255, 170)),
+                        (true, false) => (rgb(200, 235, 205), rgb(20, 100, 40)),
+                        (false, true) => (rgb(70, 40, 40), rgb(220, 160, 160)),
+                        (false, false) => (rgb(245, 215, 215), rgb(140, 40, 40)),
+                    };
+                    let label = if curve_on {
+                        t!("top_bar.curve_control_on").to_string()
                     } else {
-                        (
-                            t!("top_bar.curve_control_off").to_string(),
-                            egui::Color32::from_rgb(70, 40, 40),
-                            egui::Color32::from_rgb(220, 160, 160),
-                        )
+                        t!("top_bar.curve_control_off").to_string()
                     };
                     let btn =
                         egui::Button::new(egui::RichText::new(label).color(text_color).strong())
@@ -678,7 +679,7 @@ impl eframe::App for FanApp {
             });
             if self.settings.auto_apply_curves && !self.options.allow_hw_write {
                 ui.colored_label(
-                    egui::Color32::YELLOW,
+                    theme::warn(ui.visuals()),
                     t!("top_bar.curve_readonly_warning").to_string(),
                 );
             }
@@ -686,13 +687,13 @@ impl eframe::App for FanApp {
             // Keep live errors here so failures stay visible.
             if let Some(err) = &snap.error {
                 ui.colored_label(
-                    egui::Color32::YELLOW,
+                    theme::warn(ui.visuals()),
                     t!("top_bar.poll_error", error = err).to_string(),
                 );
             }
             if let Some(err) = &self.write_error {
                 ui.colored_label(
-                    egui::Color32::RED,
+                    theme::error(ui.visuals()),
                     t!("top_bar.write_error", error = err).to_string(),
                 );
             }
@@ -782,7 +783,7 @@ impl eframe::App for FanApp {
                                         }
                                         Some(UpdateStatus::Available { version, url }) => {
                                             ui.colored_label(
-                                                egui::Color32::LIGHT_GREEN,
+                                                theme::ok(ui.visuals()),
                                                 t!(
                                                     "options.new_version_available",
                                                     version = version
@@ -796,7 +797,7 @@ impl eframe::App for FanApp {
                                         }
                                         Some(UpdateStatus::Error(e)) => {
                                             ui.colored_label(
-                                                egui::Color32::YELLOW,
+                                                theme::warn(ui.visuals()),
                                                 t!("options.check_failed", error = e).to_string(),
                                             );
                                         }
@@ -829,6 +830,27 @@ impl eframe::App for FanApp {
                                             }
                                         }
                                     }
+                                });
+
+                            egui::CollapsingHeader::new(t!("options.section_theme").to_string())
+                                .default_open(false)
+                                .show(ui, |ui| {
+                                    egui::ComboBox::from_id_salt("theme_pick")
+                                        .selected_text(self.settings.theme.label())
+                                        .show_ui(ui, |ui| {
+                                            for choice in ThemeChoice::ALL {
+                                                let selected = self.settings.theme == choice;
+                                                if ui
+                                                    .selectable_label(selected, choice.label())
+                                                    .clicked()
+                                                    && !selected
+                                                {
+                                                    self.settings.theme = choice;
+                                                    ui.ctx().set_theme(choice.preference());
+                                                    self.settings.save();
+                                                }
+                                            }
+                                        });
                                 });
 
                             egui::CollapsingHeader::new(t!("options.section_language").to_string())
@@ -906,7 +928,7 @@ impl eframe::App for FanApp {
                                     });
                                 if self.settings.graph_style.is_shader() {
                                     ui.colored_label(
-                                        egui::Color32::YELLOW,
+                                        theme::warn(ui.visuals()),
                                         t!("options.shader_gpu_warning").to_string(),
                                     );
                                     dirty |= ui
@@ -1039,7 +1061,7 @@ impl eframe::App for FanApp {
                                         && !self.options.allow_hw_write
                                     {
                                         ui.colored_label(
-                                            egui::Color32::YELLOW,
+                                            theme::warn(ui.visuals()),
                                             t!("options.auto_apply_needs_write").to_string(),
                                         );
                                     }
@@ -2084,7 +2106,7 @@ impl FanApp {
                 });
                 if let Some(msg) = &self.elevate_status {
                     ui.add_space(6.0);
-                    ui.colored_label(egui::Color32::LIGHT_RED, msg);
+                    ui.colored_label(theme::error(ui.visuals()), msg);
                 }
                 ui.add_space(10.0);
                 ui.horizontal(|ui| {

@@ -1,5 +1,6 @@
 //! CPU temperature sparkline with glow fill and configurable time window.
 
+use crate::theme;
 use eframe::egui::{self, Color32};
 use egui_plot::{Line, Plot};
 use std::collections::VecDeque;
@@ -206,7 +207,8 @@ pub fn show_metric_graph(
                 ui.heading(t!("graph.multi_sensor_title").to_string());
                 ui.weak(format!("({window_minutes}m)"));
             });
-            ui.colored_label(Color32::GRAY, t!("graph.no_sensors_selected").to_string());
+            let dim = ui.visuals().weak_text_color();
+            ui.colored_label(dim, t!("graph.no_sensors_selected").to_string());
             return;
         }
 
@@ -243,7 +245,7 @@ pub fn show_metric_graph(
                 {
                     let u = s.unit_key();
                     let color = if u == "°C" {
-                        temp_color(t)
+                        theme::accent(ui.visuals(), temp_color(t))
                     } else {
                         series_color(0)
                     };
@@ -285,7 +287,8 @@ pub fn show_metric_graph(
         if series.iter().all(|s| s.history.is_empty()) {
             ui.allocate_ui(egui::vec2(ui.available_width(), height_each), |ui| {
                 ui.centered_and_justified(|ui| {
-                    ui.colored_label(Color32::GRAY, t!("graph.loading").to_string());
+                    let dim = ui.visuals().weak_text_color();
+                    ui.colored_label(dim, t!("graph.loading").to_string());
                 });
             });
             return;
@@ -389,6 +392,7 @@ fn draw_unit_plot(args: UnitPlotArgs<'_, '_>) {
 
     let unit_owned = unit.to_string();
     let plot_id = format!("metric_graph_{plot_index}_{unit}");
+    let visuals = ui.visuals().clone();
     Plot::new(plot_id)
         .height(height)
         .allow_drag(false)
@@ -421,7 +425,7 @@ fn draw_unit_plot(args: UnitPlotArgs<'_, '_>) {
                     continue;
                 }
                 let color = if single_series_mode && is_temp {
-                    temp_color(s.history.last().unwrap_or(40.0))
+                    theme::accent(&visuals, temp_color(s.history.last().unwrap_or(40.0)))
                 } else {
                     series_color(s.palette_index)
                 };

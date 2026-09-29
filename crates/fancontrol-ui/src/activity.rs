@@ -1,6 +1,7 @@
 //! Activity deck: CPU load sparkline + top processes (CPU / RAM) with filter.
 
 use crate::graph::TempHistory;
+use crate::theme;
 use eframe::egui::{self, Color32, RichText, Sense};
 use egui_plot::{Line, Plot};
 use fancontrol_plugins::ProcessRow;
@@ -77,7 +78,7 @@ pub fn show_activity_deck(ui: &mut egui::Ui, view: ActivityDeckView<'_>) {
         ui.heading(t!("activity.heading").to_string());
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if let Some(p) = load_pct {
-                let c = load_color(p as f32);
+                let c = theme::accent(ui.visuals(), load_color(p as f32));
                 ui.label(
                     RichText::new(format!("{p:.0}%"))
                         .monospace()
@@ -123,7 +124,8 @@ fn show_load_plot(
     if history.is_empty() {
         ui.allocate_ui(egui::vec2(ui.available_width(), height), |ui| {
             ui.centered_and_justified(|ui| {
-                ui.colored_label(Color32::GRAY, t!("activity.collecting").to_string());
+                let dim = ui.visuals().weak_text_color();
+                ui.colored_label(dim, t!("activity.collecting").to_string());
             });
         });
         return;
@@ -182,10 +184,11 @@ fn bar_cell(ui: &mut egui::Ui, frac: f32, fill: Color32) {
         2.0,
         fill,
     );
+    let outline = ui.visuals().widgets.noninteractive.bg_stroke.color;
     ui.painter().rect_stroke(
         rect,
         2.0,
-        egui::Stroke::new(1.0, Color32::from_gray(60)),
+        egui::Stroke::new(1.0, outline),
         egui::StrokeKind::Outside,
     );
 }
@@ -257,7 +260,8 @@ fn show_process_table(
     rows.truncate(top_n.max(1));
 
     if rows.is_empty() {
-        ui.colored_label(Color32::GRAY, t!("activity.no_processes").to_string());
+        let dim = ui.visuals().weak_text_color();
+        ui.colored_label(dim, t!("activity.no_processes").to_string());
         return;
     }
 
@@ -297,7 +301,7 @@ fn show_process_table(
                     for r in rows {
                         let dim = r.cpu_pct < 0.5 && *sort == ProcessSort::Cpu;
                         let name_color = if dim {
-                            Color32::GRAY
+                            ui.visuals().weak_text_color()
                         } else {
                             ui.visuals().text_color()
                         };

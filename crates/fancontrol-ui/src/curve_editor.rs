@@ -1,5 +1,6 @@
 //! Interactive fan curve editor (temp °C → duty %).
 
+use crate::theme;
 use eframe::egui::{self, Color32, Pos2, Sense, Stroke, StrokeKind, Vec2};
 use fancontrol_core::curve::interpolate_duty;
 use fancontrol_core::{CurvePoint, FanCurve};
@@ -40,13 +41,24 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
         Sense::click_and_drag(),
     );
     let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 6.0, Color32::from_rgb(14, 16, 26));
-    painter.rect_stroke(
-        rect,
-        6.0,
-        Stroke::new(1.0_f32, Color32::from_rgb(50, 60, 90)),
-        StrokeKind::Inside,
-    );
+    let visuals = ui.visuals().clone();
+    let acc = |c: Color32| theme::accent(&visuals, c);
+    let (bg, border, grid) = if visuals.dark_mode {
+        (
+            Color32::from_rgb(14, 16, 26),
+            Color32::from_rgb(50, 60, 90),
+            Color32::from_rgba_unmultiplied(70, 80, 110, 50),
+        )
+    } else {
+        (
+            Color32::from_rgb(246, 248, 252),
+            Color32::from_rgb(190, 200, 220),
+            Color32::from_rgba_unmultiplied(120, 130, 160, 60),
+        )
+    };
+    let axis_text = visuals.weak_text_color();
+    painter.rect_filled(rect, 6.0, bg);
+    painter.rect_stroke(rect, 6.0, Stroke::new(1.0_f32, border), StrokeKind::Inside);
 
     // Grid
     for i in 0..=4 {
@@ -54,11 +66,11 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
         let y = rect.top() + rect.height() * (i as f32) / 4.0;
         painter.line_segment(
             [Pos2::new(x, rect.top()), Pos2::new(x, rect.bottom())],
-            Stroke::new(1.0_f32, Color32::from_rgba_unmultiplied(70, 80, 110, 50)),
+            Stroke::new(1.0_f32, grid),
         );
         painter.line_segment(
             [Pos2::new(rect.left(), y), Pos2::new(rect.right(), y)],
-            Stroke::new(1.0_f32, Color32::from_rgba_unmultiplied(70, 80, 110, 50)),
+            Stroke::new(1.0_f32, grid),
         );
     }
 
@@ -87,13 +99,11 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
             .map(|p| to_pos(p.temperature as f32, f32::from(p.duty)))
             .collect();
         // glow
-        painter.add(egui::Shape::line(
-            pts.clone(),
-            Stroke::new(6.0_f32, Color32::from_rgba_unmultiplied(80, 200, 255, 40)),
-        ));
+        let glow = acc(Color32::from_rgba_unmultiplied(80, 200, 255, 40));
+        painter.add(egui::Shape::line(pts.clone(), Stroke::new(6.0_f32, glow)));
         painter.add(egui::Shape::line(
             pts,
-            Stroke::new(2.0_f32, Color32::from_rgb(120, 220, 255)),
+            Stroke::new(2.0_f32, acc(Color32::from_rgb(120, 220, 255))),
         ));
     }
 
@@ -105,27 +115,28 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
         let x = to_pos(t as f32, 0.0).x;
         painter.line_segment(
             [Pos2::new(x, rect.top()), Pos2::new(x, rect.bottom())],
-            Stroke::new(1.5_f32, Color32::from_rgb(255, 180, 60)),
+            Stroke::new(1.5_f32, acc(Color32::from_rgb(255, 180, 60))),
         );
         painter.text(
             Pos2::new(x + 4.0, rect.top() + 4.0),
             egui::Align2::LEFT_TOP,
             format!("{t:.0}°C"),
             egui::FontId::monospace(11.0),
-            Color32::from_rgb(255, 200, 100),
+            acc(Color32::from_rgb(255, 200, 100)),
         );
 
         if !curve.points.is_empty() {
             let duty = interpolate_duty(&curve.points, t);
             let marker = to_pos(t as f32, f32::from(duty));
             painter.circle_filled(marker, 6.0, Color32::from_rgb(255, 210, 90));
-            painter.circle_stroke(marker, 6.0, Stroke::new(1.5_f32, Color32::WHITE));
+            let outline = theme::marker_outline(&visuals);
+            painter.circle_stroke(marker, 6.0, Stroke::new(1.5_f32, outline));
             painter.text(
                 Pos2::new(marker.x + 8.0, marker.y),
                 egui::Align2::LEFT_CENTER,
                 format!("{duty}%"),
                 egui::FontId::monospace(12.0),
-                Color32::from_rgb(255, 220, 120),
+                acc(Color32::from_rgb(255, 220, 120)),
             );
         }
     }
@@ -181,15 +192,15 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
             hp,
             if active { 7.0 } else { 5.0 },
             if active {
-                Color32::from_rgb(255, 220, 80)
+                acc(Color32::from_rgb(255, 220, 80))
             } else {
-                Color32::from_rgb(100, 210, 255)
+                acc(Color32::from_rgb(100, 210, 255))
             },
         );
         painter.circle_stroke(
             hp,
             if active { 7.0 } else { 5.0 },
-            Stroke::new(1.0_f32, Color32::WHITE),
+            Stroke::new(1.0_f32, theme::marker_outline(&visuals)),
         );
     }
 
@@ -199,21 +210,21 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
         egui::Align2::LEFT_BOTTOM,
         format!("{TEMP_MIN:.0}°C"),
         egui::FontId::monospace(10.0),
-        Color32::GRAY,
+        axis_text,
     );
     painter.text(
         Pos2::new(rect.right() - 4.0, rect.bottom() - 14.0),
         egui::Align2::RIGHT_BOTTOM,
         format!("{TEMP_MAX:.0}°C"),
         egui::FontId::monospace(10.0),
-        Color32::GRAY,
+        axis_text,
     );
     painter.text(
         Pos2::new(rect.left() + 4.0, rect.top() + 4.0),
         egui::Align2::LEFT_TOP,
         "100%",
         egui::FontId::monospace(10.0),
-        Color32::GRAY,
+        axis_text,
     );
 
     // Point list

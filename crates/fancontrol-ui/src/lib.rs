@@ -19,6 +19,7 @@ mod poll;
 mod registry;
 mod settings;
 mod shaders;
+mod theme;
 mod tray;
 mod update_check;
 mod write_queue;
