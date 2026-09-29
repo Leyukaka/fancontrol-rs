@@ -83,7 +83,8 @@ winresource = "0.1"
 CompanyName = "Leyukaka"
 LegalCopyright = "Copyright (c) 2026 Leyukaka"
 OriginalFilename = "fancontrol-rs.exe"
-FileDescription = "Windows fan control and GPU/CPU/RAM activity (PawnIO)"
+FileDescription = "Fancontrol-RS"
+ProductName = "Fancontrol-RS"
 
 [profile.release]
 lto = true
