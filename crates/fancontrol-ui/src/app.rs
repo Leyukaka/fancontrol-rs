@@ -2434,6 +2434,11 @@ impl FanApp {
     }
 
     fn apply_curves_from_snapshot(&mut self, snap: &crate::poll::Snapshot) {
+        // Shared by auto-apply, "Apply now" and the tray entry: honour the consent
+        // dialog and a read-only session here so no caller can bypass them.
+        if self.show_writes_consent || snap.tick == 0 {
+            return;
+        }
         let mut temps: HashMap<String, f64> = snap
             .temps
             .iter()
@@ -2446,6 +2451,9 @@ impl FanApp {
         let step = evaluate_profile_step(&self.profile, &temps, &mut self.curve_states);
         for (ctrl, duty) in step.duties {
             if self.is_user_locked(&ctrl) {
+                continue;
+            }
+            if !self.options.allow_hw_write && !ctrl.starts_with("mock.") {
                 continue;
             }
             if self.last_applied_duty.get(&ctrl) == Some(&duty) {

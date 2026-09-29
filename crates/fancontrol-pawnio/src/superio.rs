@@ -278,7 +278,9 @@ impl NctBankedDevice {
             value |= ((self.read_byte(hr)? >> bit) & 1) as i16;
         }
         let t = 0.5 * f64::from(value);
-        if !(-55.0..=125.0).contains(&t) {
+        // Exactly 0 °C means an unwired source (e.g. PECI_0 on boards without PECI);
+        // same rule as the NCT668x path, so it can't win the CPU-temp priority.
+        if !(-55.0..=125.0).contains(&t) || t == 0.0 {
             Ok(None)
         } else {
             Ok(Some(t))
