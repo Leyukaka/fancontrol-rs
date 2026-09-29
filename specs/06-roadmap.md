@@ -1,6 +1,6 @@
 # Roadmap
 
-Last aligned with product reality: **v0.5.5** (tray-icon 0.25 + Windows tray GUID; ureq 3.4.2). See `specs/07-metrics-telemetry.md`, `specs/04-ui.md`, `docs/DIMM_TEMP.md`.
+Last aligned with product reality: **v0.6.0** (fan safety: curves keep running in tray, BIOS hand-back on exit, failsafe duty; read-only session enforced on every curve apply). See `specs/07-metrics-telemetry.md`, `specs/04-ui.md`, `docs/DIMM_TEMP.md`.
 
 ## Phase 0 - Foundation
 

@@ -1265,7 +1265,7 @@ checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
 
 [[package]]
 name = "fancontrol-core"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "directories",
  "serde",
@@ -1277,7 +1277,7 @@ dependencies = [
 
 [[package]]
 name = "fancontrol-metrics"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "fancontrol-core",
  "rusqlite",
@@ -1289,7 +1289,7 @@ dependencies = [
 
 [[package]]
 name = "fancontrol-pawnio"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "fancontrol-core",
  "fancontrol-plugins",
@@ -1300,7 +1300,7 @@ dependencies = [
 
 [[package]]
 name = "fancontrol-plugins"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "fancontrol-core",
  "thiserror 2.0.20",
@@ -1310,7 +1310,7 @@ dependencies = [
 
 [[package]]
 name = "fancontrol-rs"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1326,7 +1326,7 @@ dependencies = [
 
 [[package]]
 name = "fancontrol-ui"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "bytemuck",
  "eframe",
