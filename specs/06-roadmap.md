@@ -1,6 +1,6 @@
 # Roadmap
 
-Last aligned with product reality: **v0.6.0** (fan safety: curves keep running in tray, BIOS hand-back on exit, failsafe duty; read-only session enforced on every curve apply). See `specs/07-metrics-telemetry.md`, `specs/04-ui.md`, `docs/DIMM_TEMP.md`.
+Last aligned with product reality: **v0.6.1** (light theme following the Windows app mode; tray-icon 0.26; v0.6.0 fan safety: curves keep running in tray, BIOS hand-back on exit, failsafe duty). See `specs/07-metrics-telemetry.md`, `specs/04-ui.md`, `docs/DIMM_TEMP.md`.
 
 ## Phase 0 - Foundation
 
