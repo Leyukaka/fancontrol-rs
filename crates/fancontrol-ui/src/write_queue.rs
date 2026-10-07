@@ -34,37 +34,46 @@ impl WriteQueue {
             .spawn(move || {
                 let mut last_sent: std::collections::HashMap<String, (u8, Instant)> =
                     std::collections::HashMap::new();
-                while let Ok(cmd) = rx.recv() {
-                    match cmd {
-                        WriteCmd::Set { id, percent } => {
-                            // Coalesce: skip if same duty sent recently
-                            if let Some((p, t)) = last_sent.get(&id)
-                                && *p == percent
-                                && t.elapsed() < Duration::from_millis(400)
-                            {
-                                // Still count as applied for UI skip-map (already on hardware)
-                                if let Ok(mut s) = ok_log.lock() {
-                                    s.push((id.clone(), percent));
-                                }
-                                continue;
+                while let Ok(first) = rx.recv() {
+                    // Keep only the newest duty per control: while a slow EC write runs,
+                    // the 1 Hz curve apply queues another full set, and replaying the
+                    // stale ones one by one made the fans lag the curve.
+                    let mut batch: Vec<(String, u8)> = Vec::new();
+                    for cmd in std::iter::once(first).chain(rx.try_iter()) {
+                        let WriteCmd::Set { id, percent } = cmd;
+                        match batch.iter_mut().find(|(queued, _)| *queued == id) {
+                            Some(slot) => slot.1 = percent,
+                            None => batch.push((id, percent)),
+                        }
+                    }
+                    for (id, percent) in batch {
+                        // Coalesce: skip if same duty sent recently
+                        if let Some((p, t)) = last_sent.get(&id)
+                            && *p == percent
+                            && t.elapsed() < Duration::from_millis(400)
+                        {
+                            // Still count as applied for UI skip-map (already on hardware)
+                            if let Ok(mut s) = ok_log.lock() {
+                                s.push((id.clone(), percent));
                             }
-                            match reg.set_duty(&ControlId::new(id.clone()), percent) {
-                                Ok(()) => {
-                                    last_sent.insert(id.clone(), (percent, Instant::now()));
-                                    if let Ok(mut e) = err.lock() {
-                                        *e = None;
-                                    }
-                                    if let Ok(mut s) = ok_log.lock() {
-                                        s.push((id, percent));
-                                    }
+                            continue;
+                        }
+                        match reg.set_duty(&ControlId::new(id.clone()), percent) {
+                            Ok(()) => {
+                                last_sent.insert(id.clone(), (percent, Instant::now()));
+                                if let Ok(mut e) = err.lock() {
+                                    *e = None;
                                 }
-                                Err(e) => {
-                                    if let Ok(mut g) = err.lock() {
-                                        *g = Some(format!("{id}: {e}"));
-                                    }
-                                    if let Ok(mut f) = fail_log.lock() {
-                                        f.push(id);
-                                    }
+                                if let Ok(mut s) = ok_log.lock() {
+                                    s.push((id, percent));
+                                }
+                            }
+                            Err(e) => {
+                                if let Ok(mut g) = err.lock() {
+                                    *g = Some(format!("{id}: {e}"));
+                                }
+                                if let Ok(mut f) = fail_log.lock() {
+                                    f.push(id);
                                 }
                             }
                         }

@@ -273,6 +273,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         graph_axis_max: None,
         graph_axis_max_secondary: None,
         metrics_sink,
+        pending_export: None,
         otel_sink,
         last_metrics_record: Instant::now() - Duration::from_secs(60),
         load_history,
@@ -411,6 +412,9 @@ struct FanApp {
     graph_axis_max_secondary: Option<f32>,
     /// Optional local SQLite metrics store (background writer).
     metrics_sink: Option<SqliteMetricsStore>,
+    /// CSV export running on the metrics worker: target path + reply channel,
+    /// polled in `background_tick` so the UI thread never waits on it.
+    pending_export: Option<PendingExport>,
     /// Optional OTLP/HTTP export (background sender).
     otel_sink: Option<OtlpSink>,
     last_metrics_record: Instant,
@@ -493,6 +497,9 @@ fn load_or_create_default_profile(preferred: Option<&str>) -> Profile {
     }
     p
 }
+
+/// A CSV export in flight: target path and the metrics worker's reply channel.
+type PendingExport = (std::path::PathBuf, std::sync::mpsc::Receiver<Result<usize, String>>);
 
 /// Lay out `add_contents` in the available width without letting over-wide
 /// content (narrow window) widen the parent. egui sizes a panel, and the
@@ -1191,7 +1198,7 @@ impl eframe::App for FanApp {
                                             {
                                                 dirty = true;
                                                 if let Some(store) = &self.metrics_sink {
-                                                    store.request_purge();
+                                                    store.set_retention_and_purge(u32::from(d));
                                                 }
                                             }
                                         }
@@ -1203,8 +1210,14 @@ impl eframe::App for FanApp {
                                             path.display()
                                         ));
                                     }
+                                    let exporting = self.pending_export.is_some();
                                     if ui
-                                        .button(t!("options.metrics_export_csv").to_string())
+                                        .add_enabled(
+                                            !exporting,
+                                            egui::Button::new(
+                                                t!("options.metrics_export_csv").to_string(),
+                                            ),
+                                        )
                                         .clicked()
                                         && let Some(store) = &self.metrics_sink
                                         && let Ok(dir) = fancontrol_core::config_dir()
@@ -1219,14 +1232,8 @@ impl eframe::App for FanApp {
                                                 .unwrap_or(0)
                                         );
                                         let path = exports.join(name);
-                                        match store.request_export_csv(&path) {
-                                            Ok(n) => {
-                                                self.profile_status = Some(format!(
-                                                    "{} ({n} rows) → {}",
-                                                    t!("options.metrics_export_ok"),
-                                                    path.display()
-                                                ));
-                                            }
+                                        match store.start_export_csv(&path) {
+                                            Ok(rx) => self.pending_export = Some((path, rx)),
                                             Err(e) => {
                                                 self.profile_status = Some(format!(
                                                     "{}: {e}",
@@ -1254,9 +1261,11 @@ impl eframe::App for FanApp {
                                 if self.settings.otel_enabled {
                                     ui.horizontal(|ui| {
                                         ui.label(t!("options.otel_endpoint").to_string());
+                                        // Apply on Enter / focus loss, not per keystroke: each
+                                        // change started a new exporter and rewrote settings.
                                         if ui
                                             .text_edit_singleline(&mut self.settings.otel_endpoint)
-                                            .changed()
+                                            .lost_focus()
                                         {
                                             dirty = true;
                                             self.otel_sink =
@@ -2520,6 +2529,7 @@ impl FanApp {
     /// eframe skips `ui()` for a hidden root viewport and only calls `logic()`.
     /// Drains write outcomes, records graph/metrics history and applies curves.
     fn background_tick(&mut self) {
+        self.poll_csv_export();
         // Drain write-queue outcomes before applying more curve steps.
         for (id, duty) in self.writes.take_successes() {
             self.last_applied_duty.insert(id, duty);
@@ -2669,6 +2679,28 @@ impl FanApp {
         for e in step.errors {
             tracing::debug!(error = %e, "curve apply");
         }
+    }
+
+    fn poll_csv_export(&mut self) {
+        let Some((path, rx)) = &self.pending_export else {
+            return;
+        };
+        let result = match rx.try_recv() {
+            Ok(result) => result,
+            Err(std::sync::mpsc::TryRecvError::Empty) => return,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                Err("metrics store worker stopped".to_string())
+            }
+        };
+        self.profile_status = Some(match result {
+            Ok(n) => format!(
+                "{} ({n} rows) → {}",
+                t!("options.metrics_export_ok"),
+                path.display()
+            ),
+            Err(e) => format!("{}: {e}", t!("options.metrics_export_err")),
+        });
+        self.pending_export = None;
     }
 
     fn begin_rename(&mut self, id: &str, current: &str, is_control: bool) {

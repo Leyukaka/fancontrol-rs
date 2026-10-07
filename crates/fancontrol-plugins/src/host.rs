@@ -8,7 +8,8 @@
 
 use crate::traits::{PluginError, Result, SensorProvider};
 use fancontrol_core::{SensorDescriptor, SensorId, SensorKind};
-use std::process::Command;
+use std::io::Read;
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -209,15 +210,47 @@ fn probe_nvidia() -> Vec<SensorRow> {
     ]);
     #[cfg(windows)]
     cmd.creation_flags(CREATE_NO_WINDOW);
-    let output = cmd.output();
-    let Ok(out) = output else {
-        return Vec::new();
-    };
-    if !out.status.success() {
-        return Vec::new();
+    match run_with_timeout(&mut cmd, NVIDIA_SMI_TIMEOUT) {
+        Some(stdout) => parse_nvidia_smi_csv(&String::from_utf8_lossy(&stdout)),
+        None => Vec::new(),
     }
-    let text = String::from_utf8_lossy(&out.stdout);
-    parse_nvidia_smi_csv(&text)
+}
+
+/// `nvidia-smi` normally answers in well under a second; a stuck driver can make it
+/// hang forever, which used to freeze GPU *and* SSD readings (same worker thread).
+const NVIDIA_SMI_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Run `cmd`, returning its stdout if it exits successfully within `timeout`.
+/// On timeout the child is killed and reaped.
+fn run_with_timeout(cmd: &mut Command, timeout: Duration) -> Option<Vec<u8>> {
+    let mut child = cmd
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    // Drain stdout on a helper thread so a full pipe cannot stall the child.
+    let mut stdout = child.stdout.take()?;
+    let reader = thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = stdout.read_to_end(&mut buf);
+        buf
+    });
+    let deadline = Instant::now() + timeout;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break Some(status),
+            Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(50)),
+            _ => {
+                tracing::warn!("nvidia-smi did not answer in time, killing it");
+                let _ = child.kill();
+                let _ = child.wait();
+                break None;
+            }
+        }
+    };
+    let out = reader.join().unwrap_or_default();
+    status.filter(|s| s.success()).map(|_| out)
 }
 
 /// Parse nvidia-smi multi-metric CSV (`csv,noheader,nounits`).

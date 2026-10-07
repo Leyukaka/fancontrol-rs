@@ -50,7 +50,8 @@ enum StoreCmd {
         path: PathBuf,
         reply: SyncSender<Result<usize, String>>,
     },
-    PurgeNow,
+    /// Purge now; `Some(days)` also replaces the retention used from then on.
+    PurgeNow(Option<u32>),
     Shutdown,
 }
 
@@ -84,21 +85,42 @@ impl SqliteMetricsStore {
         Some(Self { tx })
     }
 
-    pub fn request_export_csv(&self, path: impl Into<PathBuf>) -> Result<usize, String> {
+    /// Queue a CSV export without waiting: poll the returned receiver for the row
+    /// count. Never blocks (a full queue is reported as an error), so it is safe to
+    /// call from the UI thread.
+    pub fn start_export_csv(
+        &self,
+        path: impl Into<PathBuf>,
+    ) -> Result<Receiver<Result<usize, String>>, String> {
         let (reply_tx, reply_rx) = mpsc::sync_channel(1);
         self.tx
-            .send(StoreCmd::ExportCsv {
+            .try_send(StoreCmd::ExportCsv {
                 path: path.into(),
                 reply: reply_tx,
             })
-            .map_err(|_| "metrics store worker stopped".to_string())?;
-        reply_rx
+            .map_err(|e| match e {
+                mpsc::TrySendError::Full(_) => "metrics store busy, try again".to_string(),
+                mpsc::TrySendError::Disconnected(_) => "metrics store worker stopped".to_string(),
+            })?;
+        Ok(reply_rx)
+    }
+
+    /// Blocking export (CLI / tests): waits up to 30 s for the row count.
+    pub fn request_export_csv(&self, path: impl Into<PathBuf>) -> Result<usize, String> {
+        self.start_export_csv(path)?
             .recv_timeout(Duration::from_secs(30))
             .map_err(|_| "metrics CSV export timed out".to_string())?
     }
 
     pub fn request_purge(&self) {
-        let _ = self.tx.try_send(StoreCmd::PurgeNow);
+        let _ = self.tx.try_send(StoreCmd::PurgeNow(None));
+    }
+
+    /// Change the retention of the running store and purge with it right away.
+    pub fn set_retention_and_purge(&self, retention_days: u32) {
+        let _ = self
+            .tx
+            .try_send(StoreCmd::PurgeNow(Some(retention_days.max(1))));
     }
 }
 
@@ -120,7 +142,7 @@ impl Drop for SqliteMetricsStore {
     }
 }
 
-fn writer_loop(path: PathBuf, retention_days: u32, flush_ms: u64, rx: Receiver<StoreCmd>) {
+fn writer_loop(path: PathBuf, mut retention_days: u32, flush_ms: u64, rx: Receiver<StoreCmd>) {
     let Ok(conn) = Connection::open(&path) else {
         tracing::error!(?path, "metrics sqlite open failed in worker");
         return;
@@ -147,7 +169,10 @@ fn writer_loop(path: PathBuf, retention_days: u32, flush_ms: u64, rx: Receiver<S
                 let r = export_csv(&conn, &path);
                 let _ = reply.send(r);
             }
-            Ok(StoreCmd::PurgeNow) => {
+            Ok(StoreCmd::PurgeNow(days)) => {
+                if let Some(days) = days {
+                    retention_days = days;
+                }
                 if !pending.is_empty() {
                     let _ = flush_inserts(&conn, &pending);
                     pending.clear();
