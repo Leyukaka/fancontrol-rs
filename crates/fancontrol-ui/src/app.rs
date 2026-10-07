@@ -1884,14 +1884,25 @@ impl FanApp {
     /// Records their width so the next frame knows whether they fit next to the
     /// left-hand controls or need a row of their own.
     fn ui_top_toggles(&mut self, ui: &mut egui::Ui) {
+        // Laid out right to left, and the order follows where each panel sits:
+        // Sensors / GPU / CPU (top row) on the left, then Activity, the
+        // Temperatures / Fans / Controls lists, Curves (bottom), Options (right panel).
         if ui
-            .button(format!("⚙ {}", t!("top_bar.options_button")))
+            .selectable_label(
+                self.show_settings,
+                format!("⚙ {}", t!("top_bar.options_button")),
+            )
             .clicked()
         {
             self.show_settings = !self.show_settings;
         }
-        // Updates: Options only (no top-bar button - clutter / unclear action).
-        // right-to-left: add Controls, Fans, Temps, then Curves
+        if ui
+            .selectable_label(self.show_curves, t!("top_bar.curves_toggle").to_string())
+            .on_hover_text(t!("top_bar.curves_toggle_tooltip").to_string())
+            .clicked()
+        {
+            self.show_curves = !self.show_curves;
+        }
         if ui
             .selectable_label(
                 self.show_controls,
@@ -1960,13 +1971,6 @@ impl FanApp {
         {
             self.settings.show_graph_panel = !self.settings.show_graph_panel;
             self.settings.save();
-        }
-        if ui
-            .selectable_label(self.show_curves, t!("top_bar.curves_toggle").to_string())
-            .on_hover_text(t!("top_bar.curves_toggle_tooltip").to_string())
-            .clicked()
-        {
-            self.show_curves = !self.show_curves;
         }
         // Prominent Curve control toggle (auto-apply to hardware)
         let curve_on = self.settings.auto_apply_curves;
