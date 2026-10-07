@@ -5,6 +5,7 @@
 
 use crate::lpcio::LpcIo;
 use crate::mutex_isa::IsaBusGuard;
+use crate::nct668::HwmSample;
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
@@ -286,6 +287,14 @@ impl NctBankedDevice {
         half_reg: Option<(u16, u8)>,
     ) -> Result<Option<f64>, String> {
         let _g = IsaBusGuard::acquire(Duration::from_millis(50));
+        self.read_temp_c_unlocked(reg, half_reg)
+    }
+
+    fn read_temp_c_unlocked(
+        &self,
+        reg: u16,
+        half_reg: Option<(u16, u8)>,
+    ) -> Result<Option<f64>, String> {
         let raw = self.read_byte(reg)? as i8;
         let mut value = (raw as i16) << 1;
         if let Some((hr, bit)) = half_reg {
@@ -303,10 +312,14 @@ impl NctBankedDevice {
 
     /// 13-bit fan count → RPM (LHM formula).
     pub fn read_fan_rpm(&self, index: usize) -> Result<Option<f64>, String> {
+        let _g = IsaBusGuard::acquire(Duration::from_millis(50));
+        self.read_fan_rpm_unlocked(index)
+    }
+
+    fn read_fan_rpm_unlocked(&self, index: usize) -> Result<Option<f64>, String> {
         if index >= self.fan_count {
             return Ok(None);
         }
-        let _g = IsaBusGuard::acquire(Duration::from_millis(50));
         // fan count registers 0x4B0, 0x4B2, ...
         let base = 0x4B0u16 + (index as u16) * 2;
         let high = self.read_byte(base)?;
@@ -327,14 +340,36 @@ impl NctBankedDevice {
 
     /// Current PWM output as percent 0..=100.
     pub fn read_duty_percent(&self, index: usize) -> Result<u8, String> {
+        let _g = IsaBusGuard::acquire(Duration::from_millis(50));
+        self.read_duty_percent_unlocked(index)
+    }
+
+    fn read_duty_percent_unlocked(&self, index: usize) -> Result<u8, String> {
         if index >= self.control_count {
             return Err("control index out of range".into());
         }
-        let _g = IsaBusGuard::acquire(Duration::from_millis(50));
         // PWM out regs for classic NCT679x
         let regs: [u16; 7] = [0x001, 0x003, 0x011, 0x013, 0x015, 0x017, 0x029];
         let value = self.read_byte(regs[index])?;
         Ok(((f64::from(value) / 2.55).round() as u8).min(100))
+    }
+
+    /// Every temp, fan and duty under one bus lock: one global ISA mutex wait per
+    /// poll instead of one per register (about 21 on a 7-channel chip).
+    pub fn sample_all(&self) -> Result<HwmSample, String> {
+        let _g = IsaBusGuard::acquire(Duration::from_millis(200));
+        let mut s = HwmSample::default();
+        for ts in self.temp_sources() {
+            let v = self.read_temp_c_unlocked(ts.reg, ts.half)?;
+            s.temps.push((ts.name.to_string(), v));
+        }
+        for i in 0..self.fan_count {
+            s.fans.push((i, self.read_fan_rpm_unlocked(i)?));
+        }
+        for i in 0..self.control_count {
+            s.duties.push((i, self.read_duty_percent_unlocked(i).ok()));
+        }
+        Ok(s)
     }
 
     /// Set manual PWM duty 0..=100. **Writes hardware.**

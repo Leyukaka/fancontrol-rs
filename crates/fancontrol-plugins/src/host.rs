@@ -42,6 +42,15 @@ pub struct HostSensorProvider {
     enabled: Arc<AtomicBool>,
     cache: Arc<Mutex<Option<Cached>>>,
     started: Mutex<bool>,
+    /// Set on drop: the background refresh thread exits at its next wake-up
+    /// instead of probing nvidia-smi / storage for the rest of the process.
+    stop: Arc<AtomicBool>,
+}
+
+impl Drop for HostSensorProvider {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+    }
 }
 
 impl Default for HostSensorProvider {
@@ -62,6 +71,7 @@ impl HostSensorProvider {
             enabled,
             cache: Arc::new(Mutex::new(None)),
             started: Mutex::new(false),
+            stop: Arc::new(AtomicBool::new(false)),
         };
         p.ensure_bg_refresh();
         p
@@ -83,13 +93,14 @@ impl HostSensorProvider {
         *started = true;
         let cache = Arc::clone(&self.cache);
         let enabled = Arc::clone(&self.enabled);
+        let stop = Arc::clone(&self.stop);
         thread::Builder::new()
             .name("host-sensors".into())
             .spawn(move || {
                 let mut empty_gpu_streak = 0u32;
                 let mut last_storage = Instant::now() - Duration::from_secs(60);
                 let storage_every = Duration::from_secs(5);
-                loop {
+                while !stop.load(Ordering::Relaxed) {
                     if !enabled.load(Ordering::Relaxed) {
                         empty_gpu_streak = 0;
                         thread::sleep(Duration::from_secs(2));
