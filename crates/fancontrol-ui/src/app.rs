@@ -305,12 +305,16 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
     let icon = eframe::icon_data::from_png_bytes(include_bytes!("../../../assets/icon.png"))
         .map_err(|e| UiError::Eframe(format!("app icon: {e}")))?;
 
+    let defaults = eframe::NativeOptions::default();
+    let mut wgpu_options = defaults.wgpu_options;
+    wgpu_options.on_surface_status = Arc::new(surface_status_action);
     let native = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1200.0, 860.0])
             .with_title("Fancontrol-RS")
             .with_icon(icon),
-        ..Default::default()
+        wgpu_options,
+        ..defaults
     };
 
     eframe::run_native(
@@ -467,6 +471,38 @@ fn load_or_create_default_profile(preferred: Option<&str>) -> Profile {
         .insert("pawnio.0.ctrl1".into(), "pawnio.0.temp.CPU".into());
     let _ = save_profile(&p);
     p
+}
+
+/// How to recover when wgpu can't hand us a frame to draw into.
+///
+/// egui-wgpu's default silently skips the frame on `Occluded` and `Timeout`. On
+/// Windows that state can stick after a minimize / restore or a resize: the app
+/// keeps running (tray, curves) but nothing is repainted, leaving the old frame
+/// at the old size with a black band around it. Reconfiguring the swapchain
+/// gets a fresh frame next time; when the window really is hidden eframe does
+/// not paint at all, so this costs nothing then.
+fn surface_status_action(
+    status: &eframe::egui_wgpu::wgpu::CurrentSurfaceTexture,
+) -> eframe::egui_wgpu::SurfaceErrorAction {
+    use eframe::egui_wgpu::SurfaceErrorAction;
+    use eframe::egui_wgpu::wgpu::CurrentSurfaceTexture;
+    use std::sync::atomic::AtomicU64;
+
+    // Log the first occurrence and then every 100th, enough to confirm the path
+    // from a user's log without flooding it at 5 Hz.
+    static DROPPED: AtomicU64 = AtomicU64::new(0);
+    let n = DROPPED.fetch_add(1, Ordering::Relaxed);
+    if n.is_multiple_of(100) {
+        tracing::info!(status = ?status, dropped = n + 1, "wgpu frame not acquired");
+    }
+
+    match status {
+        CurrentSurfaceTexture::Lost => SurfaceErrorAction::RecreateSurface,
+        CurrentSurfaceTexture::Outdated
+        | CurrentSurfaceTexture::Occluded
+        | CurrentSurfaceTexture::Timeout => SurfaceErrorAction::Reconfigure,
+        _ => SurfaceErrorAction::SkipFrame,
+    }
 }
 
 impl eframe::App for FanApp {
