@@ -9,7 +9,15 @@ const TEMP_MIN: f32 = 20.0;
 const TEMP_MAX: f32 = 100.0;
 
 /// Draw / edit curve points. Returns true if curve was modified.
-pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Option<f64>) -> bool {
+///
+/// `applied_duty` is the duty the control loop is actually sending (after
+/// hysteresis / response time); without it the marker shows the plain curve value.
+pub fn show_curve_editor(
+    ui: &mut egui::Ui,
+    curve: &mut FanCurve,
+    live_temp: Option<f64>,
+    applied_duty: Option<u8>,
+) -> bool {
     let mut changed = false;
     ui.horizontal(|ui| {
         ui.heading(&curve.name);
@@ -137,7 +145,7 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
         );
 
         if !curve.points.is_empty() {
-            let duty = interpolate_duty(&curve.points, t);
+            let duty = applied_duty.unwrap_or_else(|| interpolate_duty(&curve.points, t));
             let marker = to_pos(t as f32, f32::from(duty));
             painter.circle_filled(marker, 6.0, Color32::from_rgb(255, 210, 90));
             let outline = theme::marker_outline(&visuals);

@@ -148,7 +148,7 @@ fn neon_visuals() -> Visuals {
 /// Neon theme: a glowing border around the window whose hue runs around the
 /// edges over time. `time_s` drives the animation.
 pub fn paint_neon_border(ctx: &egui::Context, time_s: f64) {
-    const SEGMENTS: usize = 160;
+    const SEGMENTS: usize = 96;
     // Wide faint passes first, sharp core last: a cheap glow.
     const PASSES: [(f32, f32); 3] = [(9.0, 0.10), (4.0, 0.30), (1.5, 1.0)];
     let rect = ctx.content_rect().shrink(1.0);
@@ -189,8 +189,9 @@ pub fn paint_neon_border(ctx: &egui::Context, time_s: f64) {
 
 /// Use the Windows UI fonts (Segoe UI, Cascadia Mono) instead of egui's built-in
 /// ones, falling back to those if a file is missing.
-/// The CJK fallback is always appended (egui's fonts have no CJK glyphs).
-pub fn install_fonts(ctx: &egui::Context, system_fonts: bool) {
+/// The CJK fallback is always appended (egui's fonts have no CJK glyphs), using the
+/// Simplified Chinese face of the collection for `zh` and the Japanese one otherwise.
+pub fn install_fonts(ctx: &egui::Context, system_fonts: bool, language: &str) {
     let mut fonts = egui::FontDefinitions::default();
     let mut add = |name: &str, data: egui::FontData, family: egui::FontFamily, first: bool| {
         fonts
@@ -215,8 +216,12 @@ pub fn install_fonts(ctx: &egui::Context, system_fonts: bool) {
             add("cascadia_mono", data, egui::FontFamily::Monospace, true);
         }
     }
-    let cjk =
+    let mut cjk =
         egui::FontData::from_static(include_bytes!("../assets/fonts/NotoSansCJK-Regular.ttc"));
+    // Faces in NotoSansCJK-Regular.ttc: 0 = JP, 1 = KR, 2 = SC, 3 = TC.
+    if language.starts_with("zh") {
+        cjk.index = 2;
+    }
     add(
         "noto_sans_cjk",
         cjk.clone(),

@@ -271,7 +271,11 @@ impl FanApp {
         } else {
             t!("dashboard.extra_sensors_some", count = extras.len()).to_string()
         };
-        let menu = ui.menu_button(label, |ui| {
+        // Stays open while ticking several sensors (default closes on every click).
+        let config = egui::containers::menu::MenuConfig::new()
+            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside);
+        let menu = egui::containers::menu::MenuButton::new(label).config(config);
+        let (button, _) = menu.ui(ui, |ui| {
             let live = snap.temps.iter().filter(|(id, _, _)| id != bound_id);
             // Keep extras that are absent from this poll listed, so they can be removed.
             let missing = extras
@@ -301,7 +305,6 @@ impl FanApp {
                 }
             }
         });
-        menu.response
-            .on_hover_text(t!("dashboard.extra_sensors_hover").to_string());
+        button.on_hover_text(t!("dashboard.extra_sensors_hover").to_string());
     }
 }

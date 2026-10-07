@@ -213,6 +213,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
     // First-run writes consent only when the process actually allows PWM.
     let show_writes_consent = options.allow_hw_write && !settings.writes_risk_acknowledged;
     let (theme_choice, system_font) = (settings.theme, settings.system_font);
+    let language = settings.language.clone().unwrap_or_default();
 
     // Activity deck: sample only while the panel is enabled (default on).
     fancontrol_plugins::cpu_activity::set_enabled(settings.show_activity_deck);
@@ -336,7 +337,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
             theme::apply(&cc.egui_ctx, theme_choice);
             // Windows UI fonts + CJK fallback (loaded unconditionally: the language
             // can be switched live at runtime).
-            theme::install_fonts(&cc.egui_ctx, system_font);
+            theme::install_fonts(&cc.egui_ctx, system_font, &language);
 
             // One-time setup for the shader graph gallery's wgpu pipelines
             // (see crates/fancontrol-ui/src/shaders/mod.rs). Skipped gracefully
@@ -564,8 +565,8 @@ impl eframe::App for FanApp {
         {
             Duration::from_secs_f32(1.0 / f32::from(self.settings.shader_fps))
         } else if self.settings.theme.is_animated() && self.window_visible && !minimized {
-            // Neon border animation.
-            Duration::from_millis(33)
+            // Neon border animation (20 fps is enough for a slow hue drift).
+            Duration::from_millis(50)
         } else {
             Duration::from_millis(200)
         };
@@ -855,7 +856,13 @@ impl eframe::App for FanApp {
                                         )
                                         .changed()
                                     {
-                                        theme::install_fonts(ui.ctx(), self.settings.system_font);
+                                        let lang =
+                                            self.settings.language.as_deref().unwrap_or("en");
+                                        theme::install_fonts(
+                                            ui.ctx(),
+                                            self.settings.system_font,
+                                            lang,
+                                        );
                                         self.settings.save();
                                     }
                                 });
@@ -884,6 +891,12 @@ impl eframe::App for FanApp {
                                                     self.settings.language =
                                                         Some(code.to_string());
                                                     rust_i18n::set_locale(code);
+                                                    // CJK face follows the language.
+                                                    theme::install_fonts(
+                                                        ui.ctx(),
+                                                        self.settings.system_font,
+                                                        code,
+                                                    );
                                                     if let Some(tray) = &self.tray {
                                                         tray.retranslate();
                                                     }

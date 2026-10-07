@@ -3,32 +3,45 @@
 use super::*;
 
 impl FanApp {
-    /// Temperature the selected curve is actually driven by: the input of the first
-    /// control using it (same resolution as the control loop), else CPU temp.
-    pub(super) fn selected_curve_temp(&self, snap: &crate::poll::Snapshot) -> Option<f64> {
-        let curve_id = self.profile.curves.get(self.selected_curve)?.id.as_str();
+    /// Input temperature and applied duty for the selected curve's marker: the fan
+    /// using it with the hottest input (same resolution as the control loop), else
+    /// the CPU temp and no applied duty.
+    pub(super) fn selected_curve_input(
+        &self,
+        snap: &crate::poll::Snapshot,
+    ) -> (Option<f64>, Option<u8>) {
+        let Some(curve) = self.profile.curves.get(self.selected_curve) else {
+            return (snap.cpu_temp, None);
+        };
         let temps: HashMap<String, f64> = snap
             .temps
             .iter()
             .map(|(id, _, v)| (id.clone(), *v))
             .collect();
-        self.profile
+        let hottest = self
+            .profile
             .assignments
             .iter()
-            .filter(|(_, cid)| cid.as_str() == curve_id)
-            .find_map(|(ctrl, _)| {
+            .filter(|(_, cid)| cid.as_str() == curve.id.as_str())
+            .filter_map(|(ctrl, _)| {
                 let bound = self.profile.sensor_bindings.get(ctrl).map(String::as_str);
                 let id = resolve_curve_temp_sensor(bound, &temps)?;
                 let base = temps.get(&id).copied()?;
-                // Same input as the control loop: the hottest of the extra sensors.
                 let extras = self.profile.extra_sensors.get(ctrl).into_iter().flatten();
-                let hottest = extras
+                let input = extras
                     .filter_map(|e| temps.get(e).copied())
-                    .filter(|t| t.is_finite())
+                    .filter(|t| t.is_finite() && *t > 0.0)
                     .fold(base, f64::max);
-                Some(hottest)
+                Some((ctrl, input))
             })
-            .or(snap.cpu_temp)
+            .max_by(|a, b| a.1.total_cmp(&b.1));
+        match hottest {
+            Some((ctrl, input)) => {
+                let applied = self.curve_states.get(ctrl).and_then(|s| s.applied_duty);
+                (Some(input), applied)
+            }
+            None => (snap.cpu_temp, None),
+        }
     }
 
     /// First free `curveN` id: a loaded profile can already use `curve3` with only
@@ -41,7 +54,7 @@ impl FanApp {
     }
 
     pub(super) fn ui_curves_panel(&mut self, ui: &mut egui::Ui, snap: &crate::poll::Snapshot) {
-        let live_temp = self.selected_curve_temp(snap);
+        let (live_temp, applied_duty) = self.selected_curve_input(snap);
         ui.horizontal(|ui| {
             ui.heading(t!("curves_panel.heading").to_string());
             if let Some(s) = &self.profile_status {
@@ -221,7 +234,7 @@ impl FanApp {
                     } else {
                         ui.small(t!("curves_panel.used_by", list = users.join(", ")).to_string());
                     }
-                    if show_curve_editor(ui, curve, live_temp) {
+                    if show_curve_editor(ui, curve, live_temp, applied_duty) {
                         self.profile_status =
                             Some(t!("curves_panel.curve_edited_status").to_string());
                     }

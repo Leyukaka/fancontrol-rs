@@ -68,9 +68,19 @@ pub fn evaluate_profile_step_at(
             temps,
         );
         let state = states.entry(control_id.clone()).or_default();
+        // Hottest extra sensor. 0 °C is an unwired / not-yet-read source (e.g. a GPU
+        // row before nvidia-smi answers), not a temperature: skip it like a missing one.
+        let hottest_extra = profile
+            .extra_sensors
+            .get(control_id)
+            .into_iter()
+            .flatten()
+            .filter_map(|id| temps.get(id).copied())
+            .filter(|t| t.is_finite() && *t > 0.0)
+            .reduce(f64::max);
         // A non-finite reading counts as missing: NaN fails every comparison in the
         // interpolation and would land on the curve's last (usually 100 %) point.
-        let Some(temp) = sensor_id
+        let Some(cpu) = sensor_id
             .as_ref()
             .and_then(|id| temps.get(id))
             .copied()
@@ -88,18 +98,18 @@ pub fn evaluate_profile_step_at(
                 result
                     .errors
                     .push(format!("control {control_id}: no temperature source"));
+                // Grace steps before the failsafe: keep following the extra sensors
+                // rather than freezing the fan at its last duty.
+                if let Some(temp) = hottest_extra {
+                    let duty = evaluate_curve(curve, temp, Some(state));
+                    let duty = apply_response_time(curve, state, duty, now);
+                    result.duties.insert(control_id.clone(), duty);
+                }
             }
             continue;
         };
         state.missing_steps = 0;
-        let temp = profile
-            .extra_sensors
-            .get(control_id)
-            .into_iter()
-            .flatten()
-            .filter_map(|id| temps.get(id).copied())
-            .filter(|t| t.is_finite())
-            .fold(temp, f64::max);
+        let temp = hottest_extra.map_or(cpu, |t| t.max(cpu));
         let duty = evaluate_curve(curve, temp, Some(state));
         let duty = apply_response_time(curve, state, duty, now);
         result.duties.insert(control_id.clone(), duty);
@@ -215,11 +225,25 @@ mod tests {
         // GPU at 70 °C wins over CPU at 30 °C; the absent SSD is ignored.
         assert_eq!(step.duties.get("fan1"), Some(&100));
 
-        // Extras alone never replace a missing CPU sensor (failsafe path instead).
-        let gpu_only = HashMap::from([("host.gpu.0.temp".into(), 70.0)]);
+        // CPU missing: extras keep driving the fan during the grace steps, then the
+        // failsafe takes over as usual.
+        let gpu_only = HashMap::from([("host.gpu.0.temp".into(), 40.0)]);
         let mut states = HashMap::new();
+        for _ in 1..FAILSAFE_AFTER_MISSING_STEPS {
+            let step = evaluate_profile_step(&p, &gpu_only, &mut states);
+            assert_eq!(step.duties.get("fan1"), Some(&40));
+        }
         let step = evaluate_profile_step(&p, &gpu_only, &mut states);
-        assert!(step.duties.is_empty());
+        assert_eq!(step.duties.get("fan1"), Some(&FAILSAFE_DUTY));
+
+        // A 0 °C extra (unwired / not read yet) is ignored, the CPU drives.
+        let zero_gpu = HashMap::from([
+            ("pawnio.0.temp.CPUTIN".into(), 30.0),
+            ("host.gpu.0.temp".into(), 0.0),
+        ]);
+        let mut states = HashMap::new();
+        let step = evaluate_profile_step(&p, &zero_gpu, &mut states);
+        assert_eq!(step.duties.get("fan1"), Some(&20));
     }
 
     #[test]
