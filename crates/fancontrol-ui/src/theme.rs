@@ -11,11 +11,11 @@ use eframe::egui::{self, Color32, Visuals};
 #[serde(rename_all = "snake_case")]
 pub enum ThemeChoice {
     /// Follow the Windows light / dark app mode.
-    #[default]
     System,
     Light,
     Dark,
-    /// Experimental: dark neon palette with an animated RGB border.
+    /// Default since v0.7: dark neon palette, own title bar, animated RGB border.
+    #[default]
     Neon,
 }
 

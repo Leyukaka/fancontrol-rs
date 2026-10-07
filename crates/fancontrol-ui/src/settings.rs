@@ -51,6 +51,9 @@ pub struct UiSettings {
     /// Light / dark / follow Windows / neon.
     #[serde(default)]
     pub theme: ThemeChoice,
+    /// The one-time "Neon is the new default" notice was answered (v0.7).
+    #[serde(default)]
+    pub neon_intro_shown: bool,
     /// Use the Windows UI fonts (Segoe UI, Cascadia Mono) instead of egui's own.
     #[serde(default = "default_true")]
     pub system_font: bool,
@@ -192,6 +195,7 @@ impl Default for UiSettings {
             language: None,
             theme: ThemeChoice::default(),
             system_font: true,
+            neon_intro_shown: false,
             graph_style: GraphStyle::default(),
             shader_speed: default_shader_speed(),
             shader_color_a: default_shader_color_a(),

@@ -213,6 +213,11 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
     let pawnio_dialog = detect_pawnio_dialog(options.include_hw);
     // First-run writes consent only when the process actually allows PWM.
     let show_writes_consent = options.allow_hw_write && !settings.writes_risk_acknowledged;
+    // v0.7: Neon becomes the default look, also for upgrades. A one-time notice
+    // (see `show_neon_intro_dialog`) offers to switch back to the classic theme.
+    if !settings.neon_intro_shown {
+        settings.theme = ThemeChoice::Neon;
+    }
     let (theme_choice, system_font) = (settings.theme, settings.system_font);
     let language = settings.language.clone().unwrap_or_default();
 
@@ -1654,6 +1659,10 @@ impl eframe::App for FanApp {
             // the PawnIO window is up: both are centered and would stack.
             if self.pawnio_dialog.is_none() {
                 self.show_startup_prompt_dialog(&ctx);
+                // Last in line: only once the other startup windows are answered.
+                if !self.show_startup_prompt {
+                    self.show_neon_intro_dialog(&ctx);
+                }
             }
         }
         if self.settings.theme.custom_frame() {

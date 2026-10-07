@@ -37,6 +37,35 @@ impl FanApp {
             });
     }
 
+    /// One-time notice: Neon is the new default theme; the classic look is one
+    /// click away here, or later in Options > Theme.
+    pub(super) fn show_neon_intro_dialog(&mut self, ctx: &egui::Context) {
+        if self.settings.neon_intro_shown {
+            return;
+        }
+        egui::Window::new(t!("neon_intro.title").to_string())
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.set_max_width(420.0);
+                ui.label(t!("neon_intro.body").to_string());
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    if ui.button(t!("neon_intro.keep").to_string()).clicked() {
+                        self.settings.neon_intro_shown = true;
+                        self.settings.save();
+                    }
+                    if ui.button(t!("neon_intro.classic").to_string()).clicked() {
+                        self.settings.theme = ThemeChoice::System;
+                        theme::apply(ctx, ThemeChoice::System);
+                        self.settings.neon_intro_shown = true;
+                        self.settings.save();
+                    }
+                });
+            });
+    }
+
     pub(super) fn show_startup_prompt_dialog(&mut self, ctx: &egui::Context) {
         if !self.show_startup_prompt {
             return;
