@@ -34,6 +34,7 @@ mod curves;
 mod dashboard;
 mod dialogs;
 mod graph_area;
+mod title_bar;
 mod top_bar;
 
 const GRAPH_WINDOWS: [u16; 4] = [10, 20, 30, 60];
@@ -310,6 +311,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         shader_clock: Instant::now(),
         shader_backend_available: false,
         window_visible: true,
+        title_icon: None,
         top_toggles_w: 0.0,
         last_ui_pass: Instant::now(),
         last_stall_log: Instant::now(),
@@ -325,6 +327,8 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1200.0, 860.0])
             .with_title("Fancontrol-RS")
+            // Neon draws its own title bar (theme::apply keeps this in sync later).
+            .with_decorations(!theme_choice.custom_frame())
             .with_icon(icon),
         wgpu_options,
         ..defaults
@@ -447,6 +451,8 @@ struct FanApp {
     shader_backend_available: bool,
     /// Tracks minimize-to-tray so a shader style's fast repaint doesn't run while hidden.
     window_visible: bool,
+    /// App icon texture for the Neon title bar (see `app/title_bar.rs`).
+    title_icon: Option<egui::TextureHandle>,
     /// Width of the top-bar toggles last frame (see `ui_top_toggles`).
     top_toggles_w: f32,
     /// Start of the last `ui()` pass, and of the last "UI stalled" log (see `log_ui_stall`).
@@ -611,6 +617,9 @@ impl eframe::App for FanApp {
             self.load_history.push_if_due(load as f32, Instant::now());
         }
 
+        if self.settings.theme.custom_frame() {
+            self.ui_title_bar(ui);
+        }
         egui::Panel::top("top").show(ui, |ui| {
             let toggles_w = self.top_toggles_w;
             let mut wrap_toggles = false;
@@ -1603,6 +1612,9 @@ impl eframe::App for FanApp {
             if self.pawnio_dialog.is_none() {
                 self.show_startup_prompt_dialog(&ctx);
             }
+        }
+        if self.settings.theme.custom_frame() {
+            self.handle_frame_resize(&ctx);
         }
         if self.settings.theme == ThemeChoice::Neon {
             theme::paint_neon_border(&ctx, self.shader_clock.elapsed().as_secs_f64());

@@ -30,6 +30,11 @@ impl ThemeChoice {
         }
     }
 
+    /// Whether the app draws its own title bar and window frame (Neon).
+    pub fn custom_frame(self) -> bool {
+        self == Self::Neon
+    }
+
     /// Whether this theme animates (the neon border) and needs a steady repaint.
     pub fn is_animated(self) -> bool {
         self == Self::Neon
@@ -104,9 +109,11 @@ pub fn marker_outline(v: &Visuals) -> Color32 {
 }
 
 /// Apply a theme choice: light / dark preference plus, for Neon, its own dark
-/// visuals (reset to the stock dark visuals otherwise).
+/// visuals (reset to the stock dark visuals otherwise) and the app's own title bar
+/// instead of the native one (which cannot be styled).
 pub fn apply(ctx: &egui::Context, choice: ThemeChoice) {
     ctx.set_theme(choice.preference());
+    ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(!choice.custom_frame()));
     let dark = if choice == ThemeChoice::Neon {
         neon_visuals()
     } else {
@@ -115,8 +122,8 @@ pub fn apply(ctx: &egui::Context, choice: ThemeChoice) {
     ctx.set_visuals_of(egui::Theme::Dark, dark);
 }
 
-const NEON_CYAN: Color32 = Color32::from_rgb(0, 229, 255);
-const NEON_MAGENTA: Color32 = Color32::from_rgb(255, 46, 196);
+pub(crate) const NEON_CYAN: Color32 = Color32::from_rgb(0, 229, 255);
+pub(crate) const NEON_MAGENTA: Color32 = Color32::from_rgb(255, 46, 196);
 
 fn neon_visuals() -> Visuals {
     let mut v = Visuals::dark();
@@ -146,45 +153,88 @@ fn neon_visuals() -> Visuals {
 }
 
 /// Neon theme: a glowing border around the window whose hue runs around the
-/// edges over time. `time_s` drives the animation.
+/// edges over time. `time_s` drives the animation. Corners are rounded like a
+/// Windows 11 window, so nothing gets clipped at the corners.
 pub fn paint_neon_border(ctx: &egui::Context, time_s: f64) {
-    const SEGMENTS: usize = 96;
     // Wide faint passes first, sharp core last: a cheap glow.
     const PASSES: [(f32, f32); 3] = [(9.0, 0.10), (4.0, 0.30), (1.5, 1.0)];
-    let rect = ctx.content_rect().shrink(1.0);
+    let path = rounded_rect_path(ctx.content_rect().shrink(1.0), 8.0);
+    let mut along = vec![0.0_f32];
+    for w in path.windows(2) {
+        along.push(along[along.len() - 1] + w[0].distance(w[1]));
+    }
+    let total = along[along.len() - 1].max(1.0);
+    let shift = (time_s * 0.12).fract() as f32;
     let painter = ctx.layer_painter(egui::LayerId::new(
         egui::Order::Foreground,
         egui::Id::new("neon_border"),
     ));
-    let corners = [
-        rect.left_top(),
-        rect.right_top(),
-        rect.right_bottom(),
-        rect.left_bottom(),
-    ];
-    let perimeter = 2.0 * (rect.width() + rect.height());
-    // Point at distance `d` along the edges, clockwise from the top-left corner.
-    let at = |mut d: f32| {
-        for (i, &a) in corners.iter().enumerate() {
-            let b = corners[(i + 1) % 4];
-            let len = a.distance(b);
-            if d <= len || i == 3 {
-                return a + (b - a) * (d / len.max(1.0)).min(1.0);
-            }
-            d -= len;
-        }
-        corners[0]
-    };
-    let shift = (time_s * 0.12).fract() as f32;
     for (width, alpha) in PASSES {
-        for i in 0..SEGMENTS {
-            let f0 = i as f32 / SEGMENTS as f32;
-            let f1 = (i + 1) as f32 / SEGMENTS as f32;
-            let hue = (f0 + shift).fract();
+        for (i, w) in path.windows(2).enumerate() {
+            let hue = (along[i] / total + shift).fract();
             let color = Color32::from(egui::ecolor::Hsva::new(hue, 1.0, 1.0, alpha));
-            painter.line_segment([at(f0 * perimeter), at(f1 * perimeter)], (width, color));
+            painter.line_segment([w[0], w[1]], (width, color));
         }
     }
+}
+
+/// Closed clockwise outline of `rect` with rounded corners, starting on the left
+/// edge: straight edges cut in ~24 pt steps, corners in 6 arc steps.
+fn rounded_rect_path(rect: egui::Rect, radius: f32) -> Vec<egui::Pos2> {
+    const STEP: f32 = 24.0;
+    const ARC_STEPS: usize = 6;
+    let r = radius.min(rect.width() / 2.0).min(rect.height() / 2.0);
+    let half_pi = std::f32::consts::FRAC_PI_2;
+    // Corner arc centres (top-left, top-right, bottom-right, bottom-left) and the
+    // start angle of each arc; screen y points down, so angles grow clockwise.
+    let corners = [
+        (egui::pos2(rect.left() + r, rect.top() + r), 2.0 * half_pi),
+        (egui::pos2(rect.right() - r, rect.top() + r), 3.0 * half_pi),
+        (egui::pos2(rect.right() - r, rect.bottom() - r), 0.0),
+        (egui::pos2(rect.left() + r, rect.bottom() - r), half_pi),
+    ];
+    let on_arc = |(c, a): (egui::Pos2, f32), t: f32| {
+        let angle = a + half_pi * t;
+        egui::pos2(c.x + r * angle.cos(), c.y + r * angle.sin())
+    };
+    let mut pts = Vec::new();
+    for (i, &corner) in corners.iter().enumerate() {
+        for k in 0..=ARC_STEPS {
+            pts.push(on_arc(corner, k as f32 / ARC_STEPS as f32));
+        }
+        let from = pts[pts.len() - 1];
+        let to = on_arc(corners[(i + 1) % 4], 0.0);
+        let n = ((from.distance(to) / STEP).ceil() as usize).max(1);
+        for k in 1..n {
+            pts.push(from + (to - from) * (k as f32 / n as f32));
+        }
+    }
+    pts.push(pts[0]);
+    pts
+}
+
+/// Text with a neon glow: faint offset copies in `color`, then a bright core.
+pub fn neon_text(
+    painter: &egui::Painter,
+    pos: egui::Pos2,
+    anchor: egui::Align2,
+    text: &str,
+    font: egui::FontId,
+    color: Color32,
+) -> egui::Rect {
+    for (off, alpha) in [(2.0, 0.18), (1.0, 0.35)] {
+        for d in [
+            egui::vec2(-off, 0.0),
+            egui::vec2(off, 0.0),
+            egui::vec2(0.0, -off),
+            egui::vec2(0.0, off),
+        ] {
+            let glow = color.gamma_multiply(alpha);
+            painter.text(pos + d, anchor, text, font.clone(), glow);
+        }
+    }
+    let core = Color32::WHITE.lerp_to_gamma(color, 0.35);
+    painter.text(pos, anchor, text, font, core)
 }
 
 /// Use the Windows UI fonts (Segoe UI, Cascadia Mono) instead of egui's built-in
