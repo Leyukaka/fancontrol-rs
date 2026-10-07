@@ -11,13 +11,15 @@ use crate::poll::{SharedMap, SharedSnapshot, spawn_poller};
 use crate::registry::{BackendStatus, backend_status, build_registry};
 use crate::settings::{SHADER_FPS_ALLOWED, UiSettings};
 use crate::shaders::{GraphStyle, ShaderGallery, show_shader_panel};
+use crate::theme::{self, ThemeChoice};
 use crate::tray::{AppTray, TrayCommand, TrayState};
 use crate::update_check::{UpdateChecker, UpdateStatus};
 use crate::write_queue::WriteQueue;
 use eframe::egui;
 use fancontrol_core::{
-    ChannelMap, CurveEvalState, FanCurve, MetricSample, Profile, SensorKind, evaluate_profile_step,
-    is_cpu_temp_candidate, list_profiles, load_profile, save_profile,
+    ChannelMap, CoreError, CurveEvalState, FanCurve, MetricSample, Profile, SensorKind,
+    evaluate_profile_step, is_cpu_temp_candidate, list_profiles, load_profile,
+    resolve_curve_temp_sensor, save_profile,
 };
 use fancontrol_metrics::{
     MetricSink, OtlpSink, SqliteMetricsStore, SqliteStoreConfig, default_metrics_db_path,
@@ -27,6 +29,13 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+
+mod curves;
+mod dashboard;
+mod dialogs;
+mod graph_area;
+mod title_bar;
+mod top_bar;
 
 const GRAPH_WINDOWS: [u16; 4] = [10, 20, 30, 60];
 const GRAPH_SAMPLES: [u16; 4] = [1, 2, 5, 10];
@@ -204,6 +213,13 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
     let pawnio_dialog = detect_pawnio_dialog(options.include_hw);
     // First-run writes consent only when the process actually allows PWM.
     let show_writes_consent = options.allow_hw_write && !settings.writes_risk_acknowledged;
+    // v0.7: Neon becomes the default look, also for upgrades. A one-time notice
+    // (see `show_neon_intro_dialog`) offers to switch back to the classic theme.
+    if !settings.neon_intro_shown {
+        settings.theme = ThemeChoice::Neon;
+    }
+    let (theme_choice, system_font) = (settings.theme, settings.system_font);
+    let language = settings.language.clone().unwrap_or_default();
 
     // Activity deck: sample only while the panel is enabled (default on).
     fancontrol_plugins::cpu_activity::set_enabled(settings.show_activity_deck);
@@ -261,6 +277,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         host_enabled,
         slider_state: HashMap::new(),
         user_lock_until: HashMap::new(),
+        echo_hold_until: HashMap::new(),
         write_error: None,
         rename_id: None,
         rename_buf: String::new(),
@@ -269,6 +286,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         graph_axis_max: None,
         graph_axis_max_secondary: None,
         metrics_sink,
+        pending_export: None,
         otel_sink,
         last_metrics_record: Instant::now() - Duration::from_secs(60),
         load_history,
@@ -298,46 +316,42 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         shader_clock: Instant::now(),
         shader_backend_available: false,
         window_visible: true,
+        title_icon: None,
+        top_toggles_w: 0.0,
+        last_ui_pass: Instant::now(),
+        last_stall_log: Instant::now(),
     };
 
     let icon = eframe::icon_data::from_png_bytes(include_bytes!("../../../assets/icon.png"))
         .map_err(|e| UiError::Eframe(format!("app icon: {e}")))?;
 
+    let defaults = eframe::NativeOptions::default();
+    let mut wgpu_options = defaults.wgpu_options;
+    wgpu_options.on_surface_status = Arc::new(surface_status_action);
+    if let eframe::egui_wgpu::WgpuSetup::CreateNew(setup) = &mut wgpu_options.wgpu_setup
+        && std::env::var_os("WGPU_BACKEND").is_none()
+    {
+        setup.native_adapter_selector = Some(Arc::new(prefer_dx12_adapter));
+    }
     let native = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1200.0, 860.0])
             .with_title("Fancontrol-RS")
+            // Neon draws its own title bar (theme::apply keeps this in sync later).
+            .with_decorations(!theme_choice.custom_frame())
             .with_icon(icon),
-        ..Default::default()
+        wgpu_options,
+        ..defaults
     };
 
     eframe::run_native(
         "Fancontrol-RS",
         native,
         Box::new(move |cc| {
-            cc.egui_ctx.set_visuals(egui::Visuals::dark());
-
-            // CJK glyph fallback (egui's default fonts have no Chinese/Japanese coverage).
-            // Pushed after the default fonts so Latin-script languages keep using those,
-            // and loaded unconditionally since the language can be switched live at runtime.
-            let mut fonts = egui::FontDefinitions::default();
-            fonts.font_data.insert(
-                "noto_sans_cjk".to_owned(),
-                std::sync::Arc::new(egui::FontData::from_static(include_bytes!(
-                    "../assets/fonts/NotoSansCJK-Regular.ttc"
-                ))),
-            );
-            fonts
-                .families
-                .entry(egui::FontFamily::Proportional)
-                .or_default()
-                .push("noto_sans_cjk".to_owned());
-            fonts
-                .families
-                .entry(egui::FontFamily::Monospace)
-                .or_default()
-                .push("noto_sans_cjk".to_owned());
-            cc.egui_ctx.set_fonts(fonts);
+            theme::apply(&cc.egui_ctx, theme_choice);
+            // Windows UI fonts + CJK fallback (loaded unconditionally: the language
+            // can be switched live at runtime).
+            theme::install_fonts(&cc.egui_ctx, system_font, &language);
 
             // One-time setup for the shader graph gallery's wgpu pipelines
             // (see crates/fancontrol-ui/src/shaders/mod.rs). Skipped gracefully
@@ -354,6 +368,20 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
                 tracing::warn!("wgpu render state unavailable: shader graph styles disabled");
                 false
             };
+
+            // Wake the event loop at least twice a second even if a scheduled
+            // repaint gets lost (seen after the Windows resize loop): keeps the UI,
+            // tray commands and curve apply alive whatever the window backend does.
+            let ctx = cc.egui_ctx.clone();
+            std::thread::Builder::new()
+                .name("repaint-watchdog".into())
+                .spawn(move || {
+                    loop {
+                        std::thread::sleep(Duration::from_millis(500));
+                        ctx.request_repaint();
+                    }
+                })
+                .ok();
 
             let mut app = app;
             app.shader_backend_available = shader_backend_available;
@@ -381,6 +409,9 @@ struct FanApp {
     host_enabled: Arc<AtomicBool>,
     slider_state: HashMap<String, f32>,
     user_lock_until: HashMap<String, Instant>,
+    /// Per control: keep the requested duty on the slider until this instant, so the
+    /// previous hardware reading (the EC echo lags a poll) does not snap it back.
+    echo_hold_until: HashMap<String, Instant>,
     write_error: Option<String>,
     rename_id: Option<String>,
     rename_buf: String,
@@ -397,6 +428,9 @@ struct FanApp {
     graph_axis_max_secondary: Option<f32>,
     /// Optional local SQLite metrics store (background writer).
     metrics_sink: Option<SqliteMetricsStore>,
+    /// CSV export running on the metrics worker: target path + reply channel,
+    /// polled in `background_tick` so the UI thread never waits on it.
+    pending_export: Option<PendingExport>,
     /// Optional OTLP/HTTP export (background sender).
     otel_sink: Option<OtlpSink>,
     last_metrics_record: Instant,
@@ -441,6 +475,13 @@ struct FanApp {
     shader_backend_available: bool,
     /// Tracks minimize-to-tray so a shader style's fast repaint doesn't run while hidden.
     window_visible: bool,
+    /// App icon texture for the Neon title bar (see `app/title_bar.rs`).
+    title_icon: Option<egui::TextureHandle>,
+    /// Width of the top-bar toggles last frame (see `ui_top_toggles`).
+    top_toggles_w: f32,
+    /// Start of the last `ui()` pass, and of the last "UI stalled" log (see `log_ui_stall`).
+    last_ui_pass: Instant,
+    last_stall_log: Instant,
 }
 
 fn load_or_create_default_profile(preferred: Option<&str>) -> Profile {
@@ -449,9 +490,15 @@ fn load_or_create_default_profile(preferred: Option<&str>) -> Profile {
     {
         return p;
     }
-    if let Ok(p) = load_profile("default") {
-        return p;
-    }
+    let default_missing = match load_profile("default") {
+        Ok(p) => return p,
+        Err(CoreError::ProfileNotFound(_)) => true,
+        Err(e) => {
+            // Keep the user's file: run on the built-in default without saving over it.
+            tracing::warn!(error = %e, "default profile unreadable, using built-in curves");
+            false
+        }
+    };
     let mut p = Profile::new("default", "Default");
     p.curves
         .push(FanCurve::linear("quiet", "Quiet", 30.0, 75.0, 25, 100));
@@ -463,8 +510,93 @@ fn load_or_create_default_profile(preferred: Option<&str>) -> Profile {
         .insert("pawnio.0.ctrl1".into(), "quiet".into());
     p.sensor_bindings
         .insert("pawnio.0.ctrl1".into(), "pawnio.0.temp.CPU".into());
-    let _ = save_profile(&p);
+    if default_missing {
+        let _ = save_profile(&p);
+    }
     p
+}
+
+/// A CSV export in flight: target path and the metrics worker's reply channel.
+type PendingExport = (
+    std::path::PathBuf,
+    std::sync::mpsc::Receiver<Result<usize, String>>,
+);
+
+/// Lay out `add_contents` in the available width without letting over-wide
+/// content (narrow window) widen the parent. egui sizes a panel, and the
+/// separator line it draws, from its content rect, so an overflowing row used to
+/// draw the line straight across the Options panel. The overflow itself is
+/// clipped by the panel.
+fn clamp_width<R>(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    let max_rect = ui.available_rect_before_wrap();
+    let mut child = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(max_rect)
+            .layout(*ui.layout()),
+    );
+    let inner = add_contents(&mut child);
+    let used = egui::vec2(max_rect.width(), child.min_rect().height());
+    ui.allocate_rect(
+        egui::Rect::from_min_size(max_rect.min, used),
+        egui::Sense::hover(),
+    );
+    inner
+}
+
+/// Pick the GPU adapter: DirectX 12 first. On NVIDIA (RTX 5080, driver 617)
+/// the Vulkan path stopped presenting after a window resize: the image stayed at
+/// the old size and the event loop no longer woke up on its own. DX12 does not
+/// show it. Falls back to any other usable adapter; `WGPU_BACKEND` (e.g.
+/// `vulkan`) bypasses this selector entirely.
+fn prefer_dx12_adapter(
+    adapters: &[eframe::egui_wgpu::wgpu::Adapter],
+    surface: Option<&eframe::egui_wgpu::wgpu::Surface<'_>>,
+) -> Result<eframe::egui_wgpu::wgpu::Adapter, String> {
+    use eframe::egui_wgpu::wgpu::{Backend, DeviceType};
+    let usable: Vec<_> = adapters
+        .iter()
+        .filter(|a| surface.is_none_or(|s| a.is_surface_supported(s)))
+        .filter(|a| a.get_info().device_type != DeviceType::Cpu)
+        .collect();
+    let dx12 = usable
+        .iter()
+        .find(|a| a.get_info().backend == Backend::Dx12);
+    dx12.or(usable.first())
+        .map(|a| (*a).clone())
+        .or_else(|| adapters.first().cloned())
+        .ok_or_else(|| "no usable wgpu adapter".to_owned())
+}
+
+/// How to recover when wgpu can't hand us a frame to draw into.
+///
+/// egui-wgpu's default silently skips the frame on `Occluded` and `Timeout`. On
+/// Windows that state can stick after a minimize / restore or a resize: the app
+/// keeps running (tray, curves) but nothing is repainted, leaving the old frame
+/// at the old size with a black band around it. Reconfiguring the swapchain
+/// gets a fresh frame next time; when the window really is hidden eframe does
+/// not paint at all, so this costs nothing then.
+fn surface_status_action(
+    status: &eframe::egui_wgpu::wgpu::CurrentSurfaceTexture,
+) -> eframe::egui_wgpu::SurfaceErrorAction {
+    use eframe::egui_wgpu::SurfaceErrorAction;
+    use eframe::egui_wgpu::wgpu::CurrentSurfaceTexture;
+    use std::sync::atomic::AtomicU64;
+
+    // Log the first occurrence and then every 100th, enough to confirm the path
+    // from a user's log without flooding it at 5 Hz.
+    static DROPPED: AtomicU64 = AtomicU64::new(0);
+    let n = DROPPED.fetch_add(1, Ordering::Relaxed);
+    if n.is_multiple_of(100) {
+        tracing::info!(status = ?status, dropped = n + 1, "wgpu frame not acquired");
+    }
+
+    match status {
+        CurrentSurfaceTexture::Lost => SurfaceErrorAction::RecreateSurface,
+        CurrentSurfaceTexture::Outdated
+        | CurrentSurfaceTexture::Occluded
+        | CurrentSurfaceTexture::Timeout => SurfaceErrorAction::Reconfigure,
+        _ => SurfaceErrorAction::SkipFrame,
+    }
 }
 
 impl eframe::App for FanApp {
@@ -476,17 +608,26 @@ impl eframe::App for FanApp {
         // Smooth shader animation needs a much faster repaint cadence than the
         // rest of the UI - only pay for it while a shader style is actually
         // active, the backend supports it, and the window isn't minimized to tray.
+        // Not while the graph is hidden or the window is minimized to the taskbar
+        // (only the tray hide clears `window_visible`).
+        let minimized = ctx.input(|i| i.viewport().minimized == Some(true));
         let repaint_interval = if self.settings.graph_style.is_shader()
             && self.shader_backend_available
+            && self.settings.show_graph_panel
             && self.window_visible
+            && !minimized
         {
             Duration::from_secs_f32(1.0 / f32::from(self.settings.shader_fps))
+        } else if self.settings.theme.is_animated() && self.window_visible && !minimized {
+            // Neon border animation (20 fps is enough for a slow hue drift).
+            Duration::from_millis(50)
         } else {
             Duration::from_millis(200)
         };
         ctx.request_repaint_after(repaint_interval);
         self.handle_tray(ctx);
         self.background_tick();
+        self.log_ui_stall(ctx);
 
         if self.tray.is_some() && !self.really_exit && ctx.input(|i| i.viewport().close_requested())
         {
@@ -500,6 +641,14 @@ impl eframe::App for FanApp {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let gap = self.last_ui_pass.elapsed();
+        if self.window_visible && gap > Duration::from_secs(2) {
+            tracing::info!(
+                gap_ms = gap.as_millis() as u64,
+                "ui pass resumed after a gap"
+            );
+        }
+        self.last_ui_pass = Instant::now();
         let ctx = ui.ctx().clone();
         let snap = self.snapshot.lock().map(|g| g.clone()).unwrap_or_default();
 
@@ -516,7 +665,12 @@ impl eframe::App for FanApp {
             self.load_history.push_if_due(load as f32, Instant::now());
         }
 
+        if self.settings.theme.custom_frame() {
+            self.ui_title_bar(ui);
+        }
         egui::Panel::top("top").show(ui, |ui| {
+            let toggles_w = self.top_toggles_w;
+            let mut wrap_toggles = false;
             ui.horizontal(|ui| {
                 self.ui_graph_controls(ui);
                 ui.separator();
@@ -524,7 +678,7 @@ impl eframe::App for FanApp {
                     self.options.allow_hw_write && matches!(self.status, BackendStatus::Ok(_));
                 if write_capable {
                     ui.colored_label(
-                        egui::Color32::LIGHT_GREEN,
+                        theme::ok(ui.visuals()),
                         t!("top_bar.write_enabled").to_string(),
                     );
                 } else {
@@ -544,8 +698,8 @@ impl eframe::App for FanApp {
                             BackendStatus::Ok(_) => None,
                         }
                     };
-                    let resp = ui
-                        .colored_label(egui::Color32::YELLOW, t!("top_bar.read_only").to_string());
+                    let warn = theme::warn(ui.visuals());
+                    let resp = ui.colored_label(warn, t!("top_bar.read_only").to_string());
                     if let Some(hint) = hint {
                         resp.on_hover_text(hint);
                     }
@@ -561,124 +715,31 @@ impl eframe::App for FanApp {
                     }
                 }
                 if let Some(msg) = &self.elevate_status {
-                    ui.colored_label(egui::Color32::LIGHT_RED, msg);
+                    ui.colored_label(theme::error(ui.visuals()), msg);
                 }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui
-                        .button(format!("⚙ {}", t!("top_bar.options_button")))
-                        .clicked()
-                    {
-                        self.show_settings = !self.show_settings;
-                    }
-                    // Updates: Options only (no top-bar button - clutter / unclear action).
-                    // right-to-left: add Controls, Fans, Temps, then Curves
-                    if ui
-                        .selectable_label(
-                            self.show_controls,
-                            t!("top_bar.controls_toggle").to_string(),
-                        )
-                        .on_hover_text(t!("top_bar.controls_toggle_tooltip").to_string())
-                        .clicked()
-                    {
-                        self.show_controls = !self.show_controls;
-                    }
-                    if ui
-                        .selectable_label(self.show_fans, t!("top_bar.fans_toggle").to_string())
-                        .on_hover_text(t!("top_bar.fans_toggle_tooltip").to_string())
-                        .clicked()
-                    {
-                        self.show_fans = !self.show_fans;
-                    }
-                    if ui
-                        .selectable_label(self.show_temps, t!("top_bar.temps_toggle").to_string())
-                        .on_hover_text(t!("top_bar.temps_toggle_tooltip").to_string())
-                        .clicked()
-                    {
-                        self.show_temps = !self.show_temps;
-                    }
-                    if ui
-                        .selectable_label(
-                            self.settings.show_activity_deck,
-                            t!("top_bar.activity_toggle").to_string(),
-                        )
-                        .on_hover_text(t!("top_bar.activity_toggle_tooltip").to_string())
-                        .clicked()
-                    {
-                        self.settings.show_activity_deck = !self.settings.show_activity_deck;
-                        self.apply_activity_deck_gate();
-                        self.settings.save();
-                    }
-                    if ui
-                        .selectable_label(
-                            self.settings.show_cpu_panel,
-                            t!("top_bar.cpu_toggle").to_string(),
-                        )
-                        .on_hover_text(t!("top_bar.cpu_toggle_tooltip").to_string())
-                        .clicked()
-                    {
-                        self.settings.show_cpu_panel = !self.settings.show_cpu_panel;
-                        self.settings.save();
-                    }
-                    if ui
-                        .selectable_label(
-                            self.settings.show_gpu_panel,
-                            t!("top_bar.gpu_toggle").to_string(),
-                        )
-                        .on_hover_text(t!("top_bar.gpu_toggle_tooltip").to_string())
-                        .clicked()
-                    {
-                        self.settings.show_gpu_panel = !self.settings.show_gpu_panel;
-                        self.settings.save();
-                    }
-                    if ui
-                        .selectable_label(
-                            self.settings.show_graph_panel,
-                            t!("top_bar.sensors_toggle").to_string(),
-                        )
-                        .on_hover_text(t!("top_bar.sensors_toggle_tooltip").to_string())
-                        .clicked()
-                    {
-                        self.settings.show_graph_panel = !self.settings.show_graph_panel;
-                        self.settings.save();
-                    }
-                    if ui
-                        .selectable_label(self.show_curves, t!("top_bar.curves_toggle").to_string())
-                        .on_hover_text(t!("top_bar.curves_toggle_tooltip").to_string())
-                        .clicked()
-                    {
-                        self.show_curves = !self.show_curves;
-                    }
-                    // Prominent Curve control toggle (auto-apply to hardware)
-                    let curve_on = self.settings.auto_apply_curves;
-                    let (label, fill, text_color) = if curve_on {
-                        (
-                            t!("top_bar.curve_control_on").to_string(),
-                            egui::Color32::from_rgb(30, 90, 50),
-                            egui::Color32::from_rgb(140, 255, 170),
-                        )
-                    } else {
-                        (
-                            t!("top_bar.curve_control_off").to_string(),
-                            egui::Color32::from_rgb(70, 40, 40),
-                            egui::Color32::from_rgb(220, 160, 160),
-                        )
-                    };
-                    let btn =
-                        egui::Button::new(egui::RichText::new(label).color(text_color).strong())
-                            .fill(fill);
-                    if ui
-                        .add(btn)
-                        .on_hover_text(t!("top_bar.curve_control_tooltip").to_string())
-                        .clicked()
-                    {
-                        self.settings.auto_apply_curves = !self.settings.auto_apply_curves;
-                        self.settings.save();
-                    }
-                });
+                if ui.available_width() >= toggles_w {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        self.ui_top_toggles(ui);
+                    });
+                } else {
+                    wrap_toggles = true;
+                }
             });
+            // Narrow window: the toggles get their own row instead of overlapping the
+            // controls on the left.
+            if wrap_toggles {
+                // One row high: a bare `with_layout` here takes all the remaining
+                // height and centres the buttons vertically, so the top panel grew
+                // over the whole window.
+                let row = egui::vec2(ui.available_width(), ui.spacing().interact_size.y);
+                let layout = egui::Layout::right_to_left(egui::Align::Center);
+                ui.allocate_ui_with_layout(row, layout, |ui| {
+                    self.ui_top_toggles(ui);
+                });
+            }
             if self.settings.auto_apply_curves && !self.options.allow_hw_write {
                 ui.colored_label(
-                    egui::Color32::YELLOW,
+                    theme::warn(ui.visuals()),
                     t!("top_bar.curve_readonly_warning").to_string(),
                 );
             }
@@ -686,13 +747,13 @@ impl eframe::App for FanApp {
             // Keep live errors here so failures stay visible.
             if let Some(err) = &snap.error {
                 ui.colored_label(
-                    egui::Color32::YELLOW,
+                    theme::warn(ui.visuals()),
                     t!("top_bar.poll_error", error = err).to_string(),
                 );
             }
             if let Some(err) = &self.write_error {
                 ui.colored_label(
-                    egui::Color32::RED,
+                    theme::error(ui.visuals()),
                     t!("top_bar.write_error", error = err).to_string(),
                 );
             }
@@ -782,7 +843,7 @@ impl eframe::App for FanApp {
                                         }
                                         Some(UpdateStatus::Available { version, url }) => {
                                             ui.colored_label(
-                                                egui::Color32::LIGHT_GREEN,
+                                                theme::ok(ui.visuals()),
                                                 t!(
                                                     "options.new_version_available",
                                                     version = version
@@ -796,7 +857,7 @@ impl eframe::App for FanApp {
                                         }
                                         Some(UpdateStatus::Error(e)) => {
                                             ui.colored_label(
-                                                egui::Color32::YELLOW,
+                                                theme::warn(ui.visuals()),
                                                 t!("options.check_failed", error = e).to_string(),
                                             );
                                         }
@@ -831,6 +892,43 @@ impl eframe::App for FanApp {
                                     }
                                 });
 
+                            egui::CollapsingHeader::new(t!("options.section_theme").to_string())
+                                .default_open(false)
+                                .show(ui, |ui| {
+                                    egui::ComboBox::from_id_salt("theme_pick")
+                                        .selected_text(self.settings.theme.label())
+                                        .show_ui(ui, |ui| {
+                                            for choice in ThemeChoice::ALL {
+                                                let selected = self.settings.theme == choice;
+                                                if ui
+                                                    .selectable_label(selected, choice.label())
+                                                    .clicked()
+                                                    && !selected
+                                                {
+                                                    self.settings.theme = choice;
+                                                    theme::apply(ui.ctx(), choice);
+                                                    self.settings.save();
+                                                }
+                                            }
+                                        });
+                                    if ui
+                                        .checkbox(
+                                            &mut self.settings.system_font,
+                                            t!("options.system_font").to_string(),
+                                        )
+                                        .changed()
+                                    {
+                                        let lang =
+                                            self.settings.language.as_deref().unwrap_or("en");
+                                        theme::install_fonts(
+                                            ui.ctx(),
+                                            self.settings.system_font,
+                                            lang,
+                                        );
+                                        self.settings.save();
+                                    }
+                                });
+
                             egui::CollapsingHeader::new(t!("options.section_language").to_string())
                                 .default_open(false)
                                 .show(ui, |ui| {
@@ -855,6 +953,12 @@ impl eframe::App for FanApp {
                                                     self.settings.language =
                                                         Some(code.to_string());
                                                     rust_i18n::set_locale(code);
+                                                    // CJK face follows the language.
+                                                    theme::install_fonts(
+                                                        ui.ctx(),
+                                                        self.settings.system_font,
+                                                        code,
+                                                    );
                                                     if let Some(tray) = &self.tray {
                                                         tray.retranslate();
                                                     }
@@ -906,7 +1010,7 @@ impl eframe::App for FanApp {
                                     });
                                 if self.settings.graph_style.is_shader() {
                                     ui.colored_label(
-                                        egui::Color32::YELLOW,
+                                        theme::warn(ui.visuals()),
                                         t!("options.shader_gpu_warning").to_string(),
                                     );
                                     dirty |= ui
@@ -1039,7 +1143,7 @@ impl eframe::App for FanApp {
                                         && !self.options.allow_hw_write
                                     {
                                         ui.colored_label(
-                                            egui::Color32::YELLOW,
+                                            theme::warn(ui.visuals()),
                                             t!("options.auto_apply_needs_write").to_string(),
                                         );
                                     }
@@ -1172,7 +1276,7 @@ impl eframe::App for FanApp {
                                             {
                                                 dirty = true;
                                                 if let Some(store) = &self.metrics_sink {
-                                                    store.request_purge();
+                                                    store.set_retention_and_purge(u32::from(d));
                                                 }
                                             }
                                         }
@@ -1184,8 +1288,14 @@ impl eframe::App for FanApp {
                                             path.display()
                                         ));
                                     }
+                                    let exporting = self.pending_export.is_some();
                                     if ui
-                                        .button(t!("options.metrics_export_csv").to_string())
+                                        .add_enabled(
+                                            !exporting,
+                                            egui::Button::new(
+                                                t!("options.metrics_export_csv").to_string(),
+                                            ),
+                                        )
                                         .clicked()
                                         && let Some(store) = &self.metrics_sink
                                         && let Ok(dir) = fancontrol_core::config_dir()
@@ -1200,14 +1310,8 @@ impl eframe::App for FanApp {
                                                 .unwrap_or(0)
                                         );
                                         let path = exports.join(name);
-                                        match store.request_export_csv(&path) {
-                                            Ok(n) => {
-                                                self.profile_status = Some(format!(
-                                                    "{} ({n} rows) → {}",
-                                                    t!("options.metrics_export_ok"),
-                                                    path.display()
-                                                ));
-                                            }
+                                        match store.start_export_csv(&path) {
+                                            Ok(rx) => self.pending_export = Some((path, rx)),
                                             Err(e) => {
                                                 self.profile_status = Some(format!(
                                                     "{}: {e}",
@@ -1235,9 +1339,11 @@ impl eframe::App for FanApp {
                                 if self.settings.otel_enabled {
                                     ui.horizontal(|ui| {
                                         ui.label(t!("options.otel_endpoint").to_string());
+                                        // Apply on Enter / focus loss, not per keystroke: each
+                                        // change started a new exporter and rewrote settings.
                                         if ui
                                             .text_edit_singleline(&mut self.settings.otel_endpoint)
-                                            .changed()
+                                            .lost_focus()
                                         {
                                             dirty = true;
                                             self.otel_sink =
@@ -1265,7 +1371,7 @@ impl eframe::App for FanApp {
                 .resizable(true)
                 .default_size(280.0)
                 .show(ui, |ui| {
-                    self.ui_curves_panel(ui, snap.cpu_temp);
+                    clamp_width(ui, |ui| self.ui_curves_panel(ui, &snap));
                 });
         }
 
@@ -1330,7 +1436,7 @@ impl eframe::App for FanApp {
                 graph_panel = graph_panel.exact_size(fill);
             }
 
-            graph_panel.show(ui, |ui| {
+            let graph_body = |ui: &mut egui::Ui| {
                 // Top row: thermal graph and/or GPU detail (side-by-side when both).
                 if top_viz {
                     let room = ui.available_height().max(80.0);
@@ -1521,7 +1627,8 @@ impl eframe::App for FanApp {
                         self.settings.save();
                     }
                 }
-            });
+            };
+            graph_panel.show(ui, |ui| clamp_width(ui, graph_body));
         }
 
         egui::CentralPanel::default().show(ui, |ui| {
@@ -1553,8 +1660,21 @@ impl eframe::App for FanApp {
         self.show_writes_consent_dialog(&ctx);
         if !self.show_writes_consent {
             self.show_pawnio_dialog(&ctx);
-            // After critical hardware dialogs, offer start-with-Windows once.
-            self.show_startup_prompt_dialog(&ctx);
+            // After critical hardware dialogs, offer start-with-Windows once. Not while
+            // the PawnIO window is up: both are centered and would stack.
+            if self.pawnio_dialog.is_none() {
+                self.show_startup_prompt_dialog(&ctx);
+                // Last in line: only once the other startup windows are answered.
+                if !self.show_startup_prompt {
+                    self.show_neon_intro_dialog(&ctx);
+                }
+            }
+        }
+        if self.settings.theme.custom_frame() {
+            self.handle_frame_resize(&ctx);
+        }
+        if self.settings.theme == ThemeChoice::Neon {
+            theme::paint_neon_border(&ctx, self.shader_clock.elapsed().as_secs_f64());
         }
     }
 }
@@ -1569,708 +1689,32 @@ impl FanApp {
         );
     }
 
-    fn ui_temps_column(&mut self, ui: &mut egui::Ui, snap: &crate::poll::Snapshot) {
-        ui.heading(t!("dashboard.temperatures").to_string());
-        ui.separator();
-        egui::ScrollArea::vertical()
-            .id_salt("temps")
-            .show(ui, |ui| {
-                if snap.temps.is_empty() {
-                    ui.label(t!("dashboard.none").to_string());
-                }
-                for (id, label, v) in &snap.temps {
-                    let clicked = list_row(ui, label, id, |ui| {
-                        ui.monospace(format!("{v:5.1} °C"));
-                    });
-                    if clicked {
-                        self.begin_rename(id, label, false);
-                    }
-                }
-            });
-    }
-
-    fn ui_fans_column(&mut self, ui: &mut egui::Ui, snap: &crate::poll::Snapshot) {
-        ui.heading(t!("dashboard.fans").to_string());
-        ui.separator();
-        egui::ScrollArea::vertical().id_salt("fans").show(ui, |ui| {
-            let fans: Vec<_> = snap
-                .fans
-                .iter()
-                .filter(|(_, _, v)| !self.settings.hide_zero_rpm || *v >= 1.0)
-                .collect();
-            if fans.is_empty() {
-                ui.label(t!("dashboard.none").to_string());
-            }
-            for (id, label, v) in fans {
-                let clicked = list_row(ui, label, id, |ui| {
-                    if *v < 1.0 {
-                        ui.weak("0");
-                    } else {
-                        ui.monospace(format!("{v:6.0}"));
-                    }
-                });
-                if clicked {
-                    self.begin_rename(id, label, false);
-                }
-            }
-        });
-    }
-
-    fn ui_controls_column(&mut self, ui: &mut egui::Ui, snap: &crate::poll::Snapshot) {
-        ui.heading(t!("dashboard.controls").to_string());
-        ui.separator();
-        egui::ScrollArea::vertical()
-            .id_salt("ctrls")
-            .show(ui, |ui| {
-                // hide_zero_rpm only affects the Fans list; this is a separate opt-in
-                // filter based on duty. `duty: None` stays visible.
-                let controls: Vec<_> = snap
-                    .controls
-                    .iter()
-                    .filter(|c| !self.settings.hide_zero_duty_controls || c.duty.unwrap_or(1) >= 1)
-                    .collect();
-                if controls.is_empty() {
-                    ui.label(t!("dashboard.none").to_string());
-                }
-                for c in controls {
-                    egui::Frame::group(ui.style())
-                        .inner_margin(egui::Margin::symmetric(10, 8))
-                        .show(ui, |ui| {
-                            if ui
-                                .add(
-                                    egui::Label::new(c.label.as_str())
-                                        .truncate()
-                                        .sense(egui::Sense::click()),
-                                )
-                                .on_hover_text(t!("dashboard.click_to_rename").to_string())
-                                .clicked()
-                            {
-                                self.begin_rename(&c.id, &c.label, true);
-                            }
-                            ui.small(&c.id);
-                            let slot =
-                                c.id.rsplit("ctrl")
-                                    .next()
-                                    .and_then(|s| s.parse::<u32>().ok())
-                                    .unwrap_or(0);
-                            if slot >= 9 {
-                                ui.small(t!("dashboard.ec_bios_warning").to_string());
-                            }
-                            ui.add_space(4.0);
-                            if let Some(rpm) = c.rpm {
-                                ui.monospace(format!("RPM {rpm:.0}"));
-                            } else {
-                                ui.weak(format!("RPM {}", t!("common.na")));
-                            }
-                            ui.add_space(4.0);
-
-                            let cur = self
-                                .profile
-                                .assignments
-                                .get(&c.id)
-                                .map(|aid| {
-                                    self.profile
-                                        .curves
-                                        .iter()
-                                        .find(|cv| cv.id.as_str() == aid)
-                                        .map(curve_combo_label)
-                                        .unwrap_or(aid.as_str())
-                                        .to_string()
-                                })
-                                .unwrap_or_else(|| t!("dashboard.none").to_string());
-                            egui::ComboBox::from_id_salt(format!("asg-{}", c.id))
-                                .selected_text(cur)
-                                .show_ui(ui, |ui| {
-                                    if ui
-                                        .selectable_label(
-                                            !self.profile.assignments.contains_key(&c.id),
-                                            t!("dashboard.none").to_string(),
-                                        )
-                                        .clicked()
-                                    {
-                                        self.profile.assignments.remove(&c.id);
-                                        self.profile.sensor_bindings.remove(&c.id);
-                                    }
-                                    let curve_opts: Vec<(String, String)> = self
-                                        .profile
-                                        .curves
-                                        .iter()
-                                        .map(|cv| {
-                                            (
-                                                cv.id.as_str().to_string(),
-                                                curve_combo_label(cv).to_string(),
-                                            )
-                                        })
-                                        .collect();
-                                    for (cid, label) in curve_opts {
-                                        let selected = self
-                                            .profile
-                                            .assignments
-                                            .get(&c.id)
-                                            .map(|x| x == &cid)
-                                            .unwrap_or(false);
-                                        if ui.selectable_label(selected, label).clicked() {
-                                            self.profile.assignments.insert(c.id.clone(), cid);
-                                            self.profile
-                                                .sensor_bindings
-                                                .entry(c.id.clone())
-                                                .or_insert_with(|| default_cpu_curve_sensor(snap));
-                                        }
-                                    }
-                                });
-
-                            if self.profile.assignments.contains_key(&c.id) {
-                                // Curves regulate on CPU-like temps only (not SYSTIN/VRM/GPU).
-                                let cpu_temps: Vec<_> = snap
-                                    .temps
-                                    .iter()
-                                    .filter(|(id, _, _)| is_cpu_temp_candidate(id))
-                                    .collect();
-                                let stored = self.profile.sensor_bindings.get(&c.id).cloned();
-                                let bound_id = stored
-                                    .filter(|id| is_cpu_temp_candidate(id))
-                                    .filter(|id| cpu_temps.iter().any(|(sid, _, _)| sid == id))
-                                    .unwrap_or_else(|| default_cpu_curve_sensor(snap));
-                                if self.profile.sensor_bindings.get(&c.id) != Some(&bound_id) {
-                                    self.profile
-                                        .sensor_bindings
-                                        .insert(c.id.clone(), bound_id.clone());
-                                }
-                                let bound_label = cpu_temps
-                                    .iter()
-                                    .find(|(id, _, _)| *id == bound_id)
-                                    .map(|(_, label, _)| (*label).clone())
-                                    .unwrap_or_else(|| bound_id.clone());
-                                let bind_resp =
-                                    egui::ComboBox::from_id_salt(format!("bind-{}", c.id))
-                                        .selected_text(bound_label)
-                                        .show_ui(ui, |ui| {
-                                            for (id, label, _) in &cpu_temps {
-                                                let selected = *id == bound_id;
-                                                if ui
-                                                    .selectable_label(selected, label.as_str())
-                                                    .clicked()
-                                                    && !selected
-                                                {
-                                                    self.profile
-                                                        .sensor_bindings
-                                                        .insert(c.id.clone(), (*id).clone());
-                                                }
-                                            }
-                                        });
-                                bind_resp
-                                    .response
-                                    .on_hover_text(t!("dashboard.curve_sensor_hover").to_string());
-                            }
-
-                            let locked = self.is_user_locked(&c.id);
-                            let hw_duty = c.duty.unwrap_or(0);
-                            if !locked && let Some(d) = c.duty {
-                                self.slider_state.insert(c.id.clone(), f32::from(d));
-                            }
-                            let mut value =
-                                *self.slider_state.get(&c.id).unwrap_or(&f32::from(hw_duty));
-
-                            let enabled = c.writable
-                                && !self.show_writes_consent
-                                && (self.options.allow_hw_write || c.id.starts_with("mock."));
-
-                            if c.duty.is_none() {
-                                ui.weak(format!("duty {}", t!("common.na")));
-                            }
-                            ui.add_space(2.0);
-
-                            let mut changed = false;
-                            ui.add_enabled_ui(enabled, |ui| {
-                                let resp = ui.add(
-                                    egui::Slider::new(&mut value, 0.0..=100.0)
-                                        .suffix("%")
-                                        .integer()
-                                        .clamping(egui::SliderClamping::Always),
-                                );
-                                changed = resp.changed();
-                                if resp.dragged() || resp.has_focus() {
-                                    self.lock_user(&c.id, Duration::from_millis(2000));
-                                }
-                                // Write on release, or keyboard/click step without drag.
-                                if resp.drag_stopped() || (changed && !resp.dragged()) {
-                                    self.lock_user(&c.id, Duration::from_millis(1500));
-                                    self.queue_write(&c.id, value);
-                                }
-                            });
-
-                            self.slider_state.insert(c.id.clone(), value);
-                            if !enabled {
-                                ui.small(t!("dashboard.locked").to_string());
-                            }
-                        });
-                    ui.add_space(6.0);
-                }
-            });
-    }
-
-    /// Fixed-height slot shared by Sensors / GPU / CPU columns so bottoms align.
-    fn domain_column_slot(ui: &mut egui::Ui, row_h: f32, add_contents: impl FnOnce(&mut egui::Ui)) {
-        ui.allocate_ui(egui::vec2(ui.available_width(), row_h), |ui| {
-            ui.set_min_height(row_h);
-            ui.set_max_height(row_h);
-            egui::ScrollArea::vertical()
-                .id_salt(ui.id().with("domain_slot_scroll"))
-                .max_height(row_h)
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    ui.set_min_height(row_h);
-                    add_contents(ui);
-                });
-        });
-    }
-
-    /// Thermal / multi-metric graph (or shader style) for the top visualization row.
-    /// `slot_h` is the **total** column height (equal to GPU/CPU slots); the plot uses
-    /// remaining space after the legend so the three domain cards share one surface.
-    fn ui_thermal_graph_block(
-        &mut self,
-        ui: &mut egui::Ui,
-        labels: &HashMap<&str, &str>,
-        units: &HashMap<&str, Option<&str>>,
-        kinds: &HashMap<&str, SensorKind>,
-        slot_h: f32,
-        power_axis_ceiling: Option<f32>,
-    ) {
-        let (win, samp) = (
-            self.settings.graph_window_minutes,
-            self.settings.graph_sample_secs,
+    /// Diagnostic for the "window stops repainting" bug: `logic()` keeps running
+    /// (tray, curves) while the window is meant to be visible, but `ui()` has not
+    /// run for a while. Logs what eframe believes about the window at that point.
+    fn log_ui_stall(&mut self, ctx: &egui::Context) {
+        let stalled = self.last_ui_pass.elapsed();
+        if !self.window_visible
+            || stalled < Duration::from_secs(2)
+            || self.last_stall_log.elapsed() < Duration::from_secs(5)
+        {
+            return;
+        }
+        self.last_stall_log = Instant::now();
+        let info = ctx.input(|i| i.viewport().clone());
+        let stalled_ms = stalled.as_millis() as u64;
+        if info.minimized == Some(true) {
+            // Expected while minimized to the taskbar; debug only so it doesn't flood.
+            tracing::debug!(stalled_ms, "ui pass paused: window minimized");
+            return;
+        }
+        tracing::warn!(
+            stalled_ms,
+            occluded = ?info.occluded,
+            focused = ?info.focused,
+            inner_rect = ?info.inner_rect,
+            "ui pass not running while the window should be visible"
         );
-        for id in &self.settings.graph_sensor_ids {
-            self.histories.entry(id.clone()).or_insert_with(|| {
-                let mut h = TempHistory::default();
-                h.configure(win, samp);
-                h
-            });
-        }
-        // Sensors graph is temperature-only (see spec goal 2/8): GPU/CPU power ids some
-        // users still have saved in `graph_sensor_ids` from before the CPU/GPU panels
-        // existed are filtered out here (by live `SensorKind`, not stripped from
-        // settings) rather than stripped from settings, so nothing is lost if a future
-        // graph adds other units back. An id currently absent from the live snapshot
-        // (e.g. a power sensor with PawnIO not elevated) is excluded too - its kind is
-        // unknown, and showing an empty, uncategorized ghost series helps no one.
-        let series: Vec<GraphSeries> = self
-            .settings
-            .graph_sensor_ids
-            .iter()
-            .enumerate()
-            .filter(|(_, id)| kinds.get(id.as_str()) == Some(&SensorKind::Temperature))
-            .filter_map(|(i, id)| {
-                self.histories.get(id).map(|h| GraphSeries {
-                    label: labels.get(id.as_str()).copied().unwrap_or(id.as_str()),
-                    palette_index: i,
-                    history: h,
-                    unit: units.get(id.as_str()).copied().flatten(),
-                })
-            })
-            .collect();
-        let style = self.settings.graph_style;
-        let only_temps = series
-            .iter()
-            .all(|s| s.unit.is_none() || s.unit == Some("°C") || s.unit == Some("C"));
-
-        // Match GPU/CPU domain_card outer size: fill the slot, plot uses rest of height.
-        let fill = egui::vec2(ui.available_width(), slot_h.max(40.0));
-        ui.allocate_ui(fill, |ui| {
-            ui.set_min_height(slot_h);
-            ui.set_max_height(slot_h);
-            // Reserve plot height from remaining space after group header (~legend).
-            // header_budget: multi-sensor legend can wrap; keep plot usable.
-            let header_budget = if series.len() > 1 { 56.0 } else { 36.0 };
-            let plot_h = clamp_ui_height(ui.available_height() - header_budget, 70.0, slot_h);
-
-            if style == GraphStyle::Classic || !self.shader_backend_available || !only_temps {
-                show_metric_graph(
-                    ui,
-                    &series,
-                    self.settings.graph_window_minutes,
-                    &mut self.graph_axis_max,
-                    &mut self.graph_axis_max_secondary,
-                    plot_h,
-                    power_axis_ceiling,
-                );
-                if style.is_shader() && !only_temps {
-                    ui.small(t!("graph.shader_temps_only_note").to_string());
-                } else if style.is_shader() && !self.shader_backend_available {
-                    ui.small(t!("graph.shader_fallback_note").to_string());
-                }
-            } else {
-                let t = self.shader_clock.elapsed().as_secs_f32() * self.settings.shader_speed;
-                let readings: Vec<(String, f32)> = series
-                    .iter()
-                    .filter_map(|s| s.history.last().map(|v| (s.label.to_string(), v)))
-                    .collect();
-                let signal = ThermalSignal::from_readings(readings);
-                ui.allocate_ui(egui::vec2(ui.available_width(), plot_h), |ui| {
-                    show_shader_panel(
-                        ui,
-                        style,
-                        t,
-                        signal,
-                        self.settings.shader_color_a,
-                        self.settings.shader_color_b,
-                    );
-                });
-            }
-            let leftover = ui.available_height();
-            if leftover > 1.0 {
-                ui.allocate_exact_size(
-                    egui::vec2(ui.available_width(), leftover),
-                    egui::Sense::hover(),
-                );
-            }
-        });
-    }
-
-    fn ui_graph_controls(&mut self, ui: &mut egui::Ui) {
-        let mut dirty = false;
-        ui.horizontal(|ui| {
-            ui.label(t!("graph_controls.window_label").to_string());
-            for m in GRAPH_WINDOWS {
-                let selected = self.settings.graph_window_minutes == m;
-                if ui.selectable_label(selected, format!("{m}m")).clicked() && !selected {
-                    self.settings.graph_window_minutes = m;
-                    dirty = true;
-                }
-            }
-            ui.separator();
-            ui.label(t!("graph_controls.sample_label").to_string());
-            for s in GRAPH_SAMPLES {
-                let selected = self.settings.graph_sample_secs == s;
-                if ui.selectable_label(selected, format!("{s}s")).clicked() && !selected {
-                    self.settings.graph_sample_secs = s;
-                    dirty = true;
-                }
-            }
-        });
-        if dirty {
-            self.settings.clamp_graph_options();
-            self.settings.save();
-            for h in self.histories.values_mut() {
-                h.configure(
-                    self.settings.graph_window_minutes,
-                    self.settings.graph_sample_secs,
-                );
-            }
-            self.cpu_power_history.configure(
-                self.settings.graph_window_minutes,
-                self.settings.graph_sample_secs,
-            );
-            self.gpu_power_history.configure(
-                self.settings.graph_window_minutes,
-                self.settings.graph_sample_secs,
-            );
-            self.load_history.configure(
-                self.settings.activity_window_minutes,
-                1, // activity worker ~1 Hz
-            );
-        }
-    }
-
-    fn show_writes_consent_dialog(&mut self, ctx: &egui::Context) {
-        if !self.show_writes_consent {
-            return;
-        }
-        egui::Window::new(t!("writes_consent.title").to_string())
-            .collapsible(false)
-            .resizable(false)
-            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-            .show(ctx, |ui| {
-                ui.set_max_width(460.0);
-                ui.label(t!("writes_consent.body").to_string());
-                ui.add_space(8.0);
-                ui.small(t!("writes_consent.hint").to_string());
-                ui.add_space(12.0);
-                ui.horizontal(|ui| {
-                    if ui.button(t!("writes_consent.accept").to_string()).clicked() {
-                        self.settings.writes_risk_acknowledged = true;
-                        self.settings.save();
-                        self.show_writes_consent = false;
-                    }
-                    if ui
-                        .button(t!("writes_consent.read_only_session").to_string())
-                        .clicked()
-                    {
-                        // Session-only: do not persist read-only; re-prompt next launch.
-                        self.options.allow_hw_write = false;
-                        self.settings.auto_apply_curves = false;
-                        self.show_writes_consent = false;
-                    }
-                });
-            });
-    }
-
-    fn show_startup_prompt_dialog(&mut self, ctx: &egui::Context) {
-        if !self.show_startup_prompt {
-            return;
-        }
-        egui::Window::new(t!("startup_prompt.title").to_string())
-            .collapsible(false)
-            .resizable(false)
-            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-            .show(ctx, |ui| {
-                ui.set_max_width(460.0);
-                ui.label(t!("startup_prompt.body").to_string());
-                ui.add_space(8.0);
-                ui.small(t!("startup_prompt.hint").to_string());
-                ui.add_space(12.0);
-                ui.horizontal(|ui| {
-                    if ui.button(t!("startup_prompt.yes").to_string()).clicked() {
-                        match crate::autostart::set_enabled(true) {
-                            Ok(()) => {
-                                self.settings.launch_on_startup = true;
-                            }
-                            Err(e) => {
-                                self.profile_status =
-                                    Some(format!("{}: {e}", t!("options.launch_on_startup_err")));
-                            }
-                        }
-                        self.settings.startup_prompt_shown = true;
-                        self.settings.save();
-                        self.show_startup_prompt = false;
-                    }
-                    if ui.button(t!("startup_prompt.no").to_string()).clicked() {
-                        let _ = crate::autostart::set_enabled(false);
-                        self.settings.launch_on_startup = false;
-                        self.settings.startup_prompt_shown = true;
-                        self.settings.save();
-                        self.show_startup_prompt = false;
-                    }
-                    if ui.button(t!("startup_prompt.later").to_string()).clicked() {
-                        // Ask again next launch (do not set startup_prompt_shown).
-                        self.show_startup_prompt = false;
-                    }
-                });
-            });
-    }
-
-    fn show_pawnio_dialog(&mut self, ctx: &egui::Context) {
-        let Some(kind) = self.pawnio_dialog else {
-            return;
-        };
-        let mut open = true;
-        let title = match kind {
-            PawnioDialogKind::NotInstalled => t!("pawnio.title_not_installed").to_string(),
-            PawnioDialogKind::NeedsAdmin => t!("pawnio.title_needs_admin").to_string(),
-        };
-        egui::Window::new(title)
-            .collapsible(false)
-            .resizable(false)
-            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-            .open(&mut open)
-            .show(ctx, |ui| {
-                ui.set_max_width(440.0);
-                ui.label(t!("pawnio.intro").to_string());
-                ui.add_space(6.0);
-                match kind {
-                    PawnioDialogKind::NotInstalled => {
-                        ui.label(t!("pawnio.body_not_installed").to_string());
-                    }
-                    PawnioDialogKind::NeedsAdmin => {
-                        ui.label(t!("pawnio.body_needs_admin_1").to_string());
-                        ui.label(t!("pawnio.body_needs_admin_2").to_string());
-                    }
-                }
-                ui.add_space(4.0);
-                ui.horizontal(|ui| {
-                    ui.label(t!("pawnio.site_label").to_string());
-                    ui.hyperlink_to("pawnio.eu", PAWNIO_URL);
-                });
-                if let Some(msg) = &self.elevate_status {
-                    ui.add_space(6.0);
-                    ui.colored_label(egui::Color32::LIGHT_RED, msg);
-                }
-                ui.add_space(10.0);
-                ui.horizontal(|ui| {
-                    if matches!(kind, PawnioDialogKind::NeedsAdmin)
-                        && !crate::elevation::is_elevated()
-                        && ui
-                            .button(t!("pawnio.restart_as_admin").to_string())
-                            .clicked()
-                    {
-                        self.try_relaunch_elevated();
-                    }
-                    if ui.button(t!("pawnio.open_button").to_string()).clicked() {
-                        ui.ctx().open_url(egui::OpenUrl::new_tab(PAWNIO_URL));
-                    }
-                    if ui
-                        .button(t!("pawnio.continue_without_hw").to_string())
-                        .clicked()
-                    {
-                        self.pawnio_dialog = None;
-                    }
-                    if ui.button(t!("common.close").to_string()).clicked() {
-                        self.pawnio_dialog = None;
-                    }
-                });
-                ui.small(t!("pawnio.footer_note").to_string());
-            });
-        if !open {
-            self.pawnio_dialog = None;
-        }
-    }
-
-    /// Ask Windows for an elevated relaunch (UAC). On success, exit this process.
-    fn try_relaunch_elevated(&mut self) {
-        match crate::elevation::relaunch_elevated() {
-            Ok(()) => {
-                // Elevated child is running - leave the non-elevated process
-                // (`process::exit` skips `on_exit`, so hand fans back first).
-                self.reg.restore_all();
-                std::process::exit(0);
-            }
-            Err(crate::elevation::ElevateError::Cancelled) => {
-                self.elevate_status = Some(t!("pawnio.elevate_cancelled").to_string());
-            }
-            Err(crate::elevation::ElevateError::AlreadyElevated) => {
-                self.elevate_status = None;
-            }
-            Err(e) => {
-                self.elevate_status =
-                    Some(t!("pawnio.elevate_failed", error = e.to_string()).to_string());
-            }
-        }
-    }
-
-    fn ui_curves_panel(&mut self, ui: &mut egui::Ui, live_temp: Option<f64>) {
-        ui.horizontal(|ui| {
-            ui.heading(t!("curves_panel.heading").to_string());
-            if let Some(s) = &self.profile_status {
-                ui.small(s);
-            }
-        });
-        ui.horizontal(|ui| {
-            ui.label(t!("curves_panel.profile_label").to_string());
-            egui::ComboBox::from_id_salt("profile_pick")
-                .selected_text(self.profile.id.as_str())
-                .show_ui(ui, |ui| {
-                    for id in self.profile_list.clone() {
-                        if ui
-                            .selectable_label(self.profile.id.as_str() == id, &id)
-                            .clicked()
-                            && let Ok(p) = load_profile(&id)
-                        {
-                            self.profile = p;
-                            self.selected_curve = 0;
-                            self.curve_states.clear();
-                            self.profile_status =
-                                Some(t!("curves_panel.loaded_status", id = id).to_string());
-                            self.settings.last_profile_id = Some(id.clone());
-                            self.settings.save();
-                        }
-                    }
-                });
-            if ui
-                .button(t!("curves_panel.reload_list").to_string())
-                .clicked()
-            {
-                self.profile_list = list_profiles().unwrap_or_default();
-            }
-            if ui.button(t!("curves_panel.save").to_string()).clicked() {
-                match save_profile(&self.profile) {
-                    Ok(path) => {
-                        self.profile_status = Some(
-                            t!(
-                                "curves_panel.saved_status",
-                                path = path.display().to_string()
-                            )
-                            .to_string(),
-                        );
-                        self.profile_list = list_profiles().unwrap_or_default();
-                        self.settings.last_profile_id = Some(self.profile.id.as_str().to_string());
-                        self.settings.save();
-                    }
-                    Err(e) => {
-                        self.profile_status =
-                            Some(t!("curves_panel.save_error", error = e).to_string())
-                    }
-                }
-            }
-            ui.text_edit_singleline(&mut self.new_profile_name);
-            if ui
-                .button(t!("curves_panel.new_save_as").to_string())
-                .clicked()
-            {
-                let name = self.new_profile_name.trim();
-                if !name.is_empty() {
-                    self.profile.id = fancontrol_core::ProfileId::new(name);
-                    self.profile.name = name.to_string();
-                    match save_profile(&self.profile) {
-                        Ok(_) => {
-                            self.profile_list = list_profiles().unwrap_or_default();
-                            self.profile_status =
-                                Some(t!("curves_panel.saved_as_status", name = name).to_string());
-                            self.settings.last_profile_id = Some(name.to_string());
-                            self.settings.save();
-                        }
-                        Err(e) => {
-                            self.profile_status =
-                                Some(t!("curves_panel.save_error", error = e).to_string())
-                        }
-                    }
-                }
-            }
-            if ui
-                .button(t!("curves_panel.apply_now").to_string())
-                .clicked()
-            {
-                let s = self.snapshot.lock().map(|g| g.clone()).unwrap_or_default();
-                self.apply_curves_from_snapshot(&s);
-                self.profile_status = Some(t!("curves_panel.curves_applied_once").to_string());
-            }
-        });
-
-        ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.label(t!("curves_panel.curves_label").to_string());
-                let n = self.profile.curves.len();
-                for i in 0..n {
-                    let name = self.profile.curves[i].name.clone();
-                    if ui
-                        .selectable_label(self.selected_curve == i, name)
-                        .clicked()
-                    {
-                        self.selected_curve = i;
-                    }
-                }
-                if ui
-                    .button(t!("curves_panel.add_curve").to_string())
-                    .clicked()
-                {
-                    let id = format!("curve{}", self.profile.curves.len() + 1);
-                    self.profile.curves.push(FanCurve::linear(
-                        id,
-                        t!("curves_panel.new_curve_name").to_string(),
-                        30.0,
-                        80.0,
-                        20,
-                        100,
-                    ));
-                    self.selected_curve = self.profile.curves.len().saturating_sub(1);
-                }
-            });
-            ui.separator();
-            ui.vertical(|ui| {
-                if let Some(curve) = self.profile.curves.get_mut(self.selected_curve) {
-                    let mut name = curve.name.clone();
-                    if ui.text_edit_singleline(&mut name).changed() {
-                        curve.name = name;
-                    }
-                    if show_curve_editor(ui, curve, live_temp) {
-                        self.profile_status =
-                            Some(t!("curves_panel.curve_edited_status").to_string());
-                    }
-                } else {
-                    ui.label(t!("curves_panel.no_curve_selected").to_string());
-                }
-            });
-        });
     }
 
     fn handle_tray(&mut self, ctx: &egui::Context) {
@@ -2307,6 +1751,7 @@ impl FanApp {
                     self.apply_curves_from_snapshot(&snap);
                 }
                 TrayCommand::Exit => {
+                    tracing::info!("tray Exit: closing the app");
                     self.really_exit = true;
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
@@ -2318,6 +1763,7 @@ impl FanApp {
     /// eframe skips `ui()` for a hidden root viewport and only calls `logic()`.
     /// Drains write outcomes, records graph/metrics history and applies curves.
     fn background_tick(&mut self) {
+        self.poll_csv_export();
         // Drain write-queue outcomes before applying more curve steps.
         for (id, duty) in self.writes.take_successes() {
             self.last_applied_duty.insert(id, duty);
@@ -2461,6 +1907,7 @@ impl FanApp {
             }
             // Do not mark applied until WriteQueue reports success (see take_successes).
             self.writes.enqueue(&ctrl, duty);
+            self.hold_echo(&ctrl);
             self.slider_state.insert(ctrl, f32::from(duty));
         }
         for e in step.errors {
@@ -2468,48 +1915,26 @@ impl FanApp {
         }
     }
 
-    fn begin_rename(&mut self, id: &str, current: &str, is_control: bool) {
-        self.rename_id = Some(id.to_string());
-        self.rename_buf = current.to_string();
-        self.rename_is_control = is_control;
-    }
-
-    fn show_rename_modal(&mut self, ctx: &egui::Context) {
-        let Some(id) = self.rename_id.clone() else {
+    fn poll_csv_export(&mut self) {
+        let Some((path, rx)) = &self.pending_export else {
             return;
         };
-        let mut open = true;
-        egui::Window::new(t!("rename.title").to_string())
-            .collapsible(false)
-            .resizable(false)
-            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-            .open(&mut open)
-            .show(ctx, |ui| {
-                ui.label(&id);
-                ui.text_edit_singleline(&mut self.rename_buf);
-                ui.horizontal(|ui| {
-                    if ui.button(t!("common.save").to_string()).clicked() {
-                        let name = self.rename_buf.trim().to_string();
-                        if !name.is_empty()
-                            && let Ok(mut map) = self.map.lock()
-                        {
-                            if self.rename_is_control {
-                                map.set_control_name(&id, &name);
-                            } else {
-                                map.set_sensor_name(&id, &name);
-                            }
-                            let _ = map.save();
-                        }
-                        self.rename_id = None;
-                    }
-                    if ui.button(t!("common.cancel").to_string()).clicked() {
-                        self.rename_id = None;
-                    }
-                });
-            });
-        if !open {
-            self.rename_id = None;
-        }
+        let result = match rx.try_recv() {
+            Ok(result) => result,
+            Err(std::sync::mpsc::TryRecvError::Empty) => return,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                Err("metrics store worker stopped".to_string())
+            }
+        };
+        self.profile_status = Some(match result {
+            Ok(n) => format!(
+                "{} ({n} rows) → {}",
+                t!("options.metrics_export_ok"),
+                path.display()
+            ),
+            Err(e) => format!("{}: {e}", t!("options.metrics_export_err")),
+        });
+        self.pending_export = None;
     }
 
     fn is_user_locked(&self, id: &str) -> bool {
@@ -2535,6 +1960,12 @@ impl FanApp {
         // Optimistic UI skip only after queue success drain; clear on failure.
         self.last_applied_duty.remove(id);
         self.writes.enqueue(id, percent);
+        self.hold_echo(id);
+    }
+
+    fn hold_echo(&mut self, id: &str) {
+        self.echo_hold_until
+            .insert(id.to_string(), Instant::now() + Duration::from_millis(2000));
     }
 }
 

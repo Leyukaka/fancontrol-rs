@@ -5,7 +5,7 @@ use crate::panel_metrics::{
     domain_card, load_chip, power_history_block, power_metric_row, temp_chip,
 };
 use crate::poll::CpuSnap;
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, RichText};
 
 /// Draw the CPU detail card. Layout mirrors [`crate::gpu_panel`]: chips → power → history.
 pub fn show_cpu_panel(ui: &mut egui::Ui, cpu: &CpuSnap, power_history: Option<&TempHistory>) {
@@ -19,7 +19,7 @@ pub fn show_cpu_panel(ui: &mut egui::Ui, cpu: &CpuSnap, power_history: Option<&T
         ui.add_space(4.0);
 
         if cpu.temp_c.is_none() && cpu.power_w.is_none() && cpu.load_pct.is_none() {
-            ui.colored_label(Color32::GRAY, t!("cpu.none").to_string());
+            ui.colored_label(ui.visuals().weak_text_color(), t!("cpu.none").to_string());
             ui.small(t!("cpu.none_hint").to_string());
             return;
         }

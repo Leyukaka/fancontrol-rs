@@ -268,10 +268,14 @@ impl Nct668Device {
 
         {
             let _g = IsaBusGuard::acquire(Duration::from_millis(100));
+            // Monitoring init (same as LibreHardwareMonitor's NCT6687D setup): needed
+            // to read temps, so it also runs in a read-only session. Only write a
+            // register that differs, so an already-initialised EC is left untouched.
             if let Ok(data) = dev.read_byte(INIT_REG)
                 && data & 0x80 == 0
+                && let Err(e) = dev.write_byte(INIT_REG, data | 0x80)
             {
-                let _ = dev.write_byte(INIT_REG, data | 0x80);
+                tracing::debug!(error = %e, "NCT668x monitor enable write failed");
             }
             for (a, v) in [
                 (0x1BB, 0x61),
@@ -280,7 +284,12 @@ impl Nct668Device {
                 (0x1BE, 0x64),
                 (0x1BF, 0x65),
             ] {
-                let _ = dev.write_byte(a, v);
+                if dev.read_byte(a).is_ok_and(|cur| cur == v) {
+                    continue;
+                }
+                if let Err(e) = dev.write_byte(a, v) {
+                    tracing::debug!(reg = a, error = %e, "NCT668x temp source write failed");
+                }
             }
         }
 
@@ -498,7 +507,7 @@ impl Nct668Device {
         let percent = percent.min(100);
         let pwm = ((f64::from(percent) * 2.55).round() as u16).min(255) as u8;
 
-        let _g = IsaBusGuard::acquire(Duration::from_millis(1500));
+        let _g = IsaBusGuard::acquire_for_write(Duration::from_millis(1500))?;
 
         if let Some((mode, bit_mask, cmd)) = self.slot_mode_cmd(control_slot) {
             let mut initial = self.initial.lock().unwrap_or_else(|e| e.into_inner());

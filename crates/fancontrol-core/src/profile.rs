@@ -1,6 +1,6 @@
 //! Profile load / save as JSON under the app config directory.
 
-use crate::config::{ensure_config_dirs, profiles_dir};
+use crate::config::{ensure_config_dirs, profiles_dir, write_atomic};
 use crate::error::{CoreError, Result};
 use crate::models::Profile;
 use std::fs;
@@ -30,7 +30,7 @@ pub fn save_profile(profile: &Profile) -> Result<PathBuf> {
     ensure_config_dirs()?;
     let path = profile_path(profile.id.as_str())?;
     let json = serde_json::to_string_pretty(profile)?;
-    fs::write(&path, json)?;
+    write_atomic(&path, json)?;
     tracing::info!(path = %path.display(), id = %profile.id.as_str(), "profile saved");
     Ok(path)
 }

@@ -1,6 +1,7 @@
 //! Shared metric widgets for GPU and CPU detail panels (aligned layout).
 
 use crate::graph::{TempHistory, power_y_max};
+use crate::theme;
 use eframe::egui::{self, Color32, Frame, Margin, Response, RichText, Stroke};
 use egui_plot::{Line, Plot};
 
@@ -52,8 +53,9 @@ pub fn metric_bar(ui: &mut egui::Ui, frac: f32, color: Color32) {
     let frac = frac.clamp(0.0, 1.0);
     let desired = egui::vec2(ui.available_width().max(40.0), 8.0);
     let (rect, _) = ui.allocate_exact_size(desired, egui::Sense::hover());
+    let track = theme::track(ui.visuals());
     let painter = ui.painter();
-    painter.rect_filled(rect, 2.0, Color32::from_gray(40));
+    painter.rect_filled(rect, 2.0, track);
     if frac > 0.0 {
         let mut fill = rect;
         fill.set_width(rect.width() * frac);
@@ -74,6 +76,7 @@ fn metric_chip(ui: &mut egui::Ui, label: String, value: Option<(String, Color32)
                 ui.add_space(2.0);
                 match value {
                     Some((text, color)) => {
+                        let color = theme::accent(ui.visuals(), color);
                         ui.label(
                             RichText::new(text)
                                 .monospace()
@@ -99,11 +102,12 @@ fn metric_chip(ui: &mut egui::Ui, label: String, value: Option<(String, Color32)
 
 /// Boxed temperature readout (`n/a` when unavailable).
 pub fn temp_chip(ui: &mut egui::Ui, label: String, value: Option<f64>, colorize: bool) -> Response {
+    let plain = ui.visuals().strong_text_color();
     let value = value.map(|t| {
         let c = if colorize {
             temp_color(t as f32)
         } else {
-            Color32::LIGHT_GRAY
+            plain
         };
         (format!("{t:.0}°C"), c)
     });
@@ -138,9 +142,9 @@ pub fn power_metric_row(
         (None, None) => t!("common.na").to_string(),
     };
     let color = if power_w.is_some() {
-        power_color(frac)
+        theme::accent(ui.visuals(), power_color(frac))
     } else {
-        Color32::DARK_GRAY
+        ui.visuals().weak_text_color()
     };
     ui.horizontal(|ui| {
         ui.label(label.to_string());
@@ -150,12 +154,12 @@ pub fn power_metric_row(
         metric_bar(ui, frac.min(1.0), power_color(frac));
     } else if power_w.is_some() {
         // Keep bar slot height even without limit.
-        metric_bar(ui, 0.0, Color32::from_gray(40));
+        metric_bar(ui, 0.0, theme::track(ui.visuals()));
         if let Some(hint) = no_limit_hint {
             ui.small(hint.to_string());
         }
     } else {
-        metric_bar(ui, 0.0, Color32::from_gray(40));
+        metric_bar(ui, 0.0, theme::track(ui.visuals()));
     }
 }
 
@@ -181,7 +185,12 @@ pub fn power_history_block(
             egui::Sense::hover(),
         );
         let dim = ui.visuals().weak_text_color();
-        ui.painter().rect_filled(rect, 2.0, Color32::from_gray(25));
+        let bg = if ui.visuals().dark_mode {
+            Color32::from_gray(25)
+        } else {
+            Color32::from_gray(238)
+        };
+        ui.painter().rect_filled(rect, 2.0, bg);
         ui.painter().text(
             rect.center(),
             egui::Align2::CENTER_CENTER,
@@ -235,7 +244,9 @@ pub fn power_sparkline(
     let data_max = points.iter().map(|p| p[1] as f32).fold(0.0_f32, f32::max);
     let max_y = power_y_max(data_max, limit_w);
     let window_mins = history.window_minutes();
-    let color = power_color(0.3);
+    // Color by how close the recent peak came to the limit, like the power bar.
+    let frac = limit_w.filter(|l| *l > 0.0).map_or(0.3, |l| data_max / l);
+    let color = theme::accent(ui.visuals(), power_color(frac));
     let line = Line::new(id_salt.to_string(), points)
         .color(color)
         .width(2.0);

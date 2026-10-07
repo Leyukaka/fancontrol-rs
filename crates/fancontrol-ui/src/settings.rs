@@ -2,7 +2,8 @@
 
 use crate::activity::{ActivityMode, ProcessSort};
 use crate::shaders::GraphStyle;
-use fancontrol_core::config::{config_dir, ensure_config_dirs};
+use crate::theme::ThemeChoice;
+use fancontrol_core::config::{config_dir, ensure_config_dirs, write_atomic};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -47,6 +48,15 @@ pub struct UiSettings {
     /// UI language code (e.g. "en", "fr"). `None` = not yet chosen → OS-locale detection.
     #[serde(default)]
     pub language: Option<String>,
+    /// Light / dark / follow Windows / neon.
+    #[serde(default)]
+    pub theme: ThemeChoice,
+    /// The one-time "Neon is the new default" notice was answered (v0.7).
+    #[serde(default)]
+    pub neon_intro_shown: bool,
+    /// Use the Windows UI fonts (Segoe UI, Cascadia Mono) instead of egui's own.
+    #[serde(default = "default_true")]
+    pub system_font: bool,
     /// Visual style for the graph panel: the classic line graph, or one of the
     /// "fun" shader-based visualizations. Shader styles are opt-in (default Classic).
     #[serde(default)]
@@ -183,6 +193,9 @@ impl Default for UiSettings {
             writes_risk_acknowledged: false,
             last_profile_id: None,
             language: None,
+            theme: ThemeChoice::default(),
+            system_font: true,
+            neon_intro_shown: false,
             graph_style: GraphStyle::default(),
             shader_speed: default_shader_speed(),
             shader_color_a: default_shader_color_a(),
@@ -220,10 +233,24 @@ impl UiSettings {
         let Some(path) = Self::path() else {
             return Self::default();
         };
-        let Ok(data) = fs::read_to_string(path) else {
+        let Ok(data) = fs::read_to_string(&path) else {
             return Self::default();
         };
-        let mut s: Self = serde_json::from_str(&data).unwrap_or_default();
+        let mut s: Self = match serde_json::from_str(&data) {
+            Ok(s) => s,
+            Err(e) => {
+                // Keep a copy of the unreadable file: the defaults are saved over it on
+                // this run, and the user may want their old settings back.
+                let backup = path.with_extension("json.bad");
+                tracing::warn!(
+                    error = %e,
+                    backup = %backup.display(),
+                    "ui-settings.json unreadable, starting from defaults"
+                );
+                let _ = fs::copy(&path, &backup);
+                Self::default()
+            }
+        };
         s.clamp_graph_options();
         let mut dirty = false;
         // Recover first-run bug: seeded=true with empty ids never auto-filled the graph.
@@ -258,7 +285,7 @@ impl UiSettings {
             return;
         };
         if let Ok(json) = serde_json::to_string_pretty(self) {
-            let _ = fs::write(path, json);
+            let _ = write_atomic(&path, json);
         }
     }
 

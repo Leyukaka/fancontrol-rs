@@ -38,14 +38,19 @@ impl UpdateChecker {
     }
 
     /// Kick off a one-shot background check. Safe to call repeatedly (e.g. on every
-    /// button click) - this is not a polling loop.
+    /// button click): a click while a check is running is ignored.
     pub fn check_now(&self) {
         {
             let mut g = self.state.lock().unwrap_or_else(|e| e.into_inner());
+            // One check at a time: a second click would race the first, and a slow
+            // failure landing last would overwrite a good answer.
+            if matches!(*g, Some(UpdateStatus::Checking)) {
+                return;
+            }
             *g = Some(UpdateStatus::Checking);
         }
         let state = Arc::clone(&self.state);
-        thread::Builder::new()
+        let spawned = thread::Builder::new()
             .name("fancontrol-update-check".into())
             .spawn(move || {
                 let status = match fetch_latest_release() {
@@ -55,8 +60,12 @@ impl UpdateChecker {
                 if let Ok(mut g) = state.lock() {
                     *g = Some(status);
                 }
-            })
-            .ok();
+            });
+        if let Err(e) = spawned {
+            // Otherwise the status would stay `Checking` and block every later click.
+            let mut g = self.state.lock().unwrap_or_else(|e| e.into_inner());
+            *g = Some(UpdateStatus::Error(e.to_string()));
+        }
     }
 }
 

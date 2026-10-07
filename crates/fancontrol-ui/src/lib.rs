@@ -19,6 +19,7 @@ mod poll;
 mod registry;
 mod settings;
 mod shaders;
+mod theme;
 mod tray;
 mod update_check;
 mod write_queue;
@@ -27,10 +28,6 @@ pub use app::UiOptions;
 
 use std::fmt;
 
-pub fn is_implemented() -> bool {
-    true
-}
-
 pub fn run(options: UiOptions) -> Result<(), UiError> {
     app::run_native(options)
 }
@@ -38,13 +35,12 @@ pub fn run(options: UiOptions) -> Result<(), UiError> {
 #[derive(Debug)]
 pub enum UiError {
     Eframe(String),
-    Backend(String),
 }
 
 impl fmt::Display for UiError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            UiError::Eframe(s) | UiError::Backend(s) => write!(f, "{s}"),
+            UiError::Eframe(s) => write!(f, "{s}"),
         }
     }
 }

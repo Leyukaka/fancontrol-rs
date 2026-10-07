@@ -1,10 +1,10 @@
 //! Periodic fan control loop: read temps → evaluate curves → set duties.
 
-use crate::curve::{CurveEvalState, evaluate_curve};
+use crate::curve::{CurveEvalState, apply_response_time, evaluate_curve};
 use crate::models::Profile;
 use crate::temp_source::resolve_curve_temp_sensor;
 use std::collections::HashMap;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Duty applied when a control's curve has no temperature to read: running blind
 /// at the last duty could under-cool, so fail loud instead.
@@ -29,10 +29,23 @@ pub struct ControlStepResult {
 /// falls back to first available temp) and evaluates the curve. A control whose
 /// curve has no temperature source keeps its last duty, then gets [`FAILSAFE_DUTY`]
 /// after [`FAILSAFE_AFTER_MISSING_STEPS`] consecutive misses (error entry each step).
+///
+/// Extra sensors (`profile.extra_sensors`) raise the input to the hottest of them
+/// when present; only the bound CPU sensor is required.
 pub fn evaluate_profile_step(
     profile: &Profile,
     temps: &HashMap<String, f64>,
     states: &mut HashMap<String, CurveEvalState>,
+) -> ControlStepResult {
+    evaluate_profile_step_at(profile, temps, states, Instant::now())
+}
+
+/// [`evaluate_profile_step`] at an explicit time (curve response time).
+pub fn evaluate_profile_step_at(
+    profile: &Profile,
+    temps: &HashMap<String, f64>,
+    states: &mut HashMap<String, CurveEvalState>,
+    now: Instant,
 ) -> ControlStepResult {
     let mut result = ControlStepResult {
         temps: temps.clone(),
@@ -55,22 +68,50 @@ pub fn evaluate_profile_step(
             temps,
         );
         let state = states.entry(control_id.clone()).or_default();
-        let Some(temp) = sensor_id.as_ref().and_then(|id| temps.get(id)).copied() else {
+        // Hottest extra sensor. 0 °C is an unwired / not-yet-read source (e.g. a GPU
+        // row before nvidia-smi answers), not a temperature: skip it like a missing one.
+        let hottest_extra = profile
+            .extra_sensors
+            .get(control_id)
+            .into_iter()
+            .flatten()
+            .filter_map(|id| temps.get(id).copied())
+            .filter(|t| t.is_finite() && *t > 0.0)
+            .reduce(f64::max);
+        // A non-finite reading counts as missing: NaN fails every comparison in the
+        // interpolation and would land on the curve's last (usually 100 %) point.
+        let Some(cpu) = sensor_id
+            .as_ref()
+            .and_then(|id| temps.get(id))
+            .copied()
+            .filter(|t| t.is_finite())
+        else {
             state.missing_steps = state.missing_steps.saturating_add(1);
             if state.missing_steps >= FAILSAFE_AFTER_MISSING_STEPS {
                 result.errors.push(format!(
                     "control {control_id}: no temperature source, failsafe {FAILSAFE_DUTY}%"
                 ));
                 result.duties.insert(control_id.clone(), FAILSAFE_DUTY);
+                state.applied_duty = Some(FAILSAFE_DUTY);
+                state.last_change = Some(now);
             } else {
                 result
                     .errors
                     .push(format!("control {control_id}: no temperature source"));
+                // Grace steps before the failsafe: keep following the extra sensors
+                // rather than freezing the fan at its last duty.
+                if let Some(temp) = hottest_extra {
+                    let duty = evaluate_curve(curve, temp, Some(state));
+                    let duty = apply_response_time(curve, state, duty, now);
+                    result.duties.insert(control_id.clone(), duty);
+                }
             }
             continue;
         };
         state.missing_steps = 0;
+        let temp = hottest_extra.map_or(cpu, |t| t.max(cpu));
         let duty = evaluate_curve(curve, temp, Some(state));
+        let duty = apply_response_time(curve, state, duty, now);
         result.duties.insert(control_id.clone(), duty);
     }
 
@@ -151,6 +192,102 @@ mod tests {
         let step = evaluate_profile_step(&p, &temps, &mut states);
         assert_eq!(step.duties.get("fan1"), Some(&60));
         assert!(step.errors.is_empty());
+    }
+
+    fn curve_profile(response_time_s: f64) -> Profile {
+        let mut p = Profile::new("t", "t");
+        p.curves.push(FanCurve {
+            id: crate::models::CurveId::new("c"),
+            name: "c".into(),
+            points: vec![CurvePoint::new(30.0, 20), CurvePoint::new(70.0, 100)],
+            hysteresis_c: 0.0,
+            response_time_s,
+        });
+        p.assignments.insert("fan1".into(), "c".into());
+        p.sensor_bindings
+            .insert("fan1".into(), "pawnio.0.temp.CPUTIN".into());
+        p
+    }
+
+    #[test]
+    fn extra_sensors_drive_the_hottest_input() {
+        let mut p = curve_profile(0.0);
+        p.extra_sensors.insert(
+            "fan1".into(),
+            vec!["host.gpu.0.temp".into(), "host.ssd.0.temp".into()],
+        );
+        let temps = HashMap::from([
+            ("pawnio.0.temp.CPUTIN".into(), 30.0),
+            ("host.gpu.0.temp".into(), 70.0),
+        ]);
+        let mut states = HashMap::new();
+        let step = evaluate_profile_step(&p, &temps, &mut states);
+        // GPU at 70 °C wins over CPU at 30 °C; the absent SSD is ignored.
+        assert_eq!(step.duties.get("fan1"), Some(&100));
+
+        // CPU missing: extras keep driving the fan during the grace steps, then the
+        // failsafe takes over as usual.
+        let gpu_only = HashMap::from([("host.gpu.0.temp".into(), 40.0)]);
+        let mut states = HashMap::new();
+        for _ in 1..FAILSAFE_AFTER_MISSING_STEPS {
+            let step = evaluate_profile_step(&p, &gpu_only, &mut states);
+            assert_eq!(step.duties.get("fan1"), Some(&40));
+        }
+        let step = evaluate_profile_step(&p, &gpu_only, &mut states);
+        assert_eq!(step.duties.get("fan1"), Some(&FAILSAFE_DUTY));
+
+        // A 0 °C extra (unwired / not read yet) is ignored, the CPU drives.
+        let zero_gpu = HashMap::from([
+            ("pawnio.0.temp.CPUTIN".into(), 30.0),
+            ("host.gpu.0.temp".into(), 0.0),
+        ]);
+        let mut states = HashMap::new();
+        let step = evaluate_profile_step(&p, &zero_gpu, &mut states);
+        assert_eq!(step.duties.get("fan1"), Some(&20));
+    }
+
+    #[test]
+    fn response_time_delays_decreases_only() {
+        let p = curve_profile(5.0);
+        let t0 = Instant::now();
+        let at = |s: u64| t0 + Duration::from_secs(s);
+        let temps = |c: f64| HashMap::from([("pawnio.0.temp.CPUTIN".to_string(), c)]);
+        let mut states = HashMap::new();
+
+        let mut step = |c: f64, s: u64| {
+            let r = evaluate_profile_step_at(&p, &temps(c), &mut states, at(s));
+            r.duties.get("fan1").copied()
+        };
+        assert_eq!(step(30.0, 0), Some(20));
+        // Rising: applied at once.
+        assert_eq!(step(70.0, 1), Some(100));
+        // Falling 2 s after the last change: held.
+        assert_eq!(step(30.0, 3), Some(100));
+        // 5 s after the last change: allowed down.
+        assert_eq!(step(30.0, 6), Some(20));
+    }
+
+    #[test]
+    fn non_finite_temp_counts_as_missing() {
+        let mut p = Profile::new("t", "t");
+        p.curves.push(FanCurve {
+            id: crate::models::CurveId::new("c"),
+            name: "c".into(),
+            points: vec![CurvePoint::new(30.0, 20), CurvePoint::new(70.0, 100)],
+            hysteresis_c: 0.0,
+            response_time_s: 0.0,
+        });
+        p.assignments.insert("fan1".into(), "c".into());
+        p.sensor_bindings
+            .insert("fan1".into(), "pawnio.0.temp.CPUTIN".into());
+
+        for bad in [f64::NAN, f64::INFINITY] {
+            let temps = HashMap::from([("pawnio.0.temp.CPUTIN".into(), bad)]);
+            let mut states = HashMap::new();
+            let step = evaluate_profile_step(&p, &temps, &mut states);
+            assert!(step.duties.is_empty(), "{bad} must not drive the curve");
+            assert_eq!(states["fan1"].missing_steps, 1);
+        }
     }
 
     #[test]

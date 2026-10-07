@@ -17,7 +17,7 @@ use fancontrol_plugins::{HostSensorProvider, MockProvider, ProviderRegistry};
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -263,13 +263,7 @@ impl fancontrol_plugins::ControlProvider for ArcControl {
 
 fn main() -> anyhow::Result<()> {
     attach_parent_console_for_cli();
-
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .init();
+    init_logging();
 
     let cli = Cli::parse();
     // Default product launch: hardware/host ON, mock OFF, PWM writes ON, subcommand UI.
@@ -485,13 +479,16 @@ fn main() -> anyhow::Result<()> {
             let _restore = do_apply.then(|| FirmwareRestoreGuard::install(&reg));
             let profile = load_profile(&profile)?;
             let mut states: HashMap<String, CurveEvalState> = HashMap::new();
-            let steps = seconds.max(1);
+            // Run for `seconds` of wall time, whatever the interval (it used to run
+            // `seconds` iterations, i.e. seconds * interval_ms plus read time).
+            let deadline = Instant::now() + Duration::from_secs(seconds.max(1));
             let mode = if do_apply { "APPLY" } else { "DRY-RUN" };
             println!(
                 "Running profile '{}' for {seconds}s (interval={interval_ms}ms mode={mode})",
                 profile.name
             );
-            for i in 0..steps {
+            let mut i: u64 = 0;
+            while Instant::now() < deadline {
                 let mut temps = HashMap::new();
                 for s in reg.all_sensors() {
                     if s.kind == SensorKind::Temperature
@@ -517,7 +514,9 @@ fn main() -> anyhow::Result<()> {
                 if step.duties.is_empty() {
                     println!("  t={i:03} no assignments applied (temps={temps:?})");
                 }
-                thread::sleep(Duration::from_millis(interval_ms));
+                i += 1;
+                let left = deadline.saturating_duration_since(Instant::now());
+                thread::sleep(Duration::from_millis(interval_ms).min(left));
             }
         }
         Commands::InitProfile { hw, id } => {
@@ -602,6 +601,29 @@ fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+/// Log to the console and to `fancontrol-rs.log` in the config dir (truncated at
+/// each launch). The UI is a GUI-subsystem exe, so console redirection is not a
+/// reliable way to get its log: PowerShell `*>` even returns at once and leaves an
+/// unread pipe, which blocked logging and froze the window on exit.
+fn init_logging() {
+    use tracing_subscriber::{EnvFilter, fmt, prelude::*};
+
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let file = fancontrol_core::config_dir().ok().and_then(|dir| {
+        std::fs::create_dir_all(&dir).ok()?;
+        std::fs::File::create(dir.join("fancontrol-rs.log")).ok()
+    });
+    let file_layer = file.map(|f| {
+        let writer = std::sync::Mutex::new(f);
+        fmt::layer().with_ansi(false).with_writer(writer)
+    });
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(fmt::layer())
+        .with(file_layer)
+        .init();
 }
 
 /// Re-attach to the launching terminal's console, if one exists, since this binary

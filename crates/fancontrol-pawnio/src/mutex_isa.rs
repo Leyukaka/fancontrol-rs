@@ -47,6 +47,8 @@ pub struct IsaBusGuard {
 }
 
 impl IsaBusGuard {
+    /// Best effort: always returns, even when another tool keeps the global ISA
+    /// mutex past `isa_timeout` (reads, and the BIOS hand-back on exit).
     pub fn acquire(isa_timeout: Duration) -> Self {
         let process = process_sio_mutex()
             .lock()
@@ -56,6 +58,19 @@ impl IsaBusGuard {
             _process: process,
             held_isa,
         }
+    }
+
+    /// For PWM writes: fails instead of proceeding when another tool (HWiNFO,
+    /// LibreHardwareMonitor, ...) still holds the global ISA mutex, so a write
+    /// never lands in the middle of that tool's index/data sequence. The next
+    /// curve step retries. Proceeds when the named mutex could not be created at
+    /// all (nobody else can hold it then).
+    pub fn acquire_for_write(isa_timeout: Duration) -> Result<Self, String> {
+        let guard = Self::acquire(isa_timeout);
+        if !guard.held_isa && isa_mutex_handle().is_some() {
+            return Err("ISA bus busy (held by another monitoring tool), write skipped".into());
+        }
+        Ok(guard)
     }
 }
 

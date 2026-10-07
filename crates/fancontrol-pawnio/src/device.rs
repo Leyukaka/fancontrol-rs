@@ -111,25 +111,11 @@ impl SuperIoDevice {
         }
     }
 
-    /// Batch sample when supported (NCT668x). Banked falls back to sequential reads.
+    /// Batch sample: every register read under a single bus lock.
     pub fn sample_all(&self) -> Result<HwmSample, String> {
         match self {
             Self::Nct668(d) => d.sample_all(),
-            Self::Banked(d) => {
-                let mut s = HwmSample::default();
-                for ts in d.temp_sources() {
-                    let v = d.read_temp_c(ts.reg, ts.half)?;
-                    s.temps.push((ts.name.to_string(), v));
-                }
-                for i in 0..d.fan_count() {
-                    s.fans.push((i, d.read_fan_rpm(i)?));
-                }
-                for i in 0..d.control_count() {
-                    let duty = d.read_duty_percent(i).ok();
-                    s.duties.push((i, duty));
-                }
-                Ok(s)
-            }
+            Self::Banked(d) => d.sample_all(),
         }
     }
 }

@@ -171,7 +171,10 @@ pub struct FanCurve {
     /// is allowed to reduce duty (reduces oscillation). `0.0` disables.
     #[serde(default)]
     pub hysteresis_c: f64,
-    /// Minimum seconds between duty changes (soft rate limit). `0.0` disables.
+    /// Response time in seconds: after a duty change the curve waits this long
+    /// before it may *lower* the duty again (increases always apply at once, so
+    /// cooling is never delayed). Smooths fans that keep speeding up and slowing
+    /// down. `0.0` disables.
     #[serde(default)]
     pub response_time_s: f64,
 }
@@ -279,6 +282,11 @@ pub struct Profile {
     /// (control id → sensor id). If missing, the UI/core may pick a default.
     #[serde(default)]
     pub sensor_bindings: HashMap<String, String>,
+    /// Extra temperature sensors per control (control id → sensor ids, any kind:
+    /// GPU, SSD, motherboard...). The curve is driven by the hottest of the bound
+    /// CPU sensor and these, e.g. a case fan that must also react to the GPU.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub extra_sensors: HashMap<String, Vec<String>>,
 }
 
 impl Profile {
@@ -289,6 +297,7 @@ impl Profile {
             curves: Vec::new(),
             assignments: HashMap::new(),
             sensor_bindings: HashMap::new(),
+            extra_sensors: HashMap::new(),
         }
     }
 

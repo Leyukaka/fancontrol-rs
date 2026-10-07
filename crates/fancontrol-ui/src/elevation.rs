@@ -4,15 +4,20 @@
 //! explicit user action (dialog / top-bar button).
 
 /// Whether this process is running with an elevated token (Administrator).
+/// A process's elevation never changes, so the token is queried once (the UI asks
+/// every frame while the backend needs admin).
 pub fn is_elevated() -> bool {
-    #[cfg(windows)]
-    {
-        win::is_elevated()
-    }
-    #[cfg(not(windows))]
-    {
-        false
-    }
+    static ELEVATED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ELEVATED.get_or_init(|| {
+        #[cfg(windows)]
+        {
+            win::is_elevated()
+        }
+        #[cfg(not(windows))]
+        {
+            false
+        }
+    })
 }
 
 /// Relaunch the current executable with the same CLI args via UAC (`runas`).

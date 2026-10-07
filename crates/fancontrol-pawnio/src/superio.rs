@@ -5,6 +5,7 @@
 
 use crate::lpcio::LpcIo;
 use crate::mutex_isa::IsaBusGuard;
+use crate::nct668::HwmSample;
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
@@ -112,10 +113,20 @@ pub fn detect_chips() -> Result<Vec<DetectedChip>, String> {
         let reg_port: u16 = if slot == 0 { 0x2E } else { 0x4E };
 
         // --- Winbond / Nuvoton / Fintek enter ---
+        // Every `?` below first exits config mode, so an I/O error never leaves
+        // the chip in config mode for the next tool.
+        let exit_winbond = |lpc: &LpcIo| {
+            let _ = lpc.write_port(reg_port, 0xAA);
+        };
         lpc.write_port(reg_port, 0x87)?;
-        lpc.write_port(reg_port, 0x87)?;
-        let id = lpc.superio_inb(CHIP_ID_REGISTER)?;
-        let revision = lpc.superio_inb(CHIP_REVISION_REGISTER)?;
+        lpc.write_port(reg_port, 0x87)
+            .inspect_err(|_| exit_winbond(&lpc))?;
+        let id = lpc
+            .superio_inb(CHIP_ID_REGISTER)
+            .inspect_err(|_| exit_winbond(&lpc))?;
+        let revision = lpc
+            .superio_inb(CHIP_REVISION_REGISTER)
+            .inspect_err(|_| exit_winbond(&lpc))?;
 
         if id != 0 && id != 0xFF {
             let chip = classify_winbond(id, revision);
@@ -129,15 +140,18 @@ pub fn detect_chips() -> Result<Vec<DetectedChip>, String> {
                 {
                     let _ = lpc.superio_outb(NUVOTON_IO_SPACE_LOCK, options & !0x10);
                 }
-                let addr = lpc.superio_inw(BASE_ADDRESS_REGISTER)?;
+                let addr = lpc
+                    .superio_inw(BASE_ADDRESS_REGISTER)
+                    .inspect_err(|_| exit_winbond(&lpc))?;
                 thread::sleep(Duration::from_millis(1));
-                let verify = lpc.superio_inw(BASE_ADDRESS_REGISTER)?;
+                let verify = lpc
+                    .superio_inw(BASE_ADDRESS_REGISTER)
+                    .inspect_err(|_| exit_winbond(&lpc))?;
                 if addr == verify && addr >= 0x100 && (addr & 0xF007) == 0 {
                     hwm = Some(addr);
                 }
             }
-            // Exit config
-            let _ = lpc.write_port(reg_port, 0xAA);
+            exit_winbond(&lpc);
 
             found.push(DetectedChip {
                 slot,
@@ -147,23 +161,28 @@ pub fn detect_chips() -> Result<Vec<DetectedChip>, String> {
             });
             continue;
         }
-        let _ = lpc.write_port(reg_port, 0xAA);
+        exit_winbond(&lpc);
 
         // --- ITE IT87 enter ---
         lpc.write_port(reg_port, 0x87)?;
         lpc.write_port(reg_port, 0x01)?;
         lpc.write_port(reg_port, 0x55)?;
         lpc.write_port(reg_port, if reg_port == 0x4E { 0xAA } else { 0x55 })?;
-        let chip_id = lpc.superio_inw(CHIP_ID_REGISTER)?;
-        if chip_id != 0 && chip_id != 0xFFFF {
-            let _ = lpc.find_bars();
-            let _ = lpc.select_ldn(0x04);
-            let addr = lpc.superio_inw(BASE_ADDRESS_REGISTER).ok();
+        let exit_ite = |lpc: &LpcIo| {
             // Exit (primary port only)
             if reg_port != 0x4E {
                 let _ = lpc.write_port(reg_port, 0x02);
                 let _ = lpc.write_port(reg_port + 1, 0x02);
             }
+        };
+        let chip_id = lpc
+            .superio_inw(CHIP_ID_REGISTER)
+            .inspect_err(|_| exit_ite(&lpc))?;
+        if chip_id != 0 && chip_id != 0xFFFF {
+            let _ = lpc.find_bars();
+            let _ = lpc.select_ldn(0x04);
+            let addr = lpc.superio_inw(BASE_ADDRESS_REGISTER).ok();
+            exit_ite(&lpc);
             found.push(DetectedChip {
                 slot,
                 register_port: reg_port,
@@ -179,9 +198,7 @@ pub fn detect_chips() -> Result<Vec<DetectedChip>, String> {
 /// Live banked Nuvoton HWM access for one chip.
 pub struct NctBankedDevice {
     lpc: LpcIo,
-    register_port: u16,
     hwm: u16,
-    slot: u8,
     #[allow(dead_code)]
     chip: SuperIoChip,
     /// Last known duties 0..=100 (software cache; HW may differ until written).
@@ -224,9 +241,7 @@ impl NctBankedDevice {
         let control_count = 7;
         Ok(Self {
             lpc,
-            register_port: detected.register_port,
             hwm,
-            slot: detected.slot,
             chip: detected.chip,
             duties: Mutex::new(vec![0u8; control_count]),
             initial: Mutex::new(vec![None; control_count]),
@@ -272,6 +287,14 @@ impl NctBankedDevice {
         half_reg: Option<(u16, u8)>,
     ) -> Result<Option<f64>, String> {
         let _g = IsaBusGuard::acquire(Duration::from_millis(50));
+        self.read_temp_c_unlocked(reg, half_reg)
+    }
+
+    fn read_temp_c_unlocked(
+        &self,
+        reg: u16,
+        half_reg: Option<(u16, u8)>,
+    ) -> Result<Option<f64>, String> {
         let raw = self.read_byte(reg)? as i8;
         let mut value = (raw as i16) << 1;
         if let Some((hr, bit)) = half_reg {
@@ -289,10 +312,14 @@ impl NctBankedDevice {
 
     /// 13-bit fan count → RPM (LHM formula).
     pub fn read_fan_rpm(&self, index: usize) -> Result<Option<f64>, String> {
+        let _g = IsaBusGuard::acquire(Duration::from_millis(50));
+        self.read_fan_rpm_unlocked(index)
+    }
+
+    fn read_fan_rpm_unlocked(&self, index: usize) -> Result<Option<f64>, String> {
         if index >= self.fan_count {
             return Ok(None);
         }
-        let _g = IsaBusGuard::acquire(Duration::from_millis(50));
         // fan count registers 0x4B0, 0x4B2, ...
         let base = 0x4B0u16 + (index as u16) * 2;
         let high = self.read_byte(base)?;
@@ -313,14 +340,36 @@ impl NctBankedDevice {
 
     /// Current PWM output as percent 0..=100.
     pub fn read_duty_percent(&self, index: usize) -> Result<u8, String> {
+        let _g = IsaBusGuard::acquire(Duration::from_millis(50));
+        self.read_duty_percent_unlocked(index)
+    }
+
+    fn read_duty_percent_unlocked(&self, index: usize) -> Result<u8, String> {
         if index >= self.control_count {
             return Err("control index out of range".into());
         }
-        let _g = IsaBusGuard::acquire(Duration::from_millis(50));
         // PWM out regs for classic NCT679x
         let regs: [u16; 7] = [0x001, 0x003, 0x011, 0x013, 0x015, 0x017, 0x029];
         let value = self.read_byte(regs[index])?;
         Ok(((f64::from(value) / 2.55).round() as u8).min(100))
+    }
+
+    /// Every temp, fan and duty under one bus lock: one global ISA mutex wait per
+    /// poll instead of one per register (about 21 on a 7-channel chip).
+    pub fn sample_all(&self) -> Result<HwmSample, String> {
+        let _g = IsaBusGuard::acquire(Duration::from_millis(200));
+        let mut s = HwmSample::default();
+        for ts in self.temp_sources() {
+            let v = self.read_temp_c_unlocked(ts.reg, ts.half)?;
+            s.temps.push((ts.name.to_string(), v));
+        }
+        for i in 0..self.fan_count {
+            s.fans.push((i, self.read_fan_rpm_unlocked(i)?));
+        }
+        for i in 0..self.control_count {
+            s.duties.push((i, self.read_duty_percent_unlocked(i).ok()));
+        }
+        Ok(s)
     }
 
     /// Set manual PWM duty 0..=100. **Writes hardware.**
@@ -332,7 +381,7 @@ impl NctBankedDevice {
         let pwm = ((f64::from(percent) * 2.55).round() as u16).min(255) as u8;
         let (mode_reg, cmd_reg) = (BANKED_MODE_REGS[index], BANKED_CMD_REGS[index]);
 
-        let _g = IsaBusGuard::acquire(Duration::from_millis(1000));
+        let _g = IsaBusGuard::acquire_for_write(Duration::from_millis(1000))?;
         {
             let mut initial = self.initial.lock().unwrap_or_else(|e| e.into_inner());
             if initial[index].is_none() {
@@ -346,12 +395,6 @@ impl NctBankedDevice {
         if let Ok(mut d) = self.duties.lock() {
             d[index] = percent;
         }
-        let _ = (
-            self.register_port,
-            self.slot,
-            WINBOND_NUVOTON_HWM_LDN,
-            NUVOTON_IO_SPACE_LOCK,
-        );
         Ok(())
     }
 

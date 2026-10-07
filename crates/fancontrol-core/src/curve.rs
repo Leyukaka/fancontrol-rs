@@ -14,6 +14,35 @@ pub struct CurveEvalState {
     /// Consecutive control steps without a usable temperature (see
     /// [`crate::control_loop::FAILSAFE_AFTER_MISSING_STEPS`]).
     pub missing_steps: u32,
+    /// Duty last handed to the fan, after the response-time hold.
+    pub applied_duty: Option<u8>,
+    /// When `applied_duty` last changed.
+    pub last_change: Option<std::time::Instant>,
+}
+
+/// Apply the curve's response time to a freshly evaluated `duty`: increases go
+/// through at once; a decrease waits until `response_time_s` has elapsed since the
+/// last change, holding the previous duty meanwhile.
+pub fn apply_response_time(
+    curve: &FanCurve,
+    state: &mut CurveEvalState,
+    duty: u8,
+    now: std::time::Instant,
+) -> u8 {
+    if let Some(prev) = state.applied_duty {
+        if duty == prev {
+            return prev;
+        }
+        let settled = state
+            .last_change
+            .is_none_or(|t| now.duration_since(t).as_secs_f64() >= curve.response_time_s);
+        if duty < prev && curve.response_time_s > 0.0 && !settled {
+            return prev;
+        }
+    }
+    state.applied_duty = Some(duty);
+    state.last_change = Some(now);
+    duty
 }
 
 /// Evaluate a fan curve at the given temperature (°C).

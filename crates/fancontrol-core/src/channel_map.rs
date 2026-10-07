@@ -1,6 +1,6 @@
 //! User-editable display names for sensors and controls.
 
-use crate::config::{config_dir, ensure_config_dirs};
+use crate::config::{config_dir, ensure_config_dirs, write_atomic};
 use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -145,7 +145,7 @@ impl ChannelMap {
             fs::create_dir_all(parent)?;
         }
         let json = serde_json::to_string_pretty(self)?;
-        fs::write(path, json)?;
+        write_atomic(path, json)?;
         Ok(())
     }
 
