@@ -3,7 +3,7 @@
 use crate::activity::{ActivityMode, ProcessSort};
 use crate::shaders::GraphStyle;
 use crate::theme::ThemeChoice;
-use fancontrol_core::config::{config_dir, ensure_config_dirs};
+use fancontrol_core::config::{config_dir, ensure_config_dirs, write_atomic};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -225,10 +225,24 @@ impl UiSettings {
         let Some(path) = Self::path() else {
             return Self::default();
         };
-        let Ok(data) = fs::read_to_string(path) else {
+        let Ok(data) = fs::read_to_string(&path) else {
             return Self::default();
         };
-        let mut s: Self = serde_json::from_str(&data).unwrap_or_default();
+        let mut s: Self = match serde_json::from_str(&data) {
+            Ok(s) => s,
+            Err(e) => {
+                // Keep a copy of the unreadable file: the defaults are saved over it on
+                // this run, and the user may want their old settings back.
+                let backup = path.with_extension("json.bad");
+                tracing::warn!(
+                    error = %e,
+                    backup = %backup.display(),
+                    "ui-settings.json unreadable, starting from defaults"
+                );
+                let _ = fs::copy(&path, &backup);
+                Self::default()
+            }
+        };
         s.clamp_graph_options();
         let mut dirty = false;
         // Recover first-run bug: seeded=true with empty ids never auto-filled the graph.
@@ -263,7 +277,7 @@ impl UiSettings {
             return;
         };
         if let Ok(json) = serde_json::to_string_pretty(self) {
-            let _ = fs::write(path, json);
+            let _ = write_atomic(&path, json);
         }
     }
 

@@ -13,7 +13,7 @@ pub mod profile;
 pub mod temp_source;
 
 pub use channel_map::ChannelMap;
-pub use config::{config_dir, ensure_config_dirs, profiles_dir};
+pub use config::{config_dir, ensure_config_dirs, profiles_dir, write_atomic};
 pub use control_loop::{
     ControlStepResult, FAILSAFE_AFTER_MISSING_STEPS, FAILSAFE_DUTY, default_interval,
     evaluate_profile_step,
