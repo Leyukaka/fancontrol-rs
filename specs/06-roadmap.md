@@ -1,6 +1,6 @@
 # Roadmap
 
-Last aligned with product reality: **v0.6.2** (bug-fix release from the 2026-10-07 code review, log file in the config dir; light theme following the Windows app mode; tray-icon 0.26; v0.6.0 fan safety: curves keep running in tray, BIOS hand-back on exit, failsafe duty). See `specs/07-metrics-telemetry.md`, `specs/04-ui.md`, `docs/DIMM_TEMP.md`.
+Last aligned with product reality: **v0.7.0** (Neon edition: Neon default theme with own title bar, Windows fonts, multi-sensor curve input, curve response time, duplicate / delete curves, DirectX 12 on Windows; v0.6.2 review fixes). See `specs/07-metrics-telemetry.md`, `specs/04-ui.md`, `docs/DIMM_TEMP.md`.
 
 ## Phase 0 - Foundation
 
@@ -56,7 +56,7 @@ Last aligned with product reality: **v0.6.2** (bug-fix release from the 2026-10-
 
 ## Phase 4 - Advanced
 
-- [ ] Multi-sensor curves (e.g. max CPU+GPU as single input)
+- [x] Multi-sensor curves (max of the CPU sensor and extra sensors per control) - v0.7.0
 - [ ] Additional official plugins
 - [ ] Auto-update: download + SHA256 verify + install
 - [x] NVIDIA multi-metric + GPU panel (v0.3.5; Hot Spot not via smi)
@@ -87,7 +87,7 @@ Spec: `specs/07-metrics-telemetry.md`.
 4. SSD/NVMe temp validation on real hardware
 5. Code signing when ready for wider audience
 5. Optional: download + SHA256 after manual check (still no silent auto-update)
-6. Multi-sensor curves (max CPU+GPU)
+6. Multi-sensor curves: done in v0.7.0 (extra sensors per control)
 7. RGB remains **future / out of Super I/O fan HWM scope**
 
 ## Out of scope for v1

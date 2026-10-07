@@ -14,7 +14,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/rust-edition%202024-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue" alt="License">
-  <img src="https://img.shields.io/badge/version-0.6.2-informational" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.7.0-informational" alt="Version">
   <img src="https://img.shields.io/badge/backend-PawnIO-success" alt="PawnIO">
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-blue" alt="Windows">
 </p>
@@ -34,7 +34,7 @@
 
 ## Features
 
-- **Fan control**: curves, profiles, live duty sliders, multi-sensor temperature graph. Works for case fans and **AIO fans on motherboard headers** (not a pump/RGB vendor app)
+- **Fan control**: curves, profiles, live duty sliders, multi-sensor temperature graph. A curve can follow the hottest of several sensors (CPU, GPU, SSD...) and slow fans down only after a response time. Works for case fans and **AIO fans on motherboard headers** (not a pump/RGB vendor app)
 - **Activity deck**: CPU load history + top processes (CPU % and RAM), filter and sort (default on; toggle from the top bar or Options)
 - **Security**: [PawnIO](https://pawnio.eu/) only for Super I/O / EC. Never ships WinRing0 or other known-vulnerable ring-0 drivers
 - **Host sensors**: NVIDIA GPU multi-metric via fixed-path `nvidia-smi` (temp, power W, util, clocks, VRAM, fan %) + GPU detail panel; SSD/NVMe temps via DeviceIoControl (no PowerShell); **DDR5 DIMM temps** via PawnIO SMBus (`host.dimm{N}.temp`, owner-validated on AMD)
@@ -42,7 +42,7 @@
 - **Updates**: **manual only** - Options → **Check for updates** (GitHub Releases API link). No background check, no auto-download, no silent install
 - **Start with Windows**: Options + first-run prompt (current-user Run key, no admin)
 - **Admin elevation**: Needs-admin dialog + top bar **Restart as Administrator** (UAC via `runas`; no silent elevation)
-- **UI**: egui 0.36 desktop app, system tray, first-run write consent, 8 languages (en/fr/de/es/it/zh/ja/lb)
+- **UI**: egui 0.36 desktop app, Neon theme by default plus light / dark, Windows fonts (Segoe UI), system tray, first-run write consent, 8 languages (en/fr/de/es/it/zh/ja/lb)
 - **CLI**: `sample`, `list-sensors`, `list-controls`, `test-duty`, `sample-storage`, …
 - **Optional fun**: shader graph styles (wgpu) in Options
 - Spec-driven design: decisions live under [`specs/`](./specs)
@@ -114,7 +114,7 @@ Rough map of the Windows landscape. Support always depends on your board and EC.
 
 ## Status
 
-**v0.6.2**. Bug-fix release from a full code review (curve bindings, curve editor, PWM write handling, atomic settings, narrow-window layout, repaint fix) plus a log file at `%APPDATA%\fancontrol-rs\fancontrol-rs\config\fancontrol-rs.log`. Since v0.6.1: light theme (follows the Windows app mode, or pick Light / Dark in Options). Since v0.6.0: curves keep running while the window is in the tray, fans are handed back to BIOS control on exit (tray Exit, Ctrl+C), and a failsafe duty applies when the CPU temperature is missing. NCT668x + banked NCT (ROG B550-A) **certified**; other boards should work - **send logs to certify**. Domain panels (Sensors / GPU / CPU), Activity toggle in the top bar, UI card/table padding, multi-kind graph, CPU package power (AMD + Intel RAPL), **DDR5 DIMM temps** (SMBus, no experimental label), Activity deck, metrics store, opt-in OTLP/HTTP, Start with Windows, **Restart as Administrator** (UAC), tray-icon 0.26 with a frozen Windows GUID. Updates are **manual only**.  
+**v0.7.0, Neon edition**. Neon theme by default (own title bar, animated RGB border; classic look in Options > Theme), Windows fonts, curves that follow several sensors, curve response time, duplicate / delete curves, DirectX 12 rendering on Windows (fixes the window freezing after a resize on NVIDIA), plus the v0.6.2 fixes. NCT668x + banked NCT (ROG B550-A) **certified**; other boards should work - **send logs to certify**. Domain panels (Sensors / GPU / CPU), Activity toggle in the top bar, UI card/table padding, multi-kind graph, CPU package power (AMD + Intel RAPL), **DDR5 DIMM temps** (SMBus, no experimental label), Activity deck, metrics store, opt-in OTLP/HTTP, Start with Windows, **Restart as Administrator** (UAC), tray-icon 0.26 with a frozen Windows GUID. Updates are **manual only**.  
 Public source of truth: this repo ([Releases](https://github.com/Leyukaka/fancontrol-rs/releases), issues, PRs).
 
 | Crate | Role |
