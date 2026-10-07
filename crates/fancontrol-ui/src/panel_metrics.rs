@@ -244,7 +244,9 @@ pub fn power_sparkline(
     let data_max = points.iter().map(|p| p[1] as f32).fold(0.0_f32, f32::max);
     let max_y = power_y_max(data_max, limit_w);
     let window_mins = history.window_minutes();
-    let color = theme::accent(ui.visuals(), power_color(0.3));
+    // Color by how close the recent peak came to the limit, like the power bar.
+    let frac = limit_w.filter(|l| *l > 0.0).map_or(0.3, |l| data_max / l);
+    let color = theme::accent(ui.visuals(), power_color(frac));
     let line = Line::new(id_salt.to_string(), points)
         .color(color)
         .width(2.0);

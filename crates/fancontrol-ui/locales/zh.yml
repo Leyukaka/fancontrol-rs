@@ -148,7 +148,7 @@ pawnio.continue_without_hw: "不使用硬件继续"
 pawnio.footer_note: "应用仍可使用（模拟 / 配置模式）。不会自动安装。仅在点击按钮后请求提权。"
 
 tray.open: "打开 fancontrol-rs"
-tray.apply_default: "立即应用默认配置文件"
+tray.apply_default: "立即应用当前配置文件"
 tray.exit: "退出"
 
 registry.hw_probe_disabled: "硬件探测已禁用 (--no-hw)"

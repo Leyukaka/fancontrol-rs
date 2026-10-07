@@ -148,7 +148,7 @@ pawnio.continue_without_hw: "Continua senza hardware"
 pawnio.footer_note: "L'app rimane utilizzabile (mock / configurazione). Nessuna installazione automatica. Elevazione solo dopo il clic sul pulsante."
 
 tray.open: "Apri fancontrol-rs"
-tray.apply_default: "Applica ora il profilo predefinito"
+tray.apply_default: "Applica ora il profilo attuale"
 tray.exit: "Esci"
 
 registry.hw_probe_disabled: "Rilevamento hardware disattivato (--no-hw)"

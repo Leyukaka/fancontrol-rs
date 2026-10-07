@@ -148,7 +148,7 @@ pawnio.continue_without_hw: "Weiderfueren ouni Hardware"
 pawnio.footer_note: "D'App bleift benotzbar (Mock / Konfiguratioun). Keng automatesch Installatioun. Erhéijung nëmmen no Klick op de Knäppchen."
 
 tray.open: "fancontrol-rs opmaachen"
-tray.apply_default: "Standardprofil elo uwenden"
+tray.apply_default: "Aktuellt Profil elo uwenden"
 tray.exit: "Verloossen"
 
 registry.hw_probe_disabled: "Hardware-Erkennung ausgeschalt (--no-hw)"

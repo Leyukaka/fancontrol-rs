@@ -17,8 +17,9 @@ use crate::update_check::{UpdateChecker, UpdateStatus};
 use crate::write_queue::WriteQueue;
 use eframe::egui;
 use fancontrol_core::{
-    ChannelMap, CurveEvalState, FanCurve, MetricSample, Profile, SensorKind, evaluate_profile_step,
-    is_cpu_temp_candidate, list_profiles, load_profile, save_profile,
+    ChannelMap, CoreError, CurveEvalState, FanCurve, MetricSample, Profile, SensorKind,
+    evaluate_profile_step, is_cpu_temp_candidate, list_profiles, load_profile,
+    resolve_curve_temp_sensor, save_profile,
 };
 use fancontrol_metrics::{
     MetricSink, OtlpSink, SqliteMetricsStore, SqliteStoreConfig, default_metrics_db_path,
@@ -263,6 +264,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         host_enabled,
         slider_state: HashMap::new(),
         user_lock_until: HashMap::new(),
+        echo_hold_until: HashMap::new(),
         write_error: None,
         rename_id: None,
         rename_buf: String::new(),
@@ -390,6 +392,9 @@ struct FanApp {
     host_enabled: Arc<AtomicBool>,
     slider_state: HashMap<String, f32>,
     user_lock_until: HashMap<String, Instant>,
+    /// Per control: keep the requested duty on the slider until this instant, so the
+    /// previous hardware reading (the EC echo lags a poll) does not snap it back.
+    echo_hold_until: HashMap<String, Instant>,
     write_error: Option<String>,
     rename_id: Option<String>,
     rename_buf: String,
@@ -463,9 +468,15 @@ fn load_or_create_default_profile(preferred: Option<&str>) -> Profile {
     {
         return p;
     }
-    if let Ok(p) = load_profile("default") {
-        return p;
-    }
+    let default_missing = match load_profile("default") {
+        Ok(p) => return p,
+        Err(CoreError::ProfileNotFound(_)) => true,
+        Err(e) => {
+            // Keep the user's file: run on the built-in default without saving over it.
+            tracing::warn!(error = %e, "default profile unreadable, using built-in curves");
+            false
+        }
+    };
     let mut p = Profile::new("default", "Default");
     p.curves
         .push(FanCurve::linear("quiet", "Quiet", 30.0, 75.0, 25, 100));
@@ -477,7 +488,9 @@ fn load_or_create_default_profile(preferred: Option<&str>) -> Profile {
         .insert("pawnio.0.ctrl1".into(), "quiet".into());
     p.sensor_bindings
         .insert("pawnio.0.ctrl1".into(), "pawnio.0.temp.CPU".into());
-    let _ = save_profile(&p);
+    if default_missing {
+        let _ = save_profile(&p);
+    }
     p
 }
 
@@ -543,9 +556,14 @@ impl eframe::App for FanApp {
         // Smooth shader animation needs a much faster repaint cadence than the
         // rest of the UI - only pay for it while a shader style is actually
         // active, the backend supports it, and the window isn't minimized to tray.
+        // Not while the graph is hidden or the window is minimized to the taskbar
+        // (only the tray hide clears `window_visible`).
+        let minimized = ctx.input(|i| i.viewport().minimized == Some(true));
         let repaint_interval = if self.settings.graph_style.is_shader()
             && self.shader_backend_available
+            && self.settings.show_graph_panel
             && self.window_visible
+            && !minimized
         {
             Duration::from_secs_f32(1.0 / f32::from(self.settings.shader_fps))
         } else {
@@ -1266,7 +1284,7 @@ impl eframe::App for FanApp {
                 .resizable(true)
                 .default_size(280.0)
                 .show(ui, |ui| {
-                    clamp_width(ui, |ui| self.ui_curves_panel(ui, snap.cpu_temp));
+                    clamp_width(ui, |ui| self.ui_curves_panel(ui, &snap));
                 });
         }
 
@@ -1555,8 +1573,11 @@ impl eframe::App for FanApp {
         self.show_writes_consent_dialog(&ctx);
         if !self.show_writes_consent {
             self.show_pawnio_dialog(&ctx);
-            // After critical hardware dialogs, offer start-with-Windows once.
-            self.show_startup_prompt_dialog(&ctx);
+            // After critical hardware dialogs, offer start-with-Windows once. Not while
+            // the PawnIO window is up: both are centered and would stack.
+            if self.pawnio_dialog.is_none() {
+                self.show_startup_prompt_dialog(&ctx);
+            }
         }
     }
 }
@@ -1728,21 +1749,24 @@ impl FanApp {
                                     .iter()
                                     .filter(|(id, _, _)| is_cpu_temp_candidate(id))
                                     .collect();
-                                let stored = self.profile.sensor_bindings.get(&c.id).cloned();
-                                let bound_id = stored
-                                    .filter(|id| is_cpu_temp_candidate(id))
-                                    .filter(|id| cpu_temps.iter().any(|(sid, _, _)| sid == id))
-                                    .unwrap_or_else(|| default_cpu_curve_sensor(snap));
-                                if self.profile.sensor_bindings.get(&c.id) != Some(&bound_id) {
-                                    self.profile
-                                        .sensor_bindings
-                                        .insert(c.id.clone(), bound_id.clone());
-                                }
+                                // Keep the user's binding even when that sensor is missing from
+                                // this poll: silently retargeting it made the fan follow another
+                                // temperature (the control loop's failsafe covers a real outage).
+                                let bound_id = match self.profile.sensor_bindings.get(&c.id) {
+                                    Some(id) if is_cpu_temp_candidate(id) => id.clone(),
+                                    _ => {
+                                        let id = default_cpu_curve_sensor(snap);
+                                        self.profile
+                                            .sensor_bindings
+                                            .insert(c.id.clone(), id.clone());
+                                        id
+                                    }
+                                };
                                 let bound_label = cpu_temps
                                     .iter()
                                     .find(|(id, _, _)| *id == bound_id)
                                     .map(|(_, label, _)| (*label).clone())
-                                    .unwrap_or_else(|| bound_id.clone());
+                                    .unwrap_or_else(|| format!("{bound_id} ({})", t!("common.na")));
                                 let bind_resp =
                                     egui::ComboBox::from_id_salt(format!("bind-{}", c.id))
                                         .selected_text(bound_label)
@@ -1767,7 +1791,11 @@ impl FanApp {
 
                             let locked = self.is_user_locked(&c.id);
                             let hw_duty = c.duty.unwrap_or(0);
-                            if !locked && let Some(d) = c.duty {
+                            let holding = self
+                                .echo_hold_until
+                                .get(&c.id)
+                                .is_some_and(|t| Instant::now() < *t);
+                            if let Some(d) = c.duty.filter(|_| !locked && !holding) {
                                 self.slider_state.insert(c.id.clone(), f32::from(d));
                             }
                             let mut value =
@@ -2004,8 +2032,9 @@ impl FanApp {
             .settings
             .graph_sensor_ids
             .iter()
+            .filter(|id| kinds.get(id.as_str()) == Some(&SensorKind::Temperature))
+            // Index the drawn series, so the first visible line gets color 0 and the fill.
             .enumerate()
-            .filter(|(_, id)| kinds.get(id.as_str()) == Some(&SensorKind::Temperature))
             .filter_map(|(i, id)| {
                 self.histories.get(id).map(|h| GraphSeries {
                     label: labels.get(id.as_str()).copied().unwrap_or(id.as_str()),
@@ -2143,8 +2172,9 @@ impl FanApp {
                         .clicked()
                     {
                         // Session-only: do not persist read-only; re-prompt next launch.
+                        // Curve control is left alone: it is a saved setting, and every
+                        // curve apply already refuses to write in a read-only session.
                         self.options.allow_hw_write = false;
-                        self.settings.auto_apply_curves = false;
                         self.show_writes_consent = false;
                     }
                 });
@@ -2283,7 +2313,29 @@ impl FanApp {
         }
     }
 
-    fn ui_curves_panel(&mut self, ui: &mut egui::Ui, live_temp: Option<f64>) {
+    /// Temperature the selected curve is actually driven by: the sensor bound to the
+    /// first control using it (same resolution as the control loop), else CPU temp.
+    fn selected_curve_temp(&self, snap: &crate::poll::Snapshot) -> Option<f64> {
+        let curve_id = self.profile.curves.get(self.selected_curve)?.id.as_str();
+        let temps: HashMap<String, f64> = snap
+            .temps
+            .iter()
+            .map(|(id, _, v)| (id.clone(), *v))
+            .collect();
+        self.profile
+            .assignments
+            .iter()
+            .filter(|(_, cid)| cid.as_str() == curve_id)
+            .find_map(|(ctrl, _)| {
+                let bound = self.profile.sensor_bindings.get(ctrl).map(String::as_str);
+                let id = resolve_curve_temp_sensor(bound, &temps)?;
+                temps.get(&id).copied()
+            })
+            .or(snap.cpu_temp)
+    }
+
+    fn ui_curves_panel(&mut self, ui: &mut egui::Ui, snap: &crate::poll::Snapshot) {
+        let live_temp = self.selected_curve_temp(snap);
         ui.horizontal(|ui| {
             ui.heading(t!("curves_panel.heading").to_string());
             if let Some(s) = &self.profile_status {
@@ -2388,7 +2440,12 @@ impl FanApp {
                     .button(t!("curves_panel.add_curve").to_string())
                     .clicked()
                 {
-                    let id = format!("curve{}", self.profile.curves.len() + 1);
+                    // First free `curveN`: a loaded profile can already use `curve3`
+                    // with only two curves, and duplicate ids are indistinguishable.
+                    let id = (self.profile.curves.len() + 1..)
+                        .map(|n| format!("curve{n}"))
+                        .find(|id| self.profile.find_curve(id).is_none())
+                        .unwrap_or_default();
                     self.profile.curves.push(FanCurve::linear(
                         id,
                         t!("curves_panel.new_curve_name").to_string(),
@@ -2606,6 +2663,7 @@ impl FanApp {
             }
             // Do not mark applied until WriteQueue reports success (see take_successes).
             self.writes.enqueue(&ctrl, duty);
+            self.hold_echo(&ctrl);
             self.slider_state.insert(ctrl, f32::from(duty));
         }
         for e in step.errors {
@@ -2643,7 +2701,11 @@ impl FanApp {
                             } else {
                                 map.set_sensor_name(&id, &name);
                             }
-                            let _ = map.save();
+                            if let Err(e) = map.save() {
+                                // The new name is live in memory but would be lost on exit.
+                                tracing::warn!(error = %e, "channel map save failed");
+                                self.profile_status = Some(e.to_string());
+                            }
                         }
                         self.rename_id = None;
                     }
@@ -2680,6 +2742,12 @@ impl FanApp {
         // Optimistic UI skip only after queue success drain; clear on failure.
         self.last_applied_duty.remove(id);
         self.writes.enqueue(id, percent);
+        self.hold_echo(id);
+    }
+
+    fn hold_echo(&mut self, id: &str) {
+        self.echo_hold_until
+            .insert(id.to_string(), Instant::now() + Duration::from_millis(2000));
     }
 }
 

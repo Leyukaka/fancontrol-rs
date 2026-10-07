@@ -269,8 +269,16 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
         curve.points.remove(i);
         changed = true;
     }
-    if changed {
+    // Points (and the numeric rows) are index-addressed, so never reorder them while
+    // a drag is in progress: the dragged index would then point at another point.
+    // Sort once the drag ends (also covers a DragValue edit that crossed a neighbor).
+    let sorted = curve
+        .points
+        .windows(2)
+        .all(|w| w[0].temperature <= w[1].temperature);
+    if !sorted && ui.ctx().dragged_id().is_none() {
         curve.sort_points();
+        changed = true;
     }
     changed
 }
