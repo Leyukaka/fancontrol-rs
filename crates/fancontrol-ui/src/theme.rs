@@ -215,9 +215,8 @@ pub fn install_fonts(ctx: &egui::Context, system_fonts: bool) {
             add("cascadia_mono", data, egui::FontFamily::Monospace, true);
         }
     }
-    let cjk = egui::FontData::from_static(include_bytes!(
-        "../assets/fonts/NotoSansCJK-Regular.ttc"
-    ));
+    let cjk =
+        egui::FontData::from_static(include_bytes!("../assets/fonts/NotoSansCJK-Regular.ttc"));
     add(
         "noto_sans_cjk",
         cjk.clone(),
