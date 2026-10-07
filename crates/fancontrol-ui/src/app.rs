@@ -206,7 +206,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
     let pawnio_dialog = detect_pawnio_dialog(options.include_hw);
     // First-run writes consent only when the process actually allows PWM.
     let show_writes_consent = options.allow_hw_write && !settings.writes_risk_acknowledged;
-    let theme_preference = settings.theme.preference();
+    let (theme_choice, system_font) = (settings.theme, settings.system_font);
 
     // Activity deck: sample only while the panel is enabled (default on).
     fancontrol_plugins::cpu_activity::set_enabled(settings.show_activity_deck);
@@ -327,29 +327,10 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         "Fancontrol-RS",
         native,
         Box::new(move |cc| {
-            cc.egui_ctx.set_theme(theme_preference);
-
-            // CJK glyph fallback (egui's default fonts have no Chinese/Japanese coverage).
-            // Pushed after the default fonts so Latin-script languages keep using those,
-            // and loaded unconditionally since the language can be switched live at runtime.
-            let mut fonts = egui::FontDefinitions::default();
-            fonts.font_data.insert(
-                "noto_sans_cjk".to_owned(),
-                std::sync::Arc::new(egui::FontData::from_static(include_bytes!(
-                    "../assets/fonts/NotoSansCJK-Regular.ttc"
-                ))),
-            );
-            fonts
-                .families
-                .entry(egui::FontFamily::Proportional)
-                .or_default()
-                .push("noto_sans_cjk".to_owned());
-            fonts
-                .families
-                .entry(egui::FontFamily::Monospace)
-                .or_default()
-                .push("noto_sans_cjk".to_owned());
-            cc.egui_ctx.set_fonts(fonts);
+            theme::apply(&cc.egui_ctx, theme_choice);
+            // Windows UI fonts + CJK fallback (loaded unconditionally: the language
+            // can be switched live at runtime).
+            theme::install_fonts(&cc.egui_ctx, system_font);
 
             // One-time setup for the shader graph gallery's wgpu pipelines
             // (see crates/fancontrol-ui/src/shaders/mod.rs). Skipped gracefully
@@ -576,6 +557,9 @@ impl eframe::App for FanApp {
             && !minimized
         {
             Duration::from_secs_f32(1.0 / f32::from(self.settings.shader_fps))
+        } else if self.settings.theme.is_animated() && self.window_visible && !minimized {
+            // Neon border animation.
+            Duration::from_millis(33)
         } else {
             Duration::from_millis(200)
         };
@@ -853,11 +837,21 @@ impl eframe::App for FanApp {
                                                     && !selected
                                                 {
                                                     self.settings.theme = choice;
-                                                    ui.ctx().set_theme(choice.preference());
+                                                    theme::apply(ui.ctx(), choice);
                                                     self.settings.save();
                                                 }
                                             }
                                         });
+                                    if ui
+                                        .checkbox(
+                                            &mut self.settings.system_font,
+                                            t!("options.system_font").to_string(),
+                                        )
+                                        .changed()
+                                    {
+                                        theme::install_fonts(ui.ctx(), self.settings.system_font);
+                                        self.settings.save();
+                                    }
                                 });
 
                             egui::CollapsingHeader::new(t!("options.section_language").to_string())
@@ -1590,6 +1584,9 @@ impl eframe::App for FanApp {
             if self.pawnio_dialog.is_none() {
                 self.show_startup_prompt_dialog(&ctx);
             }
+        }
+        if self.settings.theme == ThemeChoice::Neon {
+            theme::paint_neon_border(&ctx, self.shader_clock.elapsed().as_secs_f64());
         }
     }
 }

@@ -48,9 +48,12 @@ pub struct UiSettings {
     /// UI language code (e.g. "en", "fr"). `None` = not yet chosen → OS-locale detection.
     #[serde(default)]
     pub language: Option<String>,
-    /// Light / dark / follow Windows.
+    /// Light / dark / follow Windows / neon.
     #[serde(default)]
     pub theme: ThemeChoice,
+    /// Use the Windows UI fonts (Segoe UI, Cascadia Mono) instead of egui's own.
+    #[serde(default = "default_true")]
+    pub system_font: bool,
     /// Visual style for the graph panel: the classic line graph, or one of the
     /// "fun" shader-based visualizations. Shader styles are opt-in (default Classic).
     #[serde(default)]
@@ -188,6 +191,7 @@ impl Default for UiSettings {
             last_profile_id: None,
             language: None,
             theme: ThemeChoice::default(),
+            system_font: true,
             graph_style: GraphStyle::default(),
             shader_speed: default_shader_speed(),
             shader_color_a: default_shader_color_a(),
