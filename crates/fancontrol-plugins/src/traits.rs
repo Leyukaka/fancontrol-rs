@@ -158,14 +158,14 @@ impl ProviderRegistry {
     /// Hand all controls back to firmware auto mode and refuse later writes.
     ///
     /// Later writes are refused as soon as this starts. Waits (bounded) for an
-    /// in-flight write to finish; past the timeout it restores anyway, and the
-    /// providers' own bus lock then orders the restore after that last write.
+    /// in-flight write to finish; past the timeout it restores anyway, then hands
+    /// back a second time once the straggling writes are done.
     pub fn restore_all(&self) {
         if self.released.swap(true, Ordering::SeqCst) {
             return;
         }
         let deadline = Instant::now() + Duration::from_secs(10);
-        let _gate = loop {
+        let gate = loop {
             match self.write_gate.try_write() {
                 Ok(g) => break Some(g),
                 Err(std::sync::TryLockError::Poisoned(e)) => break Some(e.into_inner()),
@@ -175,6 +175,28 @@ impl ProviderRegistry {
                 Err(std::sync::TryLockError::WouldBlock) => break None,
             }
         };
+        self.restore_controls();
+        if gate.is_none() {
+            // Timed out: a write that already passed the `released` check (e.g. one
+            // waiting on the bus lock) can still land after this restore and leave a
+            // header in manual mode. Wait for it (bounded) and hand back once more;
+            // providers re-save the firmware bytes on such a late write.
+            let deadline = Instant::now() + Duration::from_secs(10);
+            while Instant::now() < deadline {
+                match self.write_gate.try_write() {
+                    Ok(_) | Err(std::sync::TryLockError::Poisoned(_)) => {
+                        self.restore_controls();
+                        break;
+                    }
+                    Err(std::sync::TryLockError::WouldBlock) => {
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                }
+            }
+        }
+    }
+
+    fn restore_controls(&self) {
         for p in &self.controls {
             match p.restore_auto() {
                 Ok(()) => tracing::info!(provider = p.name(), "controls handed back to firmware"),

@@ -38,8 +38,11 @@ impl LpcIo {
         // Enter config mode
         self.write_port(register_port, 0x87)?;
         self.write_port(register_port, 0x87)?;
-        self.find_bars()
-            .map_err(|e| format!("find_bars failed (HWM ports will be denied): {e}"))?;
+        if let Err(e) = self.find_bars() {
+            // Never leave the chip in config mode on an error path.
+            let _ = self.write_port(register_port, 0xAA);
+            return Err(format!("find_bars failed (HWM ports will be denied): {e}"));
+        }
         // Select HWM logical device + clear IO lock (best effort)
         let _ = self.select_ldn(0x0B);
         if let Ok(options) = self.superio_inb(0x28)
@@ -54,7 +57,7 @@ impl LpcIo {
 
     pub fn read_port(&self, port: u16) -> Result<u8, String> {
         let out = self.session.execute("ioctl_pio_inb", &[port as u64], 1)?;
-        Ok(out.first().copied().unwrap_or(0) as u8)
+        Ok(first_word(&out, "ioctl_pio_inb")? as u8)
     }
 
     pub fn write_port(&self, port: u16, value: u8) -> Result<(), String> {
@@ -67,14 +70,14 @@ impl LpcIo {
         let out = self
             .session
             .execute("ioctl_superio_inb", &[reg as u64], 1)?;
-        Ok(out.first().copied().unwrap_or(0) as u8)
+        Ok(first_word(&out, "ioctl_superio_inb")? as u8)
     }
 
     pub fn superio_inw(&self, reg: u8) -> Result<u16, String> {
         let out = self
             .session
             .execute("ioctl_superio_inw", &[reg as u64], 1)?;
-        Ok(out.first().copied().unwrap_or(0) as u16)
+        Ok(first_word(&out, "ioctl_superio_inw")? as u16)
     }
 
     pub fn superio_outb(&self, reg: u8, value: u8) -> Result<(), String> {
@@ -86,4 +89,13 @@ impl LpcIo {
     pub fn select_ldn(&self, ldn: u8) -> Result<(), String> {
         self.superio_outb(0x07, ldn)
     }
+}
+
+/// First output word of a PawnIO read. An empty reply is an error: turning it
+/// into 0 read as a stopped fan, and could be saved as the firmware PWM byte
+/// that the BIOS hand-back writes back on exit.
+fn first_word(out: &[u64], what: &str) -> Result<u64, String> {
+    out.first()
+        .copied()
+        .ok_or_else(|| format!("{what}: PawnIO returned no data"))
 }

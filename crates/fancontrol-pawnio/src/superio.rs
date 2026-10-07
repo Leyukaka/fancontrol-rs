@@ -112,10 +112,20 @@ pub fn detect_chips() -> Result<Vec<DetectedChip>, String> {
         let reg_port: u16 = if slot == 0 { 0x2E } else { 0x4E };
 
         // --- Winbond / Nuvoton / Fintek enter ---
+        // Every `?` below first exits config mode, so an I/O error never leaves
+        // the chip in config mode for the next tool.
+        let exit_winbond = |lpc: &LpcIo| {
+            let _ = lpc.write_port(reg_port, 0xAA);
+        };
         lpc.write_port(reg_port, 0x87)?;
-        lpc.write_port(reg_port, 0x87)?;
-        let id = lpc.superio_inb(CHIP_ID_REGISTER)?;
-        let revision = lpc.superio_inb(CHIP_REVISION_REGISTER)?;
+        lpc.write_port(reg_port, 0x87)
+            .inspect_err(|_| exit_winbond(&lpc))?;
+        let id = lpc
+            .superio_inb(CHIP_ID_REGISTER)
+            .inspect_err(|_| exit_winbond(&lpc))?;
+        let revision = lpc
+            .superio_inb(CHIP_REVISION_REGISTER)
+            .inspect_err(|_| exit_winbond(&lpc))?;
 
         if id != 0 && id != 0xFF {
             let chip = classify_winbond(id, revision);
@@ -129,15 +139,18 @@ pub fn detect_chips() -> Result<Vec<DetectedChip>, String> {
                 {
                     let _ = lpc.superio_outb(NUVOTON_IO_SPACE_LOCK, options & !0x10);
                 }
-                let addr = lpc.superio_inw(BASE_ADDRESS_REGISTER)?;
+                let addr = lpc
+                    .superio_inw(BASE_ADDRESS_REGISTER)
+                    .inspect_err(|_| exit_winbond(&lpc))?;
                 thread::sleep(Duration::from_millis(1));
-                let verify = lpc.superio_inw(BASE_ADDRESS_REGISTER)?;
+                let verify = lpc
+                    .superio_inw(BASE_ADDRESS_REGISTER)
+                    .inspect_err(|_| exit_winbond(&lpc))?;
                 if addr == verify && addr >= 0x100 && (addr & 0xF007) == 0 {
                     hwm = Some(addr);
                 }
             }
-            // Exit config
-            let _ = lpc.write_port(reg_port, 0xAA);
+            exit_winbond(&lpc);
 
             found.push(DetectedChip {
                 slot,
@@ -147,23 +160,28 @@ pub fn detect_chips() -> Result<Vec<DetectedChip>, String> {
             });
             continue;
         }
-        let _ = lpc.write_port(reg_port, 0xAA);
+        exit_winbond(&lpc);
 
         // --- ITE IT87 enter ---
         lpc.write_port(reg_port, 0x87)?;
         lpc.write_port(reg_port, 0x01)?;
         lpc.write_port(reg_port, 0x55)?;
         lpc.write_port(reg_port, if reg_port == 0x4E { 0xAA } else { 0x55 })?;
-        let chip_id = lpc.superio_inw(CHIP_ID_REGISTER)?;
-        if chip_id != 0 && chip_id != 0xFFFF {
-            let _ = lpc.find_bars();
-            let _ = lpc.select_ldn(0x04);
-            let addr = lpc.superio_inw(BASE_ADDRESS_REGISTER).ok();
+        let exit_ite = |lpc: &LpcIo| {
             // Exit (primary port only)
             if reg_port != 0x4E {
                 let _ = lpc.write_port(reg_port, 0x02);
                 let _ = lpc.write_port(reg_port + 1, 0x02);
             }
+        };
+        let chip_id = lpc
+            .superio_inw(CHIP_ID_REGISTER)
+            .inspect_err(|_| exit_ite(&lpc))?;
+        if chip_id != 0 && chip_id != 0xFFFF {
+            let _ = lpc.find_bars();
+            let _ = lpc.select_ldn(0x04);
+            let addr = lpc.superio_inw(BASE_ADDRESS_REGISTER).ok();
+            exit_ite(&lpc);
             found.push(DetectedChip {
                 slot,
                 register_port: reg_port,
@@ -328,7 +346,7 @@ impl NctBankedDevice {
         let pwm = ((f64::from(percent) * 2.55).round() as u16).min(255) as u8;
         let (mode_reg, cmd_reg) = (BANKED_MODE_REGS[index], BANKED_CMD_REGS[index]);
 
-        let _g = IsaBusGuard::acquire(Duration::from_millis(1000));
+        let _g = IsaBusGuard::acquire_for_write(Duration::from_millis(1000))?;
         {
             let mut initial = self.initial.lock().unwrap_or_else(|e| e.into_inner());
             if initial[index].is_none() {

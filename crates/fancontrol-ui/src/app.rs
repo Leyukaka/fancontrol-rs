@@ -499,7 +499,10 @@ fn load_or_create_default_profile(preferred: Option<&str>) -> Profile {
 }
 
 /// A CSV export in flight: target path and the metrics worker's reply channel.
-type PendingExport = (std::path::PathBuf, std::sync::mpsc::Receiver<Result<usize, String>>);
+type PendingExport = (
+    std::path::PathBuf,
+    std::sync::mpsc::Receiver<Result<usize, String>>,
+);
 
 /// Lay out `add_contents` in the available width without letting over-wide
 /// content (narrow window) widen the parent. egui sizes a panel, and the

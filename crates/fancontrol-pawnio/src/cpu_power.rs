@@ -11,6 +11,9 @@ use std::time::Instant;
 
 /// Below this interval a delta is too noisy - reuse previous watts.
 const MIN_SAMPLE_INTERVAL_SECS: f64 = 0.05;
+/// Above any real CPU package draw: a larger value is a bad counter read (e.g. a
+/// zeroed sample making the next delta ~2^32 counts), not a measurement.
+const MAX_PLAUSIBLE_WATTS: f64 = 2000.0;
 
 // AMD
 const AMD_MSR_PWR_UNIT: u32 = 0xC001_0299;
@@ -175,7 +178,10 @@ impl IntelCpuPower {
 
 fn read_msr(session: &PawnSession, msr: u32) -> Result<u64, String> {
     let out = session.execute("ioctl_read_msr", &[u64::from(msr)], 1)?;
-    Ok(out.first().copied().unwrap_or(0))
+    // An empty reply is a failed read, not a zero counter (that would spike power).
+    out.first()
+        .copied()
+        .ok_or_else(|| format!("read_msr({msr:#x}): PawnIO returned no data"))
 }
 
 /// AMD `MSR_PWR_UNIT` energy-status unit (bits 12:8) → joules / increment.
@@ -203,6 +209,7 @@ fn energy_delta_update(
     now: Instant,
 ) -> f64 {
     let mut g = state.lock().unwrap_or_else(|e| e.into_inner());
+    let prev_watts = g.as_ref().map(|p| p.last_watts);
     let watts = match g.as_ref() {
         None => 0.0,
         Some(prev) => {
@@ -214,6 +221,12 @@ fn energy_delta_update(
             }
         }
     };
+    if let Some(prev_watts) = prev_watts
+        && !(0.0..=MAX_PLAUSIBLE_WATTS).contains(&watts)
+    {
+        // Keep the previous counter so the next good read measures from it.
+        return prev_watts;
+    }
     *g = Some(EnergyState {
         last_counter: counter,
         last_time: now,
@@ -238,6 +251,7 @@ fn energy_delta_to_watts(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     #[test]
     fn amd_default_energy_unit() {
@@ -269,6 +283,22 @@ mod tests {
         let w = energy_delta_to_watts(current, previous, unit, 1.0);
         let expected = unit * 301.0;
         assert!((w - expected).abs() < 1e-9);
+    }
+
+    #[test]
+    fn implausible_delta_keeps_previous_sample() {
+        let unit = 1.0 / 65536.0;
+        let state = Mutex::new(None);
+        let t0 = Instant::now();
+        let (t1, t2) = (t0 + Duration::from_secs(1), t0 + Duration::from_secs(2));
+        energy_delta_update(&state, 1_000_000, unit, t0);
+        let good = energy_delta_update(&state, 1_000_000 + 65536 * 50, unit, t1);
+        assert!((good - 50.0).abs() < 1e-6);
+        // A zeroed counter read: the wrapped delta is ~65 kW, so it is ignored.
+        let bad = energy_delta_update(&state, 0, unit, t2);
+        assert!((bad - good).abs() < 1e-9);
+        let last = state.lock().unwrap().as_ref().map(|s| s.last_counter);
+        assert_eq!(last, Some(1_000_000 + 65536 * 50));
     }
 
     #[test]
