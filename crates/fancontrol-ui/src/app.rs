@@ -728,7 +728,12 @@ impl eframe::App for FanApp {
             // Narrow window: the toggles get their own row instead of overlapping the
             // controls on the left.
             if wrap_toggles {
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                // One row high: a bare `with_layout` here takes all the remaining
+                // height and centres the buttons vertically, so the top panel grew
+                // over the whole window.
+                let row = egui::vec2(ui.available_width(), ui.spacing().interact_size.y);
+                let layout = egui::Layout::right_to_left(egui::Align::Center);
+                ui.allocate_ui_with_layout(row, layout, |ui| {
                     self.ui_top_toggles(ui);
                 });
             }
