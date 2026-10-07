@@ -323,6 +323,11 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
     let defaults = eframe::NativeOptions::default();
     let mut wgpu_options = defaults.wgpu_options;
     wgpu_options.on_surface_status = Arc::new(surface_status_action);
+    if let eframe::egui_wgpu::WgpuSetup::CreateNew(setup) = &mut wgpu_options.wgpu_setup
+        && std::env::var_os("WGPU_BACKEND").is_none()
+    {
+        setup.native_adapter_selector = Some(Arc::new(prefer_dx12_adapter));
+    }
     let native = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1200.0, 860.0])
@@ -358,6 +363,20 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
                 tracing::warn!("wgpu render state unavailable: shader graph styles disabled");
                 false
             };
+
+            // Wake the event loop at least twice a second even if a scheduled
+            // repaint gets lost (seen after the Windows resize loop): keeps the UI,
+            // tray commands and curve apply alive whatever the window backend does.
+            let ctx = cc.egui_ctx.clone();
+            std::thread::Builder::new()
+                .name("repaint-watchdog".into())
+                .spawn(move || {
+                    loop {
+                        std::thread::sleep(Duration::from_millis(500));
+                        ctx.request_repaint();
+                    }
+                })
+                .ok();
 
             let mut app = app;
             app.shader_backend_available = shader_backend_available;
@@ -517,6 +536,28 @@ fn clamp_width<R>(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui) ->
         egui::Sense::hover(),
     );
     inner
+}
+
+/// Pick the GPU adapter: DirectX 12 first. On NVIDIA (RTX 5080, driver 617)
+/// the Vulkan path stopped presenting after a window resize: the image stayed at
+/// the old size and the event loop no longer woke up on its own. DX12 does not
+/// show it. Falls back to any other usable adapter; `WGPU_BACKEND` (e.g.
+/// `vulkan`) bypasses this selector entirely.
+fn prefer_dx12_adapter(
+    adapters: &[eframe::egui_wgpu::wgpu::Adapter],
+    surface: Option<&eframe::egui_wgpu::wgpu::Surface<'_>>,
+) -> Result<eframe::egui_wgpu::wgpu::Adapter, String> {
+    use eframe::egui_wgpu::wgpu::{Backend, DeviceType};
+    let usable: Vec<_> = adapters
+        .iter()
+        .filter(|a| surface.is_none_or(|s| a.is_surface_supported(s)))
+        .filter(|a| a.get_info().device_type != DeviceType::Cpu)
+        .collect();
+    let dx12 = usable.iter().find(|a| a.get_info().backend == Backend::Dx12);
+    dx12.or(usable.first())
+        .map(|a| (*a).clone())
+        .or_else(|| adapters.first().cloned())
+        .ok_or_else(|| "no usable wgpu adapter".to_owned())
 }
 
 /// How to recover when wgpu can't hand us a frame to draw into.
