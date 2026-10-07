@@ -164,6 +164,7 @@ impl ProviderRegistry {
         if self.released.swap(true, Ordering::SeqCst) {
             return;
         }
+        tracing::info!("handing controls back to firmware");
         let deadline = Instant::now() + Duration::from_secs(10);
         let gate = loop {
             match self.write_gate.try_write() {
@@ -175,6 +176,9 @@ impl ProviderRegistry {
                 Err(std::sync::TryLockError::WouldBlock) => break None,
             }
         };
+        if gate.is_none() {
+            tracing::warn!("a PWM write is still in flight after 10 s, restoring anyway");
+        }
         self.restore_controls();
         if gate.is_none() {
             // Timed out: a write that already passed the `released` check (e.g. one

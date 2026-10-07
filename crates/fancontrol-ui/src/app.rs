@@ -2521,6 +2521,7 @@ impl FanApp {
                     self.apply_curves_from_snapshot(&snap);
                 }
                 TrayCommand::Exit => {
+                    tracing::info!("tray Exit: closing the app");
                     self.really_exit = true;
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
