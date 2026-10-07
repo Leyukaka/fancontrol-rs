@@ -553,7 +553,9 @@ fn prefer_dx12_adapter(
         .filter(|a| surface.is_none_or(|s| a.is_surface_supported(s)))
         .filter(|a| a.get_info().device_type != DeviceType::Cpu)
         .collect();
-    let dx12 = usable.iter().find(|a| a.get_info().backend == Backend::Dx12);
+    let dx12 = usable
+        .iter()
+        .find(|a| a.get_info().backend == Backend::Dx12);
     dx12.or(usable.first())
         .map(|a| (*a).clone())
         .or_else(|| adapters.first().cloned())
