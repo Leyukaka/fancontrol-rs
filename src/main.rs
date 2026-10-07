@@ -619,7 +619,11 @@ fn init_logging() {
         let writer = std::sync::Mutex::new(f);
         fmt::layer().with_ansi(false).with_writer(writer)
     });
-    tracing_subscriber::registry().with(filter).with(fmt::layer()).with(file_layer).init();
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(fmt::layer())
+        .with(file_layer)
+        .init();
 }
 
 /// Re-attach to the launching terminal's console, if one exists, since this binary
