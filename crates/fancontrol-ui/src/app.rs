@@ -1799,6 +1799,7 @@ impl FanApp {
                                 bind_resp
                                     .response
                                     .on_hover_text(t!("dashboard.curve_sensor_hover").to_string());
+                                self.ui_extra_sensors(ui, &c.id, snap, &bound_id);
                             }
 
                             let locked = self.is_user_locked(&c.id);
@@ -2329,8 +2330,8 @@ impl FanApp {
         }
     }
 
-    /// Temperature the selected curve is actually driven by: the sensor bound to the
-    /// first control using it (same resolution as the control loop), else CPU temp.
+    /// Temperature the selected curve is actually driven by: the input of the first
+    /// control using it (same resolution as the control loop), else CPU temp.
     fn selected_curve_temp(&self, snap: &crate::poll::Snapshot) -> Option<f64> {
         let curve_id = self.profile.curves.get(self.selected_curve)?.id.as_str();
         let temps: HashMap<String, f64> = snap
@@ -2345,9 +2346,79 @@ impl FanApp {
             .find_map(|(ctrl, _)| {
                 let bound = self.profile.sensor_bindings.get(ctrl).map(String::as_str);
                 let id = resolve_curve_temp_sensor(bound, &temps)?;
-                temps.get(&id).copied()
+                let base = temps.get(&id).copied()?;
+                // Same input as the control loop: the hottest of the extra sensors.
+                let extras = self.profile.extra_sensors.get(ctrl).into_iter().flatten();
+                let hottest = extras
+                    .filter_map(|e| temps.get(e).copied())
+                    .filter(|t| t.is_finite())
+                    .fold(base, f64::max);
+                Some(hottest)
             })
             .or(snap.cpu_temp)
+    }
+
+    /// "Also follow" menu for a curve-driven control: extra temperature sensors
+    /// (GPU, SSD, motherboard...) whose hottest reading can raise the curve input.
+    fn ui_extra_sensors(
+        &mut self,
+        ui: &mut egui::Ui,
+        control_id: &str,
+        snap: &crate::poll::Snapshot,
+        bound_id: &str,
+    ) {
+        let extras = self
+            .profile
+            .extra_sensors
+            .get(control_id)
+            .cloned()
+            .unwrap_or_default();
+        let label = if extras.is_empty() {
+            t!("dashboard.extra_sensors_none").to_string()
+        } else {
+            t!("dashboard.extra_sensors_some", count = extras.len()).to_string()
+        };
+        let menu = ui.menu_button(label, |ui| {
+            let live = snap.temps.iter().filter(|(id, _, _)| id != bound_id);
+            // Keep extras that are absent from this poll listed, so they can be removed.
+            let missing = extras
+                .iter()
+                .filter(|e| !snap.temps.iter().any(|(id, _, _)| id == *e));
+            let rows: Vec<(String, String)> = live
+                .map(|(id, name, v)| (id.clone(), format!("{name} ({v:.0} °C)")))
+                .chain(missing.map(|id| (id.clone(), format!("{id} ({})", t!("common.na")))))
+                .collect();
+            for (id, text) in rows {
+                let mut on = extras.contains(&id);
+                if ui.checkbox(&mut on, text).changed() {
+                    let list = self
+                        .profile
+                        .extra_sensors
+                        .entry(control_id.to_string())
+                        .or_default();
+                    if on {
+                        list.push(id);
+                    } else {
+                        list.retain(|e| *e != id);
+                    }
+                    if list.is_empty() {
+                        self.profile.extra_sensors.remove(control_id);
+                    }
+                    self.profile_status = Some(t!("curves_panel.curve_edited_status").to_string());
+                }
+            }
+        });
+        menu.response
+            .on_hover_text(t!("dashboard.extra_sensors_hover").to_string());
+    }
+
+    /// First free `curveN` id: a loaded profile can already use `curve3` with only
+    /// two curves, and duplicate ids are indistinguishable.
+    fn free_curve_id(&self) -> String {
+        (self.profile.curves.len() + 1..)
+            .map(|n| format!("curve{n}"))
+            .find(|id| self.profile.find_curve(id).is_none())
+            .unwrap_or_default()
     }
 
     fn ui_curves_panel(&mut self, ui: &mut egui::Ui, snap: &crate::poll::Snapshot) {
@@ -2456,12 +2527,7 @@ impl FanApp {
                     .button(t!("curves_panel.add_curve").to_string())
                     .clicked()
                 {
-                    // First free `curveN`: a loaded profile can already use `curve3`
-                    // with only two curves, and duplicate ids are indistinguishable.
-                    let id = (self.profile.curves.len() + 1..)
-                        .map(|n| format!("curve{n}"))
-                        .find(|id| self.profile.find_curve(id).is_none())
-                        .unwrap_or_default();
+                    let id = self.free_curve_id();
                     self.profile.curves.push(FanCurve::linear(
                         id,
                         t!("curves_panel.new_curve_name").to_string(),
@@ -2472,13 +2538,69 @@ impl FanApp {
                     ));
                     self.selected_curve = self.profile.curves.len().saturating_sub(1);
                 }
+                if let Some(selected) = self.profile.curves.get(self.selected_curve).cloned() {
+                    if ui
+                        .button(t!("curves_panel.duplicate_curve").to_string())
+                        .clicked()
+                    {
+                        let mut copy = selected.clone();
+                        copy.id = fancontrol_core::CurveId::new(self.free_curve_id());
+                        copy.name = t!("curves_panel.copy_name", name = selected.name).to_string();
+                        self.profile.curves.push(copy);
+                        self.selected_curve = self.profile.curves.len() - 1;
+                    }
+                    // A curve still assigned to a fan cannot go: the fan would lose
+                    // its curve (and fall back to failsafe) without the user noticing.
+                    let in_use = self
+                        .profile
+                        .assignments
+                        .values()
+                        .any(|cid| cid == selected.id.as_str());
+                    if ui
+                        .add_enabled(
+                            !in_use,
+                            egui::Button::new(t!("curves_panel.delete_curve").to_string()),
+                        )
+                        .on_disabled_hover_text(t!("curves_panel.delete_in_use").to_string())
+                        .clicked()
+                    {
+                        self.profile.curves.remove(self.selected_curve);
+                        self.selected_curve = self.selected_curve.saturating_sub(1);
+                        self.profile_status =
+                            Some(t!("curves_panel.curve_edited_status").to_string());
+                    }
+                }
             });
             ui.separator();
+            // Fans driven by the selected curve, by their display name.
+            let users: Vec<String> = self
+                .profile
+                .curves
+                .get(self.selected_curve)
+                .map(|curve| {
+                    self.profile
+                        .assignments
+                        .iter()
+                        .filter(|(_, cid)| cid.as_str() == curve.id.as_str())
+                        .map(|(ctrl, _)| {
+                            snap.controls
+                                .iter()
+                                .find(|c| &c.id == ctrl)
+                                .map_or_else(|| ctrl.clone(), |c| c.label.clone())
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
             ui.vertical(|ui| {
                 if let Some(curve) = self.profile.curves.get_mut(self.selected_curve) {
                     let mut name = curve.name.clone();
                     if ui.text_edit_singleline(&mut name).changed() {
                         curve.name = name;
+                    }
+                    if users.is_empty() {
+                        ui.small(t!("curves_panel.used_by_none").to_string());
+                    } else {
+                        ui.small(t!("curves_panel.used_by", list = users.join(", ")).to_string());
                     }
                     if show_curve_editor(ui, curve, live_temp) {
                         self.profile_status =

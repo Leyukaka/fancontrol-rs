@@ -33,6 +33,17 @@ pub fn show_curve_editor(ui: &mut egui::Ui, curve: &mut FanCurve, live_temp: Opt
             curve.hysteresis_c = f64::from(h);
             changed = true;
         }
+        ui.separator();
+        ui.label(t!("curve_editor.response_time_label").to_string())
+            .on_hover_text(t!("curve_editor.response_time_hover").to_string());
+        let mut r = curve.response_time_s as f32;
+        if ui
+            .add(egui::DragValue::new(&mut r).range(0.0..=60.0).speed(0.5))
+            .changed()
+        {
+            curve.response_time_s = f64::from(r);
+            changed = true;
+        }
     });
 
     let height = 200.0;

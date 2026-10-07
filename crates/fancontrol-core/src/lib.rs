@@ -16,9 +16,9 @@ pub use channel_map::ChannelMap;
 pub use config::{config_dir, ensure_config_dirs, profiles_dir, write_atomic};
 pub use control_loop::{
     ControlStepResult, FAILSAFE_AFTER_MISSING_STEPS, FAILSAFE_DUTY, default_interval,
-    evaluate_profile_step,
+    evaluate_profile_step, evaluate_profile_step_at,
 };
-pub use curve::{CurveEvalState, evaluate_curve};
+pub use curve::{CurveEvalState, apply_response_time, evaluate_curve};
 pub use error::{CoreError, Result};
 pub use models::{
     ControlDescriptor, ControlId, CurveId, CurvePoint, FanCurve, MetricSample, Profile, ProfileId,
