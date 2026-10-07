@@ -300,6 +300,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         shader_clock: Instant::now(),
         shader_backend_available: false,
         window_visible: true,
+        top_toggles_w: 0.0,
     };
 
     let icon = eframe::icon_data::from_png_bytes(include_bytes!("../../../assets/icon.png"))
@@ -447,6 +448,8 @@ struct FanApp {
     shader_backend_available: bool,
     /// Tracks minimize-to-tray so a shader style's fast repaint doesn't run while hidden.
     window_visible: bool,
+    /// Width of the top-bar toggles last frame (see `ui_top_toggles`).
+    top_toggles_w: f32,
 }
 
 fn load_or_create_default_profile(preferred: Option<&str>) -> Profile {
@@ -471,6 +474,27 @@ fn load_or_create_default_profile(preferred: Option<&str>) -> Profile {
         .insert("pawnio.0.ctrl1".into(), "pawnio.0.temp.CPU".into());
     let _ = save_profile(&p);
     p
+}
+
+/// Lay out `add_contents` in the available width without letting over-wide
+/// content (narrow window) widen the parent. egui sizes a panel, and the
+/// separator line it draws, from its content rect, so an overflowing row used to
+/// draw the line straight across the Options panel. The overflow itself is
+/// clipped by the panel.
+fn clamp_width<R>(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    let max_rect = ui.available_rect_before_wrap();
+    let mut child = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(max_rect)
+            .layout(*ui.layout()),
+    );
+    let inner = add_contents(&mut child);
+    let used = egui::vec2(max_rect.width(), child.min_rect().height());
+    ui.allocate_rect(
+        egui::Rect::from_min_size(max_rect.min, used),
+        egui::Sense::hover(),
+    );
+    inner
 }
 
 /// How to recover when wgpu can't hand us a frame to draw into.
@@ -555,6 +579,8 @@ impl eframe::App for FanApp {
         }
 
         egui::Panel::top("top").show(ui, |ui| {
+            let toggles_w = self.top_toggles_w;
+            let mut wrap_toggles = false;
             ui.horizontal(|ui| {
                 self.ui_graph_controls(ui);
                 ui.separator();
@@ -601,118 +627,21 @@ impl eframe::App for FanApp {
                 if let Some(msg) = &self.elevate_status {
                     ui.colored_label(theme::error(ui.visuals()), msg);
                 }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui
-                        .button(format!("⚙ {}", t!("top_bar.options_button")))
-                        .clicked()
-                    {
-                        self.show_settings = !self.show_settings;
-                    }
-                    // Updates: Options only (no top-bar button - clutter / unclear action).
-                    // right-to-left: add Controls, Fans, Temps, then Curves
-                    if ui
-                        .selectable_label(
-                            self.show_controls,
-                            t!("top_bar.controls_toggle").to_string(),
-                        )
-                        .on_hover_text(t!("top_bar.controls_toggle_tooltip").to_string())
-                        .clicked()
-                    {
-                        self.show_controls = !self.show_controls;
-                    }
-                    if ui
-                        .selectable_label(self.show_fans, t!("top_bar.fans_toggle").to_string())
-                        .on_hover_text(t!("top_bar.fans_toggle_tooltip").to_string())
-                        .clicked()
-                    {
-                        self.show_fans = !self.show_fans;
-                    }
-                    if ui
-                        .selectable_label(self.show_temps, t!("top_bar.temps_toggle").to_string())
-                        .on_hover_text(t!("top_bar.temps_toggle_tooltip").to_string())
-                        .clicked()
-                    {
-                        self.show_temps = !self.show_temps;
-                    }
-                    if ui
-                        .selectable_label(
-                            self.settings.show_activity_deck,
-                            t!("top_bar.activity_toggle").to_string(),
-                        )
-                        .on_hover_text(t!("top_bar.activity_toggle_tooltip").to_string())
-                        .clicked()
-                    {
-                        self.settings.show_activity_deck = !self.settings.show_activity_deck;
-                        self.apply_activity_deck_gate();
-                        self.settings.save();
-                    }
-                    if ui
-                        .selectable_label(
-                            self.settings.show_cpu_panel,
-                            t!("top_bar.cpu_toggle").to_string(),
-                        )
-                        .on_hover_text(t!("top_bar.cpu_toggle_tooltip").to_string())
-                        .clicked()
-                    {
-                        self.settings.show_cpu_panel = !self.settings.show_cpu_panel;
-                        self.settings.save();
-                    }
-                    if ui
-                        .selectable_label(
-                            self.settings.show_gpu_panel,
-                            t!("top_bar.gpu_toggle").to_string(),
-                        )
-                        .on_hover_text(t!("top_bar.gpu_toggle_tooltip").to_string())
-                        .clicked()
-                    {
-                        self.settings.show_gpu_panel = !self.settings.show_gpu_panel;
-                        self.settings.save();
-                    }
-                    if ui
-                        .selectable_label(
-                            self.settings.show_graph_panel,
-                            t!("top_bar.sensors_toggle").to_string(),
-                        )
-                        .on_hover_text(t!("top_bar.sensors_toggle_tooltip").to_string())
-                        .clicked()
-                    {
-                        self.settings.show_graph_panel = !self.settings.show_graph_panel;
-                        self.settings.save();
-                    }
-                    if ui
-                        .selectable_label(self.show_curves, t!("top_bar.curves_toggle").to_string())
-                        .on_hover_text(t!("top_bar.curves_toggle_tooltip").to_string())
-                        .clicked()
-                    {
-                        self.show_curves = !self.show_curves;
-                    }
-                    // Prominent Curve control toggle (auto-apply to hardware)
-                    let curve_on = self.settings.auto_apply_curves;
-                    let rgb = egui::Color32::from_rgb;
-                    let (fill, text_color) = match (curve_on, ui.visuals().dark_mode) {
-                        (true, true) => (rgb(30, 90, 50), rgb(140, 255, 170)),
-                        (true, false) => (rgb(200, 235, 205), rgb(20, 100, 40)),
-                        (false, true) => (rgb(70, 40, 40), rgb(220, 160, 160)),
-                        (false, false) => (rgb(245, 215, 215), rgb(140, 40, 40)),
-                    };
-                    let label = if curve_on {
-                        t!("top_bar.curve_control_on").to_string()
-                    } else {
-                        t!("top_bar.curve_control_off").to_string()
-                    };
-                    let btn =
-                        egui::Button::new(egui::RichText::new(label).color(text_color).strong())
-                            .fill(fill);
-                    if ui
-                        .add(btn)
-                        .on_hover_text(t!("top_bar.curve_control_tooltip").to_string())
-                        .clicked()
-                    {
-                        self.settings.auto_apply_curves = !self.settings.auto_apply_curves;
-                        self.settings.save();
-                    }
-                });
+                if ui.available_width() >= toggles_w {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        self.ui_top_toggles(ui);
+                    });
+                } else {
+                    wrap_toggles = true;
+                }
             });
+            // Narrow window: the toggles get their own row instead of overlapping the
+            // controls on the left.
+            if wrap_toggles {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    self.ui_top_toggles(ui);
+                });
+            }
             if self.settings.auto_apply_curves && !self.options.allow_hw_write {
                 ui.colored_label(
                     theme::warn(ui.visuals()),
@@ -1323,7 +1252,7 @@ impl eframe::App for FanApp {
                 .resizable(true)
                 .default_size(280.0)
                 .show(ui, |ui| {
-                    self.ui_curves_panel(ui, snap.cpu_temp);
+                    clamp_width(ui, |ui| self.ui_curves_panel(ui, snap.cpu_temp));
                 });
         }
 
@@ -1388,7 +1317,7 @@ impl eframe::App for FanApp {
                 graph_panel = graph_panel.exact_size(fill);
             }
 
-            graph_panel.show(ui, |ui| {
+            let graph_body = |ui: &mut egui::Ui| {
                 // Top row: thermal graph and/or GPU detail (side-by-side when both).
                 if top_viz {
                     let room = ui.available_height().max(80.0);
@@ -1579,7 +1508,8 @@ impl eframe::App for FanApp {
                         self.settings.save();
                     }
                 }
-            });
+            };
+            graph_panel.show(ui, |ui| clamp_width(ui, graph_body));
         }
 
         egui::CentralPanel::default().show(ui, |ui| {
@@ -1868,6 +1798,121 @@ impl FanApp {
     }
 
     /// Fixed-height slot shared by Sensors / GPU / CPU columns so bottoms align.
+    /// Top-bar view toggles, Curve control and Options, laid out right to left.
+    /// Records their width so the next frame knows whether they fit next to the
+    /// left-hand controls or need a row of their own.
+    fn ui_top_toggles(&mut self, ui: &mut egui::Ui) {
+        if ui
+            .button(format!("⚙ {}", t!("top_bar.options_button")))
+            .clicked()
+        {
+            self.show_settings = !self.show_settings;
+        }
+        // Updates: Options only (no top-bar button - clutter / unclear action).
+        // right-to-left: add Controls, Fans, Temps, then Curves
+        if ui
+            .selectable_label(
+                self.show_controls,
+                t!("top_bar.controls_toggle").to_string(),
+            )
+            .on_hover_text(t!("top_bar.controls_toggle_tooltip").to_string())
+            .clicked()
+        {
+            self.show_controls = !self.show_controls;
+        }
+        if ui
+            .selectable_label(self.show_fans, t!("top_bar.fans_toggle").to_string())
+            .on_hover_text(t!("top_bar.fans_toggle_tooltip").to_string())
+            .clicked()
+        {
+            self.show_fans = !self.show_fans;
+        }
+        if ui
+            .selectable_label(self.show_temps, t!("top_bar.temps_toggle").to_string())
+            .on_hover_text(t!("top_bar.temps_toggle_tooltip").to_string())
+            .clicked()
+        {
+            self.show_temps = !self.show_temps;
+        }
+        if ui
+            .selectable_label(
+                self.settings.show_activity_deck,
+                t!("top_bar.activity_toggle").to_string(),
+            )
+            .on_hover_text(t!("top_bar.activity_toggle_tooltip").to_string())
+            .clicked()
+        {
+            self.settings.show_activity_deck = !self.settings.show_activity_deck;
+            self.apply_activity_deck_gate();
+            self.settings.save();
+        }
+        if ui
+            .selectable_label(
+                self.settings.show_cpu_panel,
+                t!("top_bar.cpu_toggle").to_string(),
+            )
+            .on_hover_text(t!("top_bar.cpu_toggle_tooltip").to_string())
+            .clicked()
+        {
+            self.settings.show_cpu_panel = !self.settings.show_cpu_panel;
+            self.settings.save();
+        }
+        if ui
+            .selectable_label(
+                self.settings.show_gpu_panel,
+                t!("top_bar.gpu_toggle").to_string(),
+            )
+            .on_hover_text(t!("top_bar.gpu_toggle_tooltip").to_string())
+            .clicked()
+        {
+            self.settings.show_gpu_panel = !self.settings.show_gpu_panel;
+            self.settings.save();
+        }
+        if ui
+            .selectable_label(
+                self.settings.show_graph_panel,
+                t!("top_bar.sensors_toggle").to_string(),
+            )
+            .on_hover_text(t!("top_bar.sensors_toggle_tooltip").to_string())
+            .clicked()
+        {
+            self.settings.show_graph_panel = !self.settings.show_graph_panel;
+            self.settings.save();
+        }
+        if ui
+            .selectable_label(self.show_curves, t!("top_bar.curves_toggle").to_string())
+            .on_hover_text(t!("top_bar.curves_toggle_tooltip").to_string())
+            .clicked()
+        {
+            self.show_curves = !self.show_curves;
+        }
+        // Prominent Curve control toggle (auto-apply to hardware)
+        let curve_on = self.settings.auto_apply_curves;
+        let rgb = egui::Color32::from_rgb;
+        let (fill, text_color) = match (curve_on, ui.visuals().dark_mode) {
+            (true, true) => (rgb(30, 90, 50), rgb(140, 255, 170)),
+            (true, false) => (rgb(200, 235, 205), rgb(20, 100, 40)),
+            (false, true) => (rgb(70, 40, 40), rgb(220, 160, 160)),
+            (false, false) => (rgb(245, 215, 215), rgb(140, 40, 40)),
+        };
+        let label = if curve_on {
+            t!("top_bar.curve_control_on").to_string()
+        } else {
+            t!("top_bar.curve_control_off").to_string()
+        };
+        let btn = egui::Button::new(egui::RichText::new(label).color(text_color).strong())
+            .fill(fill);
+        if ui
+            .add(btn)
+            .on_hover_text(t!("top_bar.curve_control_tooltip").to_string())
+            .clicked()
+        {
+            self.settings.auto_apply_curves = !self.settings.auto_apply_curves;
+            self.settings.save();
+        }
+        self.top_toggles_w = ui.min_rect().width() + ui.spacing().item_spacing.x;
+    }
+
     fn domain_column_slot(ui: &mut egui::Ui, row_h: f32, add_contents: impl FnOnce(&mut egui::Ui)) {
         ui.allocate_ui(egui::vec2(ui.available_width(), row_h), |ui| {
             ui.set_min_height(row_h);
