@@ -179,9 +179,7 @@ pub fn detect_chips() -> Result<Vec<DetectedChip>, String> {
 /// Live banked Nuvoton HWM access for one chip.
 pub struct NctBankedDevice {
     lpc: LpcIo,
-    register_port: u16,
     hwm: u16,
-    slot: u8,
     #[allow(dead_code)]
     chip: SuperIoChip,
     /// Last known duties 0..=100 (software cache; HW may differ until written).
@@ -224,9 +222,7 @@ impl NctBankedDevice {
         let control_count = 7;
         Ok(Self {
             lpc,
-            register_port: detected.register_port,
             hwm,
-            slot: detected.slot,
             chip: detected.chip,
             duties: Mutex::new(vec![0u8; control_count]),
             initial: Mutex::new(vec![None; control_count]),
@@ -346,12 +342,6 @@ impl NctBankedDevice {
         if let Ok(mut d) = self.duties.lock() {
             d[index] = percent;
         }
-        let _ = (
-            self.register_port,
-            self.slot,
-            WINBOND_NUVOTON_HWM_LDN,
-            NUVOTON_IO_SPACE_LOCK,
-        );
         Ok(())
     }
 

@@ -17,7 +17,7 @@ use fancontrol_plugins::{HostSensorProvider, MockProvider, ProviderRegistry};
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -485,13 +485,16 @@ fn main() -> anyhow::Result<()> {
             let _restore = do_apply.then(|| FirmwareRestoreGuard::install(&reg));
             let profile = load_profile(&profile)?;
             let mut states: HashMap<String, CurveEvalState> = HashMap::new();
-            let steps = seconds.max(1);
+            // Run for `seconds` of wall time, whatever the interval (it used to run
+            // `seconds` iterations, i.e. seconds * interval_ms plus read time).
+            let deadline = Instant::now() + Duration::from_secs(seconds.max(1));
             let mode = if do_apply { "APPLY" } else { "DRY-RUN" };
             println!(
                 "Running profile '{}' for {seconds}s (interval={interval_ms}ms mode={mode})",
                 profile.name
             );
-            for i in 0..steps {
+            let mut i: u64 = 0;
+            while Instant::now() < deadline {
                 let mut temps = HashMap::new();
                 for s in reg.all_sensors() {
                     if s.kind == SensorKind::Temperature
@@ -517,7 +520,9 @@ fn main() -> anyhow::Result<()> {
                 if step.duties.is_empty() {
                     println!("  t={i:03} no assignments applied (temps={temps:?})");
                 }
-                thread::sleep(Duration::from_millis(interval_ms));
+                i += 1;
+                let left = deadline.saturating_duration_since(Instant::now());
+                thread::sleep(Duration::from_millis(interval_ms).min(left));
             }
         }
         Commands::InitProfile { hw, id } => {
