@@ -570,7 +570,10 @@ impl eframe::App for FanApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let gap = self.last_ui_pass.elapsed();
         if self.window_visible && gap > Duration::from_secs(2) {
-            tracing::info!(gap_ms = gap.as_millis() as u64, "ui pass resumed after a gap");
+            tracing::info!(
+                gap_ms = gap.as_millis() as u64,
+                "ui pass resumed after a gap"
+            );
         }
         self.last_ui_pass = Instant::now();
         let ctx = ui.ctx().clone();
