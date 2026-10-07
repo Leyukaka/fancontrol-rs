@@ -1900,8 +1900,8 @@ impl FanApp {
         } else {
             t!("top_bar.curve_control_off").to_string()
         };
-        let btn = egui::Button::new(egui::RichText::new(label).color(text_color).strong())
-            .fill(fill);
+        let btn =
+            egui::Button::new(egui::RichText::new(label).color(text_color).strong()).fill(fill);
         if ui
             .add(btn)
             .on_hover_text(t!("top_bar.curve_control_tooltip").to_string())
