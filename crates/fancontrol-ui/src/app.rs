@@ -301,6 +301,8 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         shader_backend_available: false,
         window_visible: true,
         top_toggles_w: 0.0,
+        last_ui_pass: Instant::now(),
+        last_stall_log: Instant::now(),
     };
 
     let icon = eframe::icon_data::from_png_bytes(include_bytes!("../../../assets/icon.png"))
@@ -450,6 +452,9 @@ struct FanApp {
     window_visible: bool,
     /// Width of the top-bar toggles last frame (see `ui_top_toggles`).
     top_toggles_w: f32,
+    /// Start of the last `ui()` pass, and of the last "UI stalled" log (see `log_ui_stall`).
+    last_ui_pass: Instant,
+    last_stall_log: Instant,
 }
 
 fn load_or_create_default_profile(preferred: Option<&str>) -> Profile {
@@ -549,6 +554,7 @@ impl eframe::App for FanApp {
         ctx.request_repaint_after(repaint_interval);
         self.handle_tray(ctx);
         self.background_tick();
+        self.log_ui_stall(ctx);
 
         if self.tray.is_some() && !self.really_exit && ctx.input(|i| i.viewport().close_requested())
         {
@@ -562,6 +568,11 @@ impl eframe::App for FanApp {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let gap = self.last_ui_pass.elapsed();
+        if self.window_visible && gap > Duration::from_secs(2) {
+            tracing::info!(gap_ms = gap.as_millis() as u64, "ui pass resumed after a gap");
+        }
+        self.last_ui_pass = Instant::now();
         let ctx = ui.ctx().clone();
         let snap = self.snapshot.lock().map(|g| g.clone()).unwrap_or_default();
 
@@ -1798,6 +1809,34 @@ impl FanApp {
     }
 
     /// Fixed-height slot shared by Sensors / GPU / CPU columns so bottoms align.
+    /// Diagnostic for the "window stops repainting" bug: `logic()` keeps running
+    /// (tray, curves) while the window is meant to be visible, but `ui()` has not
+    /// run for a while. Logs what eframe believes about the window at that point.
+    fn log_ui_stall(&mut self, ctx: &egui::Context) {
+        let stalled = self.last_ui_pass.elapsed();
+        if !self.window_visible
+            || stalled < Duration::from_secs(2)
+            || self.last_stall_log.elapsed() < Duration::from_secs(5)
+        {
+            return;
+        }
+        self.last_stall_log = Instant::now();
+        let info = ctx.input(|i| i.viewport().clone());
+        let stalled_ms = stalled.as_millis() as u64;
+        if info.minimized == Some(true) {
+            // Expected while minimized to the taskbar; debug only so it doesn't flood.
+            tracing::debug!(stalled_ms, "ui pass paused: window minimized");
+            return;
+        }
+        tracing::warn!(
+            stalled_ms,
+            occluded = ?info.occluded,
+            focused = ?info.focused,
+            inner_rect = ?info.inner_rect,
+            "ui pass not running while the window should be visible"
+        );
+    }
+
     /// Top-bar view toggles, Curve control and Options, laid out right to left.
     /// Records their width so the next frame knows whether they fit next to the
     /// left-hand controls or need a row of their own.
