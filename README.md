@@ -14,7 +14,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/rust-edition%202024-orange?logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue" alt="License">
-  <img src="https://img.shields.io/badge/version-0.7.0-informational" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.7.1-informational" alt="Version">
   <img src="https://img.shields.io/badge/backend-PawnIO-success" alt="PawnIO">
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-blue" alt="Windows">
 </p>
@@ -114,7 +114,7 @@ Rough map of the Windows landscape. Support always depends on your board and EC.
 
 ## Status
 
-**v0.7.0, Neon edition**. Neon theme by default (own title bar, animated RGB border; classic look in Options > Theme), Windows fonts, curves that follow several sensors, curve response time, duplicate / delete curves, DirectX 12 rendering on Windows (fixes the window freezing after a resize on NVIDIA), plus the v0.6.2 fixes. NCT668x + banked NCT (ROG B550-A) **certified**; other boards should work - **send logs to certify**. Domain panels (Sensors / GPU / CPU), Activity toggle in the top bar, UI card/table padding, multi-kind graph, CPU package power (AMD + Intel RAPL), **DDR5 DIMM temps** (SMBus, no experimental label), Activity deck, metrics store, opt-in OTLP/HTTP, Start with Windows, **Restart as Administrator** (UAC), tray-icon 0.26 with a frozen Windows GUID. Updates are **manual only**.  
+**v0.7.1**. Options > About with project links. v0.7.0 Neon edition: Neon theme by default (own title bar, animated RGB border; classic look in Options > Theme), Windows fonts, curves that follow several sensors, curve response time, duplicate / delete curves, DirectX 12 rendering on Windows (fixes the window freezing after a resize on NVIDIA), plus the v0.6.2 fixes. NCT668x + banked NCT (ROG B550-A) **certified**; other boards should work - **send logs to certify**. Domain panels (Sensors / GPU / CPU), Activity toggle in the top bar, UI card/table padding, multi-kind graph, CPU package power (AMD + Intel RAPL), **DDR5 DIMM temps** (SMBus, no experimental label), Activity deck, metrics store, opt-in OTLP/HTTP, Start with Windows, **Restart as Administrator** (UAC), tray-icon 0.26 with a frozen Windows GUID. Updates are **manual only**.  
 Public source of truth: this repo ([Releases](https://github.com/Leyukaka/fancontrol-rs/releases), issues, PRs).
 
 | Crate | Role |

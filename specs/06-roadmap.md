@@ -1,6 +1,6 @@
 # Roadmap
 
-Last aligned with product reality: **v0.7.0** (Neon edition: Neon default theme with own title bar, Windows fonts, multi-sensor curve input, curve response time, duplicate / delete curves, DirectX 12 on Windows; v0.6.2 review fixes). See `specs/07-metrics-telemetry.md`, `specs/04-ui.md`, `docs/DIMM_TEMP.md`.
+Last aligned with product reality: **v0.7.1** (Options > About; v0.7.0 Neon edition: Neon default theme with own title bar, Windows fonts, multi-sensor curve input, curve response time, duplicate / delete curves, DirectX 12 on Windows; v0.6.2 review fixes). See `specs/07-metrics-telemetry.md`, `specs/04-ui.md`, `docs/DIMM_TEMP.md`.
 
 ## Phase 0 - Foundation
 
