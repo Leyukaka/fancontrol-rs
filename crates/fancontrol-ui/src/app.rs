@@ -30,6 +30,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+mod about;
 mod curves;
 mod dashboard;
 mod dialogs;
@@ -811,6 +812,7 @@ impl eframe::App for FanApp {
                         .id_salt("options_scroll")
                         .auto_shrink([false, false])
                         .show(ui, |ui| {
+                            self.ui_about_section(ui);
                             egui::CollapsingHeader::new(t!("options.section_updates").to_string())
                                 .default_open(true)
                                 .show(ui, |ui| {
