@@ -170,17 +170,20 @@
   .btn.secondary:hover { border-color: var(--cyan); }
 
   /* Screenshot tiles */
-  .shot-tile { padding: 0; background: #05050b; }
-  .shot-tile img { width: 100%; height: auto; }
+  /* Inset so the tile's rounded clip never eats the window's own corners */
+  .shot-tile { padding: 14px; background: #05050b; }
+  @media (min-width: 720px) { .shot-tile { padding: 22px; } }
+  .shot-tile img { width: 100%; height: auto; border-radius: 6px; }
   .shot-tile .cap {
-    position: absolute; left: 14px; bottom: 14px;
+    position: absolute; left: 28px; bottom: 28px;
     background: rgba(7,7,15,.82); color: #f4f3ff; backdrop-filter: blur(6px);
     padding: 6px 12px; border-radius: 999px; font-size: 0.82rem; font-weight: 600;
     border: 1px solid rgba(0,229,255,.35);
   }
   .tile:has(> .feature-shot) { display: flex; flex-direction: column; }
   .tile:has(> .feature-shot) > p { margin-bottom: 18px; }
-  .feature-shot { margin: auto -26px -26px; border-top: 1px solid var(--border); background: #05050b; }
+  .feature-shot { margin-top: auto; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: #05050b; }
+  .feature-shot img { border-radius: 4px; }
 
   /* Sections */
   section { padding: 56px 0 8px; }
