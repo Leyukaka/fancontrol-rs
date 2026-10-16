@@ -20,16 +20,16 @@
 </p>
 
 <p align="center">
-  <img src="assets/screenshot.jpg" alt="fancontrol-rs: temperature graph, GPU/CPU panels, Activity deck" width="920">
+  <img src="assets/screenshot.png" alt="fancontrol-rs: temperature graph, GPU/CPU panels, Activity deck" width="920">
 </p>
 
 <p align="center">
-  <img src="assets/screenshot-gpu.jpg" alt="GPU panel: NVIDIA core temp, power, utilization, VRAM" width="450">
-  <img src="assets/screenshot-cpu.jpg" alt="CPU panel: package power, temperature, load" width="450">
+  <img src="assets/screenshot-gpu.png" alt="GPU panel: NVIDIA core temp, power, utilization, VRAM" width="450">
+  <img src="assets/screenshot-cpu.png" alt="CPU panel: package power, temperature, load" width="450">
 </p>
 
 <p align="center">
-  <img src="assets/screenshot-curves.jpg" alt="Curve editor: temperature-to-duty profiles" width="920">
+  <img src="assets/screenshot-curves.png" alt="Curve editor: temperature-to-duty profiles" width="920">
 </p>
 
 ## Features

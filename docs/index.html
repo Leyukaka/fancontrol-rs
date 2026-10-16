@@ -64,7 +64,7 @@
   @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) a { color: #0077a8; } }
   :root[data-theme="light"] a { color: #0077a8; }
   code, pre { font-family: "Cascadia Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.86rem; }
-  img { max-width: 100%; display: block; }
+  img { max-width: 100%; height: auto; display: block; }
 
   .wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
   @media (min-width: 720px) { .wrap { padding: 0 28px; } }
@@ -178,7 +178,9 @@
     padding: 6px 12px; border-radius: 999px; font-size: 0.82rem; font-weight: 600;
     border: 1px solid rgba(0,229,255,.35);
   }
-  .feature-shot { margin: 18px -26px -26px; border-top: 1px solid var(--border); background: #05050b; }
+  .tile:has(> .feature-shot) { display: flex; flex-direction: column; }
+  .tile:has(> .feature-shot) > p { margin-bottom: 18px; }
+  .feature-shot { margin: auto -26px -26px; border-top: 1px solid var(--border); background: #05050b; }
 
   /* Sections */
   section { padding: 56px 0 8px; }
@@ -267,7 +269,7 @@
     </div>
 
     <div class="tile shot-tile s6">
-      <img src="assets/screenshot.jpg" alt="fancontrol-rs: temperature graph, GPU/CPU panels, Activity deck" width="1804" height="1244">
+      <img src="assets/screenshot.png" alt="fancontrol-rs: temperature graph, GPU/CPU panels, Activity deck" width="2577" height="1479">
       <span class="cap">Live graph, GPU / CPU panels, Activity deck</span>
     </div>
   </div>
@@ -282,7 +284,7 @@
         <h3>Curves that follow the hottest sensor</h3>
         <p>Curves, profiles, live duty sliders, multi-sensor temperature graph. A curve can follow the hottest of several sensors (CPU, GPU, SSD). Case fans and AIO fans on motherboard headers (not a pump/RGB vendor app).</p>
         <div class="feature-shot">
-          <img src="assets/screenshot-curves.jpg" alt="Curve editor: temperature-to-duty profiles" width="1804" height="508" loading="lazy">
+          <img src="assets/screenshot-curves.png" alt="Curve editor: temperature-to-duty profiles" width="2577" height="654" loading="lazy">
         </div>
       </div>
 
@@ -297,7 +299,7 @@
         <h3>NVIDIA multi-metric</h3>
         <p>Fixed-path <code>nvidia-smi</code>: temp, power, util, clocks, VRAM.</p>
         <div class="feature-shot">
-          <img src="assets/screenshot-gpu.jpg" alt="GPU panel: NVIDIA core temp, power, utilization, VRAM" width="613" height="514" loading="lazy">
+          <img src="assets/screenshot-gpu.png" alt="GPU panel: NVIDIA core temp, power, utilization, VRAM" width="846" height="390" loading="lazy">
         </div>
       </div>
 
@@ -306,7 +308,7 @@
         <h3>Package power, DIMMs, SSDs</h3>
         <p>CPU package watts, optional DDR5 DIMM temps, SSD/NVMe via native DeviceIoControl (no PowerShell).</p>
         <div class="feature-shot">
-          <img src="assets/screenshot-cpu.jpg" alt="CPU panel: package power, temperature, load" width="613" height="510" loading="lazy">
+          <img src="assets/screenshot-cpu.png" alt="CPU panel: package power, temperature, load" width="848" height="390" loading="lazy">
         </div>
       </div>
 
