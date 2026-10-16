@@ -1286,6 +1286,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fancontrol-lighting"
+version = "0.7.2"
+dependencies = [
+ "thiserror 2.0.21",
+ "tracing",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "fancontrol-metrics"
 version = "0.7.2"
 dependencies = [
@@ -1325,6 +1334,7 @@ dependencies = [
  "anyhow",
  "clap",
  "fancontrol-core",
+ "fancontrol-lighting",
  "fancontrol-pawnio",
  "fancontrol-plugins",
  "fancontrol-ui",

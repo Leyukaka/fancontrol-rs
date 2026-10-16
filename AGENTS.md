@@ -102,5 +102,6 @@ cargo run --profile release-fast -- ui
 | `specs/05-plugins.md` | Plugin traits |
 | `specs/06-roadmap.md` | Phases |
 | `specs/07-metrics-telemetry.md` | Metrics store, graph multi-kind, OTEL |
+| `specs/08-lighting.md` | RGB / ARGB (HID backends, experimental) |
 
 Also read: `CONTRIBUTING.md`, `docs/SUPPORTED_HARDWARE.md`.

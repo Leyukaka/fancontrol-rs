@@ -157,6 +157,21 @@ enum Commands {
         #[arg(long)]
         force: bool,
     },
+    /// List USB HID devices, flag known lighting controllers, dump their feature reports.
+    /// Read-only (no writes). See specs/08-lighting.md.
+    RgbProbe,
+    /// Experimental: solid color on MSI Mystic Light ARGB headers (USB 0DB0:0076).
+    /// Sends only the direct color report; blocked by `--read-only`.
+    RgbSet {
+        /// Color as RRGGBB hex (000000 = off)
+        color: String,
+        /// JARGB header index (0 = JARGB1); omit for all headers
+        #[arg(long)]
+        header: Option<u8>,
+        /// LEDs to fill per header
+        #[arg(long, default_value_t = 60)]
+        leds: usize,
+    },
     /// Launch desktop UI (egui). Default when no subcommand. Flags: --mock, --hw-only, --read-only, --no-hw
     Ui,
 }
@@ -588,6 +603,28 @@ fn main() -> anyhow::Result<()> {
             println!("Wrote channel map to {}", path.display());
             println!("Edit labels there; sample/ui will pick them up.");
         }
+        Commands::RgbProbe => {
+            #[cfg(windows)]
+            run_rgb_probe();
+            #[cfg(not(windows))]
+            anyhow::bail!("rgb-probe is Windows-only");
+        }
+        Commands::RgbSet {
+            color,
+            header,
+            leds,
+        } => {
+            if !allow_hw_write {
+                anyhow::bail!("refusing RGB write: --read-only is set");
+            }
+            #[cfg(windows)]
+            run_rgb_set(&color, header, leds)?;
+            #[cfg(not(windows))]
+            {
+                let _ = (color, header, leds);
+                anyhow::bail!("rgb-set is Windows-only");
+            }
+        }
         Commands::Ui => {
             let opts = fancontrol_ui::UiOptions {
                 include_mock,
@@ -861,6 +898,113 @@ fn run_test_duty(
         eprintln!("warn: restored duty {restored}% != baseline {baseline_duty}%");
     }
     Ok(())
+}
+
+#[cfg(windows)]
+fn run_rgb_probe() {
+    use fancontrol_lighting::{hid, lookup_known, msi_mystic};
+
+    let devices = hid::enumerate();
+    println!("HID interfaces: {}", devices.len());
+    for d in &devices {
+        let known = lookup_known(d.vid, d.pid);
+        println!(
+            "{mark} {vid:04X}:{pid:04X} v{ver:04X}  usage {up:04X}:{u:04X}  \
+             in/out/feature {i}/{o}/{f}  {mfr} / {prod}  serial={serial}",
+            mark = if known.is_some() { "*" } else { " " },
+            vid = d.vid,
+            pid = d.pid,
+            ver = d.version,
+            up = d.usage_page,
+            u = d.usage,
+            i = d.input_len,
+            o = d.output_len,
+            f = d.feature_len,
+            mfr = d.manufacturer.as_deref().unwrap_or("-"),
+            prod = d.product.as_deref().unwrap_or("-"),
+            serial = d.serial.as_deref().unwrap_or("-"),
+        );
+        if let Some(k) = known {
+            println!("    known: {} ({})", k.name, k.status);
+            println!("    path: {}", d.path);
+        }
+    }
+
+    let msi = devices
+        .iter()
+        .filter(|d| d.vid == msi_mystic::VID && d.pid == msi_mystic::PID);
+    for d in msi {
+        println!("\n=== MSI Mystic Light ({}) ===", d.path);
+        if usize::from(d.feature_len) != msi_mystic::REPORT_LEN {
+            println!(
+                "NOTE: feature report length {} (reference board: {})",
+                d.feature_len,
+                msi_mystic::REPORT_LEN
+            );
+        }
+        let dev = match hid::HidDevice::open(&d.path) {
+            Ok(dev) => dev,
+            Err(e) => {
+                println!("  {e}");
+                continue;
+            }
+        };
+        let len = usize::from(d.feature_len).max(msi_mystic::REPORT_LEN);
+        // GET_FEATURE only: reading reports never changes the lighting.
+        for report_id in 0x50..=0x52u8 {
+            match dev.get_feature(report_id, len) {
+                Ok(buf) => {
+                    println!("-- feature 0x{report_id:02X} ({} bytes)", buf.len());
+                    print_hex_trimmed(&buf);
+                }
+                Err(e) => println!("-- feature 0x{report_id:02X}: {e}"),
+            }
+        }
+    }
+}
+
+#[cfg(windows)]
+fn run_rgb_set(color: &str, header: Option<u8>, leds: usize) -> anyhow::Result<()> {
+    use fancontrol_lighting::{Rgb, hid, msi_mystic};
+
+    let rgb = Rgb::from_hex(color)?;
+    let info = hid::enumerate()
+        .into_iter()
+        .find(|d| d.vid == msi_mystic::VID && d.pid == msi_mystic::PID)
+        .ok_or_else(|| anyhow::anyhow!("MSI Mystic Light 0DB0:0076 not found (see rgb-probe)"))?;
+    if usize::from(info.feature_len) != msi_mystic::REPORT_LEN {
+        anyhow::bail!(
+            "refusing RGB write: feature report length is {} here, the known protocol uses {}. \
+             Please share the rgb-probe output.",
+            info.feature_len,
+            msi_mystic::REPORT_LEN
+        );
+    }
+    let dev = hid::HidDevice::open(&info.path)?;
+    let colors = vec![rgb; leds];
+    let headers: Vec<u8> = match header {
+        Some(h) => vec![h],
+        None => (0..msi_mystic::ARGB_HEADERS).collect(),
+    };
+    for h in headers {
+        let frame = msi_mystic::direct_frame(h, &colors)?;
+        dev.set_feature(&frame)?;
+        println!("JARGB{} <- #{} x{leds} LEDs", h + 1, rgb.to_hex());
+    }
+    Ok(())
+}
+
+/// Hex dump, 16 bytes per row, trailing zero bytes summarized.
+#[cfg(windows)]
+fn print_hex_trimmed(buf: &[u8]) {
+    let used = buf.iter().rposition(|&b| b != 0).map_or(0, |i| i + 1);
+    for (row, chunk) in buf[..used].chunks(16).enumerate() {
+        let hex: Vec<String> = chunk.iter().map(|b| format!("{b:02X}")).collect();
+        println!("  {:04X}: {}", row * 16, hex.join(" "));
+    }
+    if used < buf.len() {
+        println!("  ({} trailing zero bytes)", buf.len() - used);
+    }
 }
 
 fn run_demo(seconds: u64, start_temp: f64) -> anyhow::Result<()> {

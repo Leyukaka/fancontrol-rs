@@ -5,6 +5,7 @@ members = [
     "crates/fancontrol-plugins",
     "crates/fancontrol-pawnio",
     "crates/fancontrol-metrics",
+    "crates/fancontrol-lighting",
     "crates/fancontrol-ui",
     ".",
 ]
@@ -24,6 +25,7 @@ fancontrol-plugins = { path = "crates/fancontrol-plugins" }
 fancontrol-pawnio = { path = "crates/fancontrol-pawnio" }
 fancontrol-ui = { path = "crates/fancontrol-ui" }
 fancontrol-metrics = { path = "crates/fancontrol-metrics" }
+fancontrol-lighting = { path = "crates/fancontrol-lighting" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -59,6 +61,7 @@ fancontrol-core = { workspace = true }
 fancontrol-plugins = { workspace = true }
 fancontrol-pawnio = { workspace = true }
 fancontrol-ui = { workspace = true }
+fancontrol-lighting = { workspace = true }
 
 anyhow = { workspace = true }
 tracing = { workspace = true }
