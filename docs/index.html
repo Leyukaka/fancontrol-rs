@@ -6,184 +6,213 @@
 <title>fancontrol-rs: Windows fan control and GPU / CPU / RAM monitoring in Rust</title>
 <meta name="description" content="Open-source Windows fan control and monitoring for GPU, CPU and RAM activity, written in Rust. PawnIO only, no WinRing0. Curves, profiles, live UI.">
 <link rel="icon" href="assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --copper: #D46A2C;
-    --copper-light: #E8914A;
-    --copper-dark: #B84E1A;
-    --bg: #12100e;
-    --bg-panel: #1b1815;
-    --bg-panel-alt: #221e19;
-    --border: #332c24;
-    --text: #f1ece4;
-    --text-dim: #b8ada0;
-    --text-faint: #8a8073;
-    --radius: 10px;
+    --cyan: #00E5FF;
+    --magenta: #FF2EC4;
+    --copper: #F08A3C;
+    --lime: #C6FF3D;
+    --ink-on-fill: #0b0b14;
+
+    --bg: #07070f;
+    --panel: #10101d;
+    --panel-2: #161628;
+    --border: #24243c;
+    --text: #f4f3ff;
+    --text-dim: #aeadc9;
+    --text-faint: #7d7c99;
+    --radius: 22px;
+    --gap: 14px;
   }
   @media (prefers-color-scheme: light) {
-    :root {
-      --bg: #faf7f2;
-      --bg-panel: #ffffff;
-      --bg-panel-alt: #f2ede4;
-      --border: #e4dccb;
-      --text: #22190f;
-      --text-dim: #5a4d3c;
-      --text-faint: #7d6f5c;
+    :root:not([data-theme="dark"]) {
+      --bg: #f3f2ec;
+      --panel: #ffffff;
+      --panel-2: #f7f6f1;
+      --border: #e2e0d6;
+      --text: #12121c;
+      --text-dim: #4d4c60;
+      --text-faint: #75748a;
     }
   }
-  :root[data-theme="dark"] {
-    --bg: #12100e;
-    --bg-panel: #1b1815;
-    --bg-panel-alt: #221e19;
-    --border: #332c24;
-    --text: #f1ece4;
-    --text-dim: #b8ada0;
-    --text-faint: #8a8073;
-  }
   :root[data-theme="light"] {
-    --bg: #faf7f2;
-    --bg-panel: #ffffff;
-    --bg-panel-alt: #f2ede4;
-    --border: #e4dccb;
-    --text: #22190f;
-    --text-dim: #5a4d3c;
-    --text-faint: #7d6f5c;
+    --bg: #f3f2ec;
+    --panel: #ffffff;
+    --panel-2: #f7f6f1;
+    --border: #e2e0d6;
+    --text: #12121c;
+    --text-dim: #4d4c60;
+    --text-faint: #75748a;
   }
+
   * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
   body {
     margin: 0;
     background: var(--bg);
     color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-family: "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
     line-height: 1.55;
+    overflow-x: hidden;
   }
-  a { color: var(--copper-light); text-decoration: none; }
+  h1, h2, h3, .display { font-family: "Space Grotesk", "Segoe UI", sans-serif; letter-spacing: -0.02em; }
+  a { color: var(--cyan); text-decoration: none; }
   a:hover { text-decoration: underline; }
-  .wrap { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) a { color: #0077a8; } }
+  :root[data-theme="light"] a { color: #0077a8; }
+  code, pre { font-family: "Cascadia Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.86rem; }
+  img { max-width: 100%; display: block; }
 
-  header.top {
-    padding: 20px 0;
-    border-bottom: 1px solid var(--border);
-  }
-  header.top .wrap { display: flex; align-items: center; gap: 12px; }
-  header.top img { width: 32px; height: 32px; }
-  header.top .name { font-weight: 700; font-size: 1.05rem; }
-  header.top nav { margin-left: auto; display: flex; gap: 20px; font-size: 0.92rem; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+  @media (min-width: 720px) { .wrap { padding: 0 28px; } }
 
-  .hero {
-    padding: 64px 0 40px;
-    text-align: center;
+  /* Header */
+  header.top { padding: 18px 0; }
+  header.top .wrap { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  header.top img { width: 30px; height: 30px; }
+  header.top .name { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 1.1rem; }
+  header.top nav { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+  header.top nav a {
+    color: var(--text); font-size: 0.9rem; font-weight: 600;
+    padding: 7px 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel);
   }
-  .hero img.logo { width: 96px; height: 96px; margin-bottom: 18px; }
-  .hero h1 {
-    font-size: 2.4rem;
-    margin: 0 0 12px;
-    letter-spacing: -0.02em;
-  }
-  .hero p.tagline {
-    color: var(--text-dim);
-    font-size: 1.15rem;
-    max-width: 640px;
-    margin: 0 auto 24px;
-  }
-  .badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 28px; }
-  .badges img { height: 20px; }
+  header.top nav a:hover { text-decoration: none; border-color: var(--magenta); }
 
-  .cta { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-bottom: 44px; }
-  .btn {
-    display: inline-block;
-    padding: 11px 22px;
-    border-radius: var(--radius);
-    font-weight: 600;
-    font-size: 0.95rem;
+  /* Bento */
+  .bento {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--gap);
+    margin-bottom: var(--gap);
+  }
+  @media (min-width: 720px) {
+    .bento { grid-template-columns: repeat(6, 1fr); }
+    .s2 { grid-column: span 3; }
+    .s3 { grid-column: span 3; }
+    .s4 { grid-column: span 6; }
+    .s6 { grid-column: span 6; }
+    .r2 { grid-row: span 1; }
+  }
+  @media (min-width: 1000px) {
+    .s2 { grid-column: span 2; }
+    .s4 { grid-column: span 4; }
+    .r2 { grid-row: span 2; }
+  }
+
+  .tile {
+    position: relative;
+    background: var(--panel);
     border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 26px;
+    overflow: hidden;
+    min-width: 0;
+    transition: transform .2s ease, border-color .2s ease;
+  }
+  .tile:hover { transform: translateY(-2px); }
+  .tile h3 { margin: 0 0 8px; font-size: 1.25rem; }
+  .tile p { margin: 0; color: var(--text-dim); }
+  .tile p + p { margin-top: 10px; }
+  .kicker {
+    display: inline-block;
+    font-family: "Space Grotesk", sans-serif;
+    font-size: 0.76rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    margin-bottom: 12px; opacity: .8;
+  }
+
+  /* Bold color tiles: dark ink in every theme */
+  .fill { border: none; color: var(--ink-on-fill); }
+  .fill p, .fill .kicker { color: var(--ink-on-fill); opacity: .82; }
+  .fill a { color: var(--ink-on-fill) !important; text-decoration: underline; font-weight: 600; }
+  .fill code { background: rgba(0,0,0,.12); padding: 1px 6px; border-radius: 6px; }
+  .f-magenta { background: var(--magenta); }
+  .f-cyan { background: var(--cyan); }
+  .f-copper { background: var(--copper); }
+  .f-lime { background: var(--lime); }
+  .big-num { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: clamp(2.2rem, 4.5vw, 3.4rem); line-height: 1; margin: 4px 0 10px; letter-spacing: -0.04em; }
+
+  /* Hero */
+  .hero-tile { padding: 34px; display: flex; flex-direction: column; justify-content: center; }
+  @media (min-width: 720px) { .hero-tile { padding: 44px; } }
+  .hero-tile::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 2px;
+    background: conic-gradient(from var(--spin, 0deg), var(--cyan), var(--magenta), var(--copper), var(--lime), var(--cyan));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    pointer-events: none;
+    animation: spin 8s linear infinite;
+  }
+  @property --spin { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+  @keyframes spin { to { --spin: 360deg; } }
+  @media (prefers-reduced-motion: reduce) { .hero-tile::before { animation: none; } .tile { transition: none; } }
+  .hero-tile .brand { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; }
+  .hero-tile .brand img { width: 64px; height: 64px; }
+  .hero-tile h1 {
+    margin: 0; font-size: clamp(2.3rem, 6vw, 4.2rem); line-height: 1;
+    background: linear-gradient(90deg, var(--cyan), var(--magenta) 60%, var(--copper));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero-tile .tagline { font-size: 1.15rem; color: var(--text-dim); max-width: 620px; margin: 0 0 22px; }
+  .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 24px; }
+  .badges img { height: 20px; }
+  .cta { display: flex; flex-wrap: wrap; gap: 10px; }
+  .btn {
+    display: inline-block; padding: 12px 22px; border-radius: 999px;
+    font-weight: 700; font-size: 0.95rem; border: 1px solid var(--border);
   }
   .btn:hover { text-decoration: none; }
-  .btn.primary {
-    background: linear-gradient(135deg, var(--copper-light), var(--copper-dark));
-    color: #1a1006;
-    border: none;
-  }
-  .btn.secondary {
-    background: var(--bg-panel);
-    color: var(--text);
-  }
-  .btn.secondary:hover { border-color: var(--copper); }
+  .btn.primary { background: var(--magenta); color: var(--ink-on-fill) !important; border-color: var(--magenta); }
+  .btn.primary:hover { background: var(--cyan); border-color: var(--cyan); }
+  .btn.secondary { background: var(--panel-2); color: var(--text) !important; }
+  .btn.secondary:hover { border-color: var(--cyan); }
 
-  .shot { text-align: center; margin-bottom: 8px; }
-  .shot img {
-    max-width: 100%;
-    border-radius: var(--radius);
-    border: 1px solid var(--border);
-    margin: 0 0 12px;
+  /* Screenshot tiles */
+  .shot-tile { padding: 0; background: #05050b; }
+  .shot-tile img { width: 100%; height: auto; }
+  .shot-tile .cap {
+    position: absolute; left: 14px; bottom: 14px;
+    background: rgba(7,7,15,.82); color: #f4f3ff; backdrop-filter: blur(6px);
+    padding: 6px 12px; border-radius: 999px; font-size: 0.82rem; font-weight: 600;
+    border: 1px solid rgba(0,229,255,.35);
   }
+  .feature-shot { margin: 18px -26px -26px; border-top: 1px solid var(--border); background: #05050b; }
 
-  section { padding: 48px 0; border-top: 1px solid var(--border); }
-  section h2 {
-    font-size: 1.4rem;
-    margin: 0 0 20px;
-  }
-  section h2 .accent { color: var(--copper-light); }
+  /* Sections */
+  section { padding: 56px 0 8px; }
+  section > .wrap > h2 { font-size: clamp(1.7rem, 4vw, 2.4rem); margin: 0 0 20px; line-height: 1.1; }
+  .hl-cyan { color: var(--cyan); }
+  .hl-magenta { color: var(--magenta); }
+  .hl-copper { color: var(--copper); }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .hl-cyan { color: #0089b0; } }
+  :root[data-theme="light"] .hl-cyan { color: #0089b0; }
 
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 16px;
+  pre.cli {
+    margin: 16px 0 0; background: #05050b; color: #d9fbff; border: 1px solid #24243c;
+    border-radius: 14px; padding: 14px 16px; overflow-x: auto; line-height: 1.7;
   }
-  .card {
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 18px 20px;
-  }
-  .card h3 { margin: 0 0 8px; font-size: 1rem; }
-  .card p { margin: 0; color: var(--text-dim); font-size: 0.92rem; }
+  pre.cli .p { color: var(--magenta); user-select: none; }
 
-  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
-  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
-  th { color: var(--text-faint); font-weight: 600; }
+  .chip-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .chip { font-size: 0.82rem; font-weight: 600; padding: 5px 11px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text); }
+  .fill .chip { background: rgba(0,0,0,.1); border-color: rgba(0,0,0,.18); color: var(--ink-on-fill); }
 
-  .note {
-    background: var(--bg-panel-alt);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 16px 20px;
-    font-size: 0.92rem;
-    color: var(--text-dim);
-  }
-  .note strong { color: var(--text); }
+  .docs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: var(--gap); }
+  .doc-link { display: block; color: var(--text) !important; }
+  .doc-link:hover { text-decoration: none; border-color: var(--cyan); }
+  .doc-link strong { display: block; font-family: "Space Grotesk", sans-serif; font-size: 1.02rem; margin-bottom: 4px; word-break: break-word; }
+  .doc-link span { color: var(--text-dim); font-size: 0.9rem; }
+  .doc-link .arrow { float: right; color: var(--magenta); font-weight: 700; }
 
-  .signpath-badge {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 16px 20px;
-    margin-top: 16px;
-  }
-  .signpath-badge img { height: 28px; flex-shrink: 0; }
-
-  footer {
-    padding: 32px 0 56px;
-    color: var(--text-faint);
-    font-size: 0.88rem;
-    text-align: center;
-  }
-  footer a { color: var(--text-dim); }
-
-  code, pre {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 0.88rem;
-  }
-  pre {
-    background: var(--bg-panel-alt);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 14px 16px;
-    overflow-x: auto;
-  }
+  footer { padding: 56px 0 64px; color: var(--text-faint); font-size: 0.9rem; }
+  footer .wrap { display: grid; gap: 6px; }
+  footer p { margin: 0; }
+  footer a { color: var(--text-dim) !important; }
+  footer .coffee { margin-top: 12px; }
+  footer .coffee a { display: inline-block; background: var(--copper); color: var(--ink-on-fill) !important; padding: 9px 18px; border-radius: 999px; font-weight: 700; }
+  footer .coffee a:hover { text-decoration: none; background: var(--lime); }
 </style>
 </head>
 <body>
@@ -200,113 +229,190 @@
   </div>
 </header>
 
-<div class="hero wrap">
-  <img class="logo" src="assets/logo.svg" alt="fancontrol-rs logo">
-  <h1>Fancontrol-RS</h1>
-  <p class="tagline">
-    Windows fan control and monitoring for GPU, CPU and RAM activity, written in Rust.<br>
-    PawnIO only, no WinRing0. Curves, profiles, AIO fans on motherboard headers.
-  </p>
+<main>
+<div class="wrap">
+  <div class="bento">
+    <div class="tile hero-tile s4 r2">
+      <div class="brand">
+        <img src="assets/logo.svg" alt="fancontrol-rs logo">
+      </div>
+      <h1>Fancontrol-RS</h1>
+      <p class="tagline" style="margin-top:16px;">
+        Windows fan control and monitoring for GPU, CPU and RAM activity, written in Rust.
+        PawnIO only, no WinRing0. Curves, profiles, AIO fans on motherboard headers.
+      </p>
+      <div class="badges">
+        <img src="https://img.shields.io/badge/rust-edition%202024-orange?logo=rust&logoColor=white" alt="Rust edition 2024">
+        <img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue" alt="License MIT or Apache-2.0">
+        <img src="https://img.shields.io/badge/version-0.7.2-informational" alt="Version 0.7.2">
+        <img src="https://img.shields.io/badge/backend-PawnIO-success" alt="Backend: PawnIO">
+        <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-blue" alt="Platform: Windows 10/11">
+      </div>
+      <div class="cta">
+        <a class="btn primary" href="https://github.com/Leyukaka/fancontrol-rs/releases">Download latest release</a>
+        <a class="btn secondary" href="https://github.com/Leyukaka/fancontrol-rs">View source on GitHub</a>
+      </div>
+    </div>
 
-  <div class="badges">
-    <img src="https://img.shields.io/badge/rust-edition%202024-orange?logo=rust&logoColor=white" alt="Rust edition 2024">
-    <img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue" alt="License MIT or Apache-2.0">
-    <img src="https://img.shields.io/badge/version-0.7.2-informational" alt="Version 0.7.2">
-    <img src="https://img.shields.io/badge/backend-PawnIO-success" alt="Backend: PawnIO">
-    <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-blue" alt="Platform: Windows 10/11">
-  </div>
+    <div class="tile fill f-magenta s2">
+      <span class="kicker">v0.7 · Neon edition</span>
+      <h3>Some color for the autumn</h3>
+      <p>A neon look, fan curves that can follow several sensors, a leaner Rust core, and every v0.6.2 fix. Prefer the classic look? Options &gt; Theme.</p>
+    </div>
 
-  <div class="cta">
-    <a class="btn primary" href="https://github.com/Leyukaka/fancontrol-rs/releases">Download latest release</a>
-    <a class="btn secondary" href="https://github.com/Leyukaka/fancontrol-rs">View source on GitHub</a>
-  </div>
+    <div class="tile fill f-cyan s2">
+      <span class="kicker">Backend</span>
+      <div class="big-num">PawnIO</div>
+      <p>Only signed PawnIO modules for Super I/O and EC access. Never WinRing0.</p>
+    </div>
 
-  <div class="note" style="margin-bottom:28px;">
-    <strong>v0.7, Neon edition.</strong> A neon look to bring some color to the autumn, fan curves that can follow several sensors, a leaner Rust core, and every v0.6.2 fix. Prefer the classic look? Options &gt; Theme.
-  </div>
-
-  <div class="shot">
-    <img src="assets/screenshot.jpg" alt="fancontrol-rs: temperature graph, GPU/CPU panels, Activity deck">
-    <img src="assets/screenshot-gpu.jpg" alt="GPU panel: NVIDIA core temp, power, utilization, VRAM">
-    <img src="assets/screenshot-cpu.jpg" alt="CPU panel: package power, temperature, load">
-    <img src="assets/screenshot-curves.jpg" alt="Curve editor: temperature-to-duty profiles">
+    <div class="tile shot-tile s6">
+      <img src="assets/screenshot.jpg" alt="fancontrol-rs: temperature graph, GPU/CPU panels, Activity deck" width="1804" height="1244">
+      <span class="cap">Live graph, GPU / CPU panels, Activity deck</span>
+    </div>
   </div>
 </div>
 
-<section class="wrap">
-  <h2>What it <span class="accent">does</span></h2>
-  <div class="grid">
-    <div class="card">
-      <h3>Fan control</h3>
-      <p>Curves, profiles, live duty sliders, multi-sensor temperature graph. A curve can follow the hottest of several sensors (CPU, GPU, SSD). Case fans and AIO fans on motherboard headers (not a pump/RGB vendor app).</p>
-    </div>
-    <div class="card">
-      <h3>Activity deck</h3>
-      <p>CPU load history and top processes (CPU % and RAM), filterable and sortable. Toggle from the top bar or Options.</p>
-    </div>
-    <div class="card">
-      <h3>Security-first backend</h3>
-      <p><a href="https://pawnio.eu/">PawnIO</a> only for Super I/O / EC access. Never ships WinRing0 or other known-vulnerable ring-0 drivers.</p>
-    </div>
-    <div class="card">
-      <h3>Host sensors</h3>
-      <p>NVIDIA GPU multi-metric via fixed-path <code>nvidia-smi</code> (temp, power, util, clocks, VRAM) plus CPU package watts and optional DDR5 DIMM temps. SSD/NVMe via native DeviceIoControl (no PowerShell).</p>
-    </div>
-    <div class="card">
-      <h3>Desktop UI</h3>
-      <p>egui app with a Neon theme by default, light and dark themes, Windows fonts, system tray, first-run write consent, 8 languages (en/fr/de/es/it/zh/ja/lb). When PawnIO needs elevation, a <strong>Restart as Administrator</strong> button shows the Windows UAC prompt (no silent elevation).</p>
-    </div>
-    <div class="card">
-      <h3>CLI</h3>
-      <p><code>sample</code>, <code>list-sensors</code>, <code>list-controls</code>, <code>test-duty</code>, <code>sample-storage</code>, and more.</p>
+<section>
+  <div class="wrap">
+    <h2>What it <span class="hl-magenta">does</span></h2>
+    <div class="bento">
+      <div class="tile s4">
+        <span class="kicker hl-copper">Fan control</span>
+        <h3>Curves that follow the hottest sensor</h3>
+        <p>Curves, profiles, live duty sliders, multi-sensor temperature graph. A curve can follow the hottest of several sensors (CPU, GPU, SSD). Case fans and AIO fans on motherboard headers (not a pump/RGB vendor app).</p>
+        <div class="feature-shot">
+          <img src="assets/screenshot-curves.jpg" alt="Curve editor: temperature-to-duty profiles" width="1804" height="508" loading="lazy">
+        </div>
+      </div>
+
+      <div class="tile fill f-lime s2">
+        <span class="kicker">Activity deck</span>
+        <h3>What is heating your PC</h3>
+        <p>CPU load history and top processes (CPU % and RAM), filterable and sortable. Toggle from the top bar or Options.</p>
+      </div>
+
+      <div class="tile s2">
+        <span class="kicker hl-cyan">GPU</span>
+        <h3>NVIDIA multi-metric</h3>
+        <p>Fixed-path <code>nvidia-smi</code>: temp, power, util, clocks, VRAM.</p>
+        <div class="feature-shot">
+          <img src="assets/screenshot-gpu.jpg" alt="GPU panel: NVIDIA core temp, power, utilization, VRAM" width="613" height="514" loading="lazy">
+        </div>
+      </div>
+
+      <div class="tile s2">
+        <span class="kicker hl-magenta">CPU &amp; RAM</span>
+        <h3>Package power, DIMMs, SSDs</h3>
+        <p>CPU package watts, optional DDR5 DIMM temps, SSD/NVMe via native DeviceIoControl (no PowerShell).</p>
+        <div class="feature-shot">
+          <img src="assets/screenshot-cpu.jpg" alt="CPU panel: package power, temperature, load" width="613" height="510" loading="lazy">
+        </div>
+      </div>
+
+      <div class="tile fill f-copper s2">
+        <span class="kicker">Desktop UI</span>
+        <div class="big-num">8 languages</div>
+        <p>egui app with a Neon theme by default, light and dark themes, Windows fonts, system tray, first-run write consent.</p>
+        <div class="chip-list">
+          <span class="chip">en</span><span class="chip">fr</span><span class="chip">de</span><span class="chip">es</span>
+          <span class="chip">it</span><span class="chip">zh</span><span class="chip">ja</span><span class="chip">lb</span>
+        </div>
+        <p style="margin-top:14px;">When PawnIO needs elevation, a <strong>Restart as Administrator</strong> button shows the Windows UAC prompt (no silent elevation).</p>
+      </div>
+
+      <div class="tile fill f-cyan s3">
+        <span class="kicker">Security-first backend</span>
+        <h3>No vulnerable ring-0 drivers. Ever.</h3>
+        <p><a href="https://pawnio.eu/">PawnIO</a> only for Super I/O / EC access. Never ships WinRing0 or other known-vulnerable ring-0 drivers.</p>
+      </div>
+
+      <div class="tile s3">
+        <span class="kicker hl-cyan">CLI</span>
+        <h3>Scriptable diagnostics</h3>
+        <pre class="cli"><span class="p">&gt; </span>fancontrol-rs sample
+<span class="p">&gt; </span>fancontrol-rs list-sensors
+<span class="p">&gt; </span>fancontrol-rs list-controls
+<span class="p">&gt; </span>fancontrol-rs test-duty
+<span class="p">&gt; </span>fancontrol-rs sample-storage</pre>
+      </div>
     </div>
   </div>
 </section>
 
-<section class="wrap">
-  <h2>Motherboard <span class="accent">support</span></h2>
-  <p>Every desktop board with a Super I/O / EC HWM path should work in principle: broad chip coverage (Nuvoton NCT668x, banked NCT679x, ITE IT87, and friends) is the goal via PawnIO. Boards are only marked <strong>certified</strong> once someone has actually sent logs.</p>
-  <table>
-    <tr><th>Certified so far</th><td>NCT6687D-class EC HWM · ASUS ROG STRIX B550-A GAMING (banked NCT / NCT6798-class), full read + PWM write on maintainer hardware</td></tr>
-    <tr><th>Help wanted</th><td>Any other board (ASUS / MSI / Gigabyte / ASRock / …). Run <code>detect</code> + <code>list-sensors</code> + <code>list-controls</code> and open a <a href="https://github.com/Leyukaka/fancontrol-rs/issues/new?template=hardware_report.yml">hardware report</a>.</td></tr>
-  </table>
-</section>
-
-<section class="wrap">
-  <h2>Signing &amp; <span class="accent">distribution</span></h2>
-  <p>Release binaries are built on <code>windows-latest</code> in GitHub Actions and published with a SHA256 checksum. They are <strong>not code-signed yet</strong>, so expect SmartScreen and occasional Defender heuristics, the same class of warning most tools that talk to Super I/O / EC hardware get.</p>
-  <div class="note">
-    <strong>No telemetry. No auto-update.</strong> fancontrol-rs does not phone home, does not poll for new versions in the background, and never downloads or installs updates by itself. The only optional network call is the in-app <strong>Check for updates</strong> button (Options): you click it, it queries GitHub's public Releases API, and shows a link if something newer exists. No babysitting - you decide when to upgrade.
-  </div>
-  <div class="note" style="margin-top:12px;">
-    <strong>Host sensors</strong> stay local: fixed-path <code>nvidia-smi</code> for GPU metrics, native storage IOCTLs for SSD/NVMe temps, and (when elevated with PawnIO) CPU package power via MSR modules - no PowerShell, no WMI for those paths.
-  </div>
-  <div class="signpath-badge">
-    <div>
-      <strong>Applying for free code signing from the <a href="https://signpath.org/">SignPath Foundation</a></strong>
-      <p style="margin:6px 0 0;color:var(--text-dim);font-size:0.9rem;">
-        SignPath Foundation provides free Authenticode signing for qualifying open-source projects. fancontrol-rs meets the OSS licensing, active-maintenance, and no-telemetry criteria and is applying for coverage. See
-        <a href="https://github.com/Leyukaka/fancontrol-rs/blob/main/docs/SIGNING_AND_DISTRIBUTION.md">docs/SIGNING_AND_DISTRIBUTION.md</a> for the full signing plan. This page will be updated with the standard SignPath attribution once a certificate is issued.
-      </p>
+<section>
+  <div class="wrap">
+    <h2>Motherboard <span class="hl-cyan">support</span></h2>
+    <div class="bento">
+      <div class="tile s6">
+        <p>Every desktop board with a Super I/O / EC HWM path should work in principle: broad chip coverage (Nuvoton NCT668x, banked NCT679x, ITE IT87, and friends) is the goal via PawnIO. Boards are only marked <strong>certified</strong> once someone has actually sent logs.</p>
+      </div>
+      <div class="tile s3">
+        <span class="kicker hl-copper">Certified so far</span>
+        <h3>Tested on real hardware</h3>
+        <div class="chip-list">
+          <span class="chip">NCT6687D-class EC HWM</span>
+          <span class="chip">ASUS ROG STRIX B550-A GAMING</span>
+          <span class="chip">banked NCT / NCT6798-class</span>
+        </div>
+        <p style="margin-top:14px;">Full read + PWM write on maintainer hardware.</p>
+      </div>
+      <div class="tile fill f-magenta s3">
+        <span class="kicker">Help wanted</span>
+        <h3>Got another board?</h3>
+        <p>ASUS, MSI, Gigabyte, ASRock and more. Run <code>detect</code> + <code>list-sensors</code> + <code>list-controls</code> and open a <a href="https://github.com/Leyukaka/fancontrol-rs/issues/new?template=hardware_report.yml">hardware report</a>.</p>
+      </div>
     </div>
   </div>
 </section>
 
-<section class="wrap">
-  <h2>Docs &amp; <span class="accent">specs</span></h2>
-  <table>
-    <tr><td><a href="https://github.com/Leyukaka/fancontrol-rs/tree/main/specs">specs/</a></td><td>Spec-driven design: vision, architecture, hardware backend, UI, roadmap</td></tr>
-    <tr><td><a href="https://github.com/Leyukaka/fancontrol-rs/blob/main/docs/SUPPORTED_HARDWARE.md">SUPPORTED_HARDWARE.md</a></td><td>Chip matrix, prerequisites, validation</td></tr>
-    <tr><td><a href="https://github.com/Leyukaka/fancontrol-rs/blob/main/docs/SIGNING_AND_DISTRIBUTION.md">SIGNING_AND_DISTRIBUTION.md</a></td><td>Signing options, release checklist, CI notes</td></tr>
-    <tr><td><a href="https://github.com/Leyukaka/fancontrol-rs/blob/main/docs/SECURITY.md">SECURITY.md</a></td><td>Reporting, CodeQL/audit, SHA256 verify, signing status</td></tr>
-    <tr><td><a href="https://github.com/Leyukaka/fancontrol-rs/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a></td><td>Bugs, PRs, AI contribution policy</td></tr>
-  </table>
+<section>
+  <div class="wrap">
+    <h2>Signing &amp; <span class="hl-copper">distribution</span></h2>
+    <div class="bento">
+      <div class="tile fill f-lime s4">
+        <span class="kicker">Privacy</span>
+        <div class="big-num">No telemetry. No auto-update.</div>
+        <p>fancontrol-rs does not phone home, does not poll for new versions in the background, and never downloads or installs updates by itself. The only optional network call is the in-app <strong>Check for updates</strong> button (Options): you click it, it queries GitHub's public Releases API, and shows a link if something newer exists. You decide when to upgrade.</p>
+      </div>
+      <div class="tile s2">
+        <span class="kicker hl-cyan">Host sensors stay local</span>
+        <p>Fixed-path <code>nvidia-smi</code> for GPU metrics, native storage IOCTLs for SSD/NVMe temps, and (when elevated with PawnIO) CPU package power via MSR modules. No PowerShell, no WMI for those paths.</p>
+      </div>
+      <div class="tile s3">
+        <span class="kicker hl-magenta">Builds</span>
+        <h3>Built in CI, SHA256 published</h3>
+        <p>Release binaries are built on <code>windows-latest</code> in GitHub Actions and published with a SHA256 checksum. They are <strong>not code-signed yet</strong>, so expect SmartScreen and occasional Defender heuristics, the same class of warning most tools that talk to Super I/O / EC hardware get.</p>
+      </div>
+      <div class="tile s3">
+        <span class="kicker hl-copper">Code signing</span>
+        <h3>Applying for free code signing from the <a href="https://signpath.org/">SignPath Foundation</a></h3>
+        <p>SignPath Foundation provides free Authenticode signing for qualifying open-source projects. fancontrol-rs meets the OSS licensing, active-maintenance, and no-telemetry criteria and is applying for coverage. See <a href="https://github.com/Leyukaka/fancontrol-rs/blob/main/docs/SIGNING_AND_DISTRIBUTION.md">docs/SIGNING_AND_DISTRIBUTION.md</a> for the full signing plan. This page will be updated with the standard SignPath attribution once a certificate is issued.</p>
+      </div>
+    </div>
+  </div>
 </section>
 
-<footer class="wrap">
-  <p>MIT OR Apache-2.0. Maintained by <a href="https://github.com/Leyukaka">Leyukaka</a>.</p>
-  <p>Inspired by <a href="https://github.com/Rem0o/FanControl.Releases">FanControl</a> (Rémi Mercier) and LibreHardwareMonitor. PawnIO by <a href="https://github.com/namazso">namazso</a>. Not affiliated with either.</p>
-  <p><a href="https://buymeacoffee.com/leyukaka">Buy me a coffee</a></p>
+<section>
+  <div class="wrap">
+    <h2>Docs &amp; <span class="hl-magenta">specs</span></h2>
+    <div class="docs-grid">
+      <a class="tile doc-link" href="https://github.com/Leyukaka/fancontrol-rs/tree/main/specs"><span class="arrow">↗</span><strong>specs/</strong><span>Spec-driven design: vision, architecture, hardware backend, UI, roadmap</span></a>
+      <a class="tile doc-link" href="https://github.com/Leyukaka/fancontrol-rs/blob/main/docs/SUPPORTED_HARDWARE.md"><span class="arrow">↗</span><strong>SUPPORTED_HARDWARE.md</strong><span>Chip matrix, prerequisites, validation</span></a>
+      <a class="tile doc-link" href="https://github.com/Leyukaka/fancontrol-rs/blob/main/docs/SIGNING_AND_DISTRIBUTION.md"><span class="arrow">↗</span><strong>SIGNING_AND_DISTRIBUTION.md</strong><span>Signing options, release checklist, CI notes</span></a>
+      <a class="tile doc-link" href="https://github.com/Leyukaka/fancontrol-rs/blob/main/docs/SECURITY.md"><span class="arrow">↗</span><strong>SECURITY.md</strong><span>Reporting, CodeQL/audit, SHA256 verify, signing status</span></a>
+      <a class="tile doc-link" href="https://github.com/Leyukaka/fancontrol-rs/blob/main/CONTRIBUTING.md"><span class="arrow">↗</span><strong>CONTRIBUTING.md</strong><span>Bugs, PRs, AI contribution policy</span></a>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>MIT OR Apache-2.0. Maintained by <a href="https://github.com/Leyukaka">Leyukaka</a>.</p>
+    <p>Inspired by <a href="https://github.com/Rem0o/FanControl.Releases">FanControl</a> (Rémi Mercier) and LibreHardwareMonitor. PawnIO by <a href="https://github.com/namazso">namazso</a>. Not affiliated with either.</p>
+    <p class="coffee"><a href="https://buymeacoffee.com/leyukaka">Buy me a coffee</a></p>
+  </div>
 </footer>
 
 </body>
