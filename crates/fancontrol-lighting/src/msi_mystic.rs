@@ -77,7 +77,9 @@ mod tests {
     fn max_leds_fill_the_report() {
         assert_eq!(MAX_LEDS, 251);
         let f = direct_frame(0, &[Rgb::new(1, 2, 3); MAX_LEDS]).unwrap();
-        assert_eq!(&f[REPORT_LEN - 3..], &[1, 2, 3]);
+        // 754 data bytes hold 251 LEDs plus one trailing padding byte.
+        assert_eq!(&f[REPORT_LEN - 4..REPORT_LEN - 1], &[1, 2, 3]);
+        assert_eq!(f[REPORT_LEN - 1], 0);
     }
 
     #[test]
