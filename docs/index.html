@@ -217,6 +217,15 @@
   footer a { color: var(--text-dim) !important; }
   footer .coffee { margin-top: 12px; }
   footer .coffee a { display: inline-block; background: var(--copper); color: var(--ink-on-fill) !important; padding: 9px 18px; border-radius: 999px; font-weight: 700; }
+  .mascot-track { position: relative; height: 64px; margin-bottom: 22px; border-bottom: 1px solid var(--border); overflow: hidden; }
+  .mascot { position: absolute; bottom: 0; left: 0; image-rendering: pixelated; transform-origin: 32px 50%; animation: pace 48s linear infinite; }
+  @keyframes pace {
+    0% { left: calc(100% - 64px); transform: scaleX(1); }
+    49.9% { left: 0; transform: scaleX(1); }
+    50% { left: 0; transform: scaleX(-1); }
+    100% { left: calc(100% - 64px); transform: scaleX(-1); }
+  }
+  @media (prefers-reduced-motion: reduce) { .mascot { animation: none; } }
   footer .coffee a:hover { text-decoration: none; background: var(--lime); }
 </style>
 </head>
@@ -414,6 +423,7 @@
 
 <footer>
   <div class="wrap">
+    <div class="mascot-track" aria-hidden="true"><img class="mascot" src="assets/mascot.svg" alt="" width="176" height="64"></div>
     <p>MIT OR Apache-2.0. Maintained by <a href="https://github.com/Leyukaka">Leyukaka</a>.</p>
     <p>Inspired by <a href="https://github.com/Rem0o/FanControl.Releases">FanControl</a> (Rémi Mercier) and LibreHardwareMonitor. PawnIO by <a href="https://github.com/namazso">namazso</a>. Not affiliated with either.</p>
     <p class="coffee"><a href="https://buymeacoffee.com/leyukaka">Buy me a coffee</a></p>
