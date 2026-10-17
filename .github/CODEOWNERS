@@ -1,0 +1,5 @@
+# Changes to CI/workflows and editor tasks are security-sensitive
+# (a malicious tasks.json or workflow can run code). Visibility only:
+# no branch rule requires this review.
+/.github/ @Leyukaka
+/.vscode/ @Leyukaka
