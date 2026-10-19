@@ -52,6 +52,17 @@ Rejected: Azure Artifact Signing (individuals limited to US/Canada), SignPath Fo
 4. Compute SHA256 **after** signing.
 5. Test via `workflow_dispatch` before the first signed tag, then update README / SECURITY.md to state that releases are signed.
 
+### Not on the Microsoft Store (2026-10)
+
+Distribution stays GitHub Releases only. Reasons:
+
+- The app needs PawnIO, a kernel driver installed separately. The Store expects a listing to work without components from outside the Store.
+- Hardware access needs admin rights. MSIX elevation is the restricted `allowElevation` capability, which means extra justification and review.
+- It writes PWM to Super I/O / EC registers. That is a likely certification refusal or a long review back-and-forth.
+- Packaging cost: MSIX (or a submitted MSI/EXE installer) on top of the current portable exe + SHA256.
+
+Worth revisiting later: the Store signs MSIX packages itself, so it would bypass SmartScreen without a Certum cert on that channel.
+
 ---
 
 ## Pipeline shape
