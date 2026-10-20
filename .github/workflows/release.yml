@@ -26,6 +26,12 @@ jobs:
     runs-on: windows-latest
     # Only the configured environment reviewers (repo owner) can approve.
     environment: release
+    # Job-level permissions replace the workflow-level block, so keep
+    # contents: write for the release upload.
+    permissions:
+      contents: write
+      id-token: write      # OIDC token for Sigstore signing
+      attestations: write  # store the build provenance attestation
     steps:
       - uses: actions/checkout@v7
 
@@ -46,6 +52,13 @@ jobs:
           $hash = (Get-FileHash -Algorithm SHA256 dist/fancontrol-rs.exe).Hash.ToLower()
           Set-Content -Path dist/fancontrol-rs.exe.sha256 -Value "$hash  fancontrol-rs.exe" -NoNewline
           Get-Content dist/fancontrol-rs.exe.sha256
+
+      # Users can check it with:
+      #   gh attestation verify fancontrol-rs.exe --repo Leyukaka/fancontrol-rs
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/fancontrol-rs.exe
 
       - name: Upload artifact (workflow_dispatch / always)
         uses: actions/upload-artifact@v7

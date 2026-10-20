@@ -80,7 +80,7 @@ Worth revisiting later: the Store signs MSIX packages itself, so it would bypass
               GitHub Release assets: fancontrol-rs.exe + .sha256
 ```
 
-Implementation today: **[`.github/workflows/release.yml`](../.github/workflows/release.yml)** - build + upload only. Signing steps are **not** wired yet (no secrets required to land the workflow).
+Implementation today: **[`.github/workflows/release.yml`](../.github/workflows/release.yml)** - build, GitHub build provenance attestation (`actions/attest-build-provenance`, verify with `gh attestation verify fancontrol-rs.exe --repo Leyukaka/fancontrol-rs`), then upload. Provenance is not Authenticode: SmartScreen ignores it. Signing steps are **not** wired yet (no secrets required to land the workflow).
 
 ### Who can release (maintainer control)
 

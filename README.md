@@ -136,6 +136,23 @@ Details: [docs/SUPPORTED_HARDWARE.md](./docs/SUPPORTED_HARDWARE.md).
 - **[GitHub Releases](https://github.com/Leyukaka/fancontrol-rs/releases)**: tags `v*.*.*` build `fancontrol-rs.exe` + SHA256 on `windows-latest` (see [release workflow](./.github/workflows/release.yml)).
 - **Build from source**: see below.
 
+### Verify the binary
+
+Releases built after build provenance was added (newer than v0.7.2) carry a GitHub attestation that proves the exe was built by this repo's release workflow. With the [GitHub CLI](https://cli.github.com/):
+
+```powershell
+gh attestation verify fancontrol-rs.exe --repo Leyukaka/fancontrol-rs
+```
+
+The SHA256 check still works for every release:
+
+```powershell
+Get-FileHash .\fancontrol-rs.exe -Algorithm SHA256
+Get-Content .\fancontrol-rs.exe.sha256
+```
+
+The hex digests must match (case-insensitive). More in [docs/SECURITY.md](./docs/SECURITY.md).
+
 Binaries are **not code-signed yet**. Expect SmartScreen and occasional Defender false positives. Signing plan: [docs/SIGNING_AND_DISTRIBUTION.md](./docs/SIGNING_AND_DISTRIBUTION.md).
 
 ## Prerequisites (hardware)
