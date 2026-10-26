@@ -13,7 +13,7 @@ impl FanApp {
             ui.set_min_height(row_h);
             ui.set_max_height(row_h);
             egui::ScrollArea::vertical()
-                .id_salt(ui.id().with("domain_slot_scroll"))
+                .id_salt(ui.scope_id().with("domain_slot_scroll"))
                 .max_height(row_h)
                 .auto_shrink([false, false])
                 .show(ui, |ui| {

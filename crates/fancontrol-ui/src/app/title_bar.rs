@@ -25,7 +25,7 @@ impl FanApp {
             .frame(egui::Frame::NONE.fill(fill))
             .show(ui, |ui| {
                 let rect = ui.max_rect();
-                let drag_id = ui.id().with("title_drag");
+                let drag_id = ui.scope_id().with("title_drag");
                 let drag = ui.interact(rect, drag_id, egui::Sense::click_and_drag());
                 let maximized = ui.input(|i| i.viewport().maximized.unwrap_or(false));
                 if drag.double_clicked() {
@@ -138,7 +138,7 @@ fn frame_button(
     button: FrameButton,
     maximized: bool,
 ) -> egui::Response {
-    let id = ui.id().with(("frame_button", button as u8));
+    let id = ui.scope_id().with(("frame_button", button as u8));
     let resp = ui.interact(rect, id, egui::Sense::click());
     let painter = ui.painter_at(rect);
     if resp.hovered() {

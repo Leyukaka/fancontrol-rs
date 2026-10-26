@@ -164,7 +164,7 @@ pub fn show_curve_editor(
     let pointer = resp.interact_pointer_pos();
     let mut drag_idx: Option<usize> = None;
     // Find which point is under pointer / being dragged via id memory
-    let id = ui.id().with("curve_drag");
+    let id = ui.scope_id().with("curve_drag");
     let mut state = ui
         .ctx()
         .data(|d| d.get_temp::<Option<usize>>(id))
