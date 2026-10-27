@@ -167,7 +167,7 @@ pub fn paint_neon_border(ctx: &egui::Context, time_s: f64) {
     let shift = (time_s * 0.12).fract() as f32;
     let painter = ctx.layer_painter(egui::LayerId::new(
         egui::Order::Foreground,
-        egui::Id::new("neon_border"),
+        egui::Id::unique("neon_border"),
     ));
     for (width, alpha) in PASSES {
         for (i, w) in path.windows(2).enumerate() {
