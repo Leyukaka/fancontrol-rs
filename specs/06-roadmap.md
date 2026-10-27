@@ -1,6 +1,6 @@
 # Roadmap
 
-Last aligned with product reality: **v0.7.2** (rustls 0.23.46 security update; v0.7.1 Options > About; v0.7.0 Neon edition: Neon default theme with own title bar, Windows fonts, multi-sensor curve input, curve response time, duplicate / delete curves, DirectX 12 on Windows; v0.6.2 review fixes). See `specs/07-metrics-telemetry.md`, `specs/04-ui.md`, `docs/DIMM_TEMP.md`.
+Last aligned with product reality: **v0.7.3** (rustls-webpki 0.103.16 + webpki-roots 1.0.10 security update, egui 0.37, build provenance; v0.7.2 rustls 0.23.46 security update; v0.7.1 Options > About; v0.7.0 Neon edition: Neon default theme with own title bar, Windows fonts, multi-sensor curve input, curve response time, duplicate / delete curves, DirectX 12 on Windows; v0.6.2 review fixes). See `specs/07-metrics-telemetry.md`, `specs/04-ui.md`, `docs/DIMM_TEMP.md`.
 
 ## Phase 0 - Foundation
 
