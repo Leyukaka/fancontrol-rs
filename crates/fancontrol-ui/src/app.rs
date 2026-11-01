@@ -1771,6 +1771,10 @@ impl FanApp {
             match cmd {
                 TrayCommand::Open => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                    // A window minimized before the hide (Win+D, taskbar) comes back
+                    // minimized otherwise, and winit ignores Focus while minimized.
+                    // No-op when not minimized; restores to maximized if it was.
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
                     ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                     self.window_visible = true;
                     self.tray_trim_at = None;
