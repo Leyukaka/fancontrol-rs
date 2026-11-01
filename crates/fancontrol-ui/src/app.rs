@@ -321,6 +321,7 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         top_toggles_w: 0.0,
         last_ui_pass: Instant::now(),
         last_stall_log: Instant::now(),
+        tray_trim_at: None,
     };
 
     let icon = eframe::icon_data::from_png_bytes(include_bytes!("../../../assets/icon.png"))
@@ -350,13 +351,14 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
         native,
         Box::new(move |cc| {
             theme::apply(&cc.egui_ctx, theme_choice);
-            // Windows UI fonts + CJK fallback (loaded unconditionally: the language
-            // can be switched live at runtime).
+            // Windows UI fonts + CJK font for zh / ja (reinstalled on a live
+            // language switch).
             theme::install_fonts(&cc.egui_ctx, system_font, &language);
 
-            // One-time setup for the shader graph gallery's wgpu pipelines
-            // (see crates/fancontrol-ui/src/shaders/mod.rs). Skipped gracefully
-            // if the wgpu backend isn't active - Classic graph still works.
+            // Shared state for the shader graph gallery; each style's pipeline is
+            // compiled on first use (see crates/fancontrol-ui/src/shaders/mod.rs).
+            // Skipped gracefully if the wgpu backend isn't active - Classic graph
+            // still works.
             let shader_backend_available = if let Some(render_state) = &cc.wgpu_render_state {
                 let gallery = ShaderGallery::new(&render_state.device, render_state.target_format);
                 render_state
@@ -483,6 +485,8 @@ struct FanApp {
     /// Start of the last `ui()` pass, and of the last "UI stalled" log (see `log_ui_stall`).
     last_ui_pass: Instant,
     last_stall_log: Instant,
+    /// When to trim the working set after a hide to tray (see `memory::trim_working_set`).
+    tray_trim_at: Option<Instant>,
 }
 
 fn load_or_create_default_profile(preferred: Option<&str>) -> Profile {
@@ -629,6 +633,11 @@ impl eframe::App for FanApp {
         self.handle_tray(ctx);
         self.background_tick();
         self.log_ui_stall(ctx);
+        // A short delay lets the last frame and the hide settle before trimming.
+        if !self.window_visible && self.tray_trim_at.is_some_and(|t| Instant::now() >= t) {
+            self.tray_trim_at = None;
+            crate::memory::trim_working_set();
+        }
 
         if self.tray.is_some() && !self.really_exit && ctx.input(|i| i.viewport().close_requested())
         {
@@ -638,6 +647,7 @@ impl eframe::App for FanApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
             self.window_visible = false;
+            self.tray_trim_at = Some(Instant::now() + Duration::from_secs(2));
         }
     }
 
@@ -1747,6 +1757,7 @@ impl FanApp {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
                     ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                     self.window_visible = true;
+                    self.tray_trim_at = None;
                 }
                 TrayCommand::ApplyDefaultProfile => {
                     let snap = self.snapshot.lock().map(|g| g.clone()).unwrap_or_default();

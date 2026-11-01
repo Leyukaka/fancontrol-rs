@@ -82,6 +82,10 @@ struct ShaderUniforms {
 pub struct ShaderGallery {
     uniform_buffer: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
+    pipeline_layout: wgpu::PipelineLayout,
+    target_format: wgpu::TextureFormat,
+    /// Compiled on first use (see `ensure_pipeline`): most users stay on Classic,
+    /// so startup doesn't pay for every style's shader module and pipeline.
     pipelines: HashMap<GraphStyle, wgpu::RenderPipeline>,
 }
 
@@ -132,45 +136,50 @@ impl ShaderGallery {
             }],
         });
 
-        let mut pipelines = HashMap::new();
-        for style in GraphStyle::ALL {
-            let Some(fragment_src) = style.wgsl_fragment() else {
-                continue;
-            };
-            let source = format!("{COMMON_WGSL}\n{fragment_src}");
-            let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("shader_gallery_style"),
-                source: wgpu::ShaderSource::Wgsl(source.into()),
-            });
-            let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("shader_gallery_style"),
-                layout: Some(&pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &shader,
-                    entry_point: Some("vs_main"),
-                    buffers: &[],
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader,
-                    entry_point: Some("fs_main"),
-                    targets: &[Some(target_format.into())],
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                }),
-                primitive: wgpu::PrimitiveState::default(),
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState::default(),
-                multiview_mask: None,
-                cache: None,
-            });
-            pipelines.insert(style, pipeline);
-        }
-
         Self {
             uniform_buffer,
             bind_group,
-            pipelines,
+            pipeline_layout,
+            target_format,
+            pipelines: HashMap::new(),
         }
+    }
+
+    /// Compile `style`'s pipeline if it isn't built yet. No-op for `Classic`.
+    fn ensure_pipeline(&mut self, device: &wgpu::Device, style: GraphStyle) {
+        if self.pipelines.contains_key(&style) {
+            return;
+        }
+        let Some(fragment_src) = style.wgsl_fragment() else {
+            return;
+        };
+        let source = format!("{COMMON_WGSL}\n{fragment_src}");
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("shader_gallery_style"),
+            source: wgpu::ShaderSource::Wgsl(source.into()),
+        });
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("shader_gallery_style"),
+            layout: Some(&self.pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(self.target_format.into())],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+        self.pipelines.insert(style, pipeline);
     }
 
     fn prepare(&self, queue: &wgpu::Queue, uniforms: ShaderUniforms) {
@@ -195,13 +204,14 @@ struct ShaderCallback {
 impl egui_wgpu::CallbackTrait for ShaderCallback {
     fn prepare(
         &self,
-        _device: &wgpu::Device,
+        device: &wgpu::Device,
         queue: &wgpu::Queue,
         _screen_descriptor: &egui_wgpu::ScreenDescriptor,
         _egui_encoder: &mut wgpu::CommandEncoder,
         resources: &mut egui_wgpu::CallbackResources,
     ) -> Vec<wgpu::CommandBuffer> {
-        if let Some(gallery) = resources.get::<ShaderGallery>() {
+        if let Some(gallery) = resources.get_mut::<ShaderGallery>() {
+            gallery.ensure_pipeline(device, self.style);
             gallery.prepare(queue, self.uniforms);
         }
         Vec::new()
@@ -219,8 +229,8 @@ impl egui_wgpu::CallbackTrait for ShaderCallback {
     }
 }
 
-/// Draw the active shader style's panel. No-op (blank canvas) if the wgpu
-/// pipeline wasn't set up at startup, or if `style` somehow has no pipeline.
+/// Draw the active shader style's panel. No-op (blank canvas) if the shader
+/// gallery wasn't set up at startup, or if `style` somehow has no pipeline.
 pub fn show_shader_panel(
     ui: &mut egui::Ui,
     style: GraphStyle,

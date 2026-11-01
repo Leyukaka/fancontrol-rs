@@ -239,8 +239,9 @@ pub fn neon_text(
 
 /// Use the Windows UI fonts (Segoe UI, Cascadia Mono) instead of egui's built-in
 /// ones, falling back to those if a file is missing.
-/// The CJK fallback is always appended (egui's fonts have no CJK glyphs), using the
-/// Simplified Chinese face of the collection for `zh` and the Japanese one otherwise.
+/// The bundled Noto CJK font is only appended for a CJK UI language (see
+/// `needs_cjk_font`); it is ~19 MB, and eframe's system font fallback already covers
+/// stray CJK glyphs (process or sensor names) in other languages.
 pub fn install_fonts(ctx: &egui::Context, system_fonts: bool, language: &str) {
     let mut fonts = egui::FontDefinitions::default();
     let mut add = |name: &str, data: egui::FontData, family: egui::FontFamily, first: bool| {
@@ -266,20 +267,27 @@ pub fn install_fonts(ctx: &egui::Context, system_fonts: bool, language: &str) {
             add("cascadia_mono", data, egui::FontFamily::Monospace, true);
         }
     }
-    let mut cjk =
-        egui::FontData::from_static(include_bytes!("../assets/fonts/NotoSansCJK-Regular.ttc"));
-    // Faces in NotoSansCJK-Regular.ttc: 0 = JP, 1 = KR, 2 = SC, 3 = TC.
-    if language.starts_with("zh") {
-        cjk.index = 2;
+    if needs_cjk_font(language) {
+        let mut cjk =
+            egui::FontData::from_static(include_bytes!("../assets/fonts/NotoSansCJK-Regular.ttc"));
+        // Faces in NotoSansCJK-Regular.ttc: 0 = JP, 1 = KR, 2 = SC, 3 = TC.
+        if language.starts_with("zh") {
+            cjk.index = 2;
+        }
+        add(
+            "noto_sans_cjk",
+            cjk.clone(),
+            egui::FontFamily::Proportional,
+            false,
+        );
+        add("noto_sans_cjk", cjk, egui::FontFamily::Monospace, false);
     }
-    add(
-        "noto_sans_cjk",
-        cjk.clone(),
-        egui::FontFamily::Proportional,
-        false,
-    );
-    add("noto_sans_cjk", cjk, egui::FontFamily::Monospace, false);
     ctx.set_fonts(fonts);
+}
+
+/// UI languages whose text needs the bundled CJK font.
+fn needs_cjk_font(language: &str) -> bool {
+    language.starts_with("zh") || language.starts_with("ja")
 }
 
 fn read_font(dir: &std::path::Path, file: &str) -> Option<egui::FontData> {
@@ -302,6 +310,15 @@ mod tests {
         let c = Color32::from_rgb(120, 220, 255);
         let d = accent(&Visuals::light(), c);
         assert!(d.r() < c.r() && d.g() < c.g() && d.b() < c.b());
+    }
+
+    #[test]
+    fn cjk_font_only_for_cjk_languages() {
+        assert!(needs_cjk_font("zh"));
+        assert!(needs_cjk_font("ja"));
+        for lang in ["en", "fr", "de", "es", "it", "lb"] {
+            assert!(!needs_cjk_font(lang), "{lang}");
+        }
     }
 
     #[test]

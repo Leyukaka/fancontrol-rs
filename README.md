@@ -42,7 +42,7 @@
 - **Updates**: **manual only** - Options → **Check for updates** (GitHub Releases API link). No background check, no auto-download, no silent install
 - **Start with Windows**: Options + first-run prompt (current-user Run key, no admin)
 - **Admin elevation**: Needs-admin dialog + top bar **Restart as Administrator** (UAC via `runas`; no silent elevation)
-- **UI**: egui 0.36 desktop app, Neon theme by default plus light / dark, Windows fonts (Segoe UI), system tray, first-run write consent, 8 languages (en/fr/de/es/it/zh/ja/lb)
+- **UI**: egui 0.37 desktop app, Neon theme by default plus light / dark, Windows fonts (Segoe UI), system tray, first-run write consent, 8 languages (en/fr/de/es/it/zh/ja/lb)
 - **CLI**: `sample`, `list-sensors`, `list-controls`, `test-duty`, `sample-storage`, …
 - **Optional fun**: shader graph styles (wgpu) in Options
 - Spec-driven design: decisions live under [`specs/`](./specs)
