@@ -330,10 +330,23 @@ pub fn run_native(options: UiOptions) -> Result<(), UiError> {
     let defaults = eframe::NativeOptions::default();
     let mut wgpu_options = defaults.wgpu_options;
     wgpu_options.on_surface_status = Arc::new(surface_status_action);
-    if let eframe::egui_wgpu::WgpuSetup::CreateNew(setup) = &mut wgpu_options.wgpu_setup
-        && std::env::var_os("WGPU_BACKEND").is_none()
-    {
-        setup.native_adapter_selector = Some(Arc::new(prefer_dx12_adapter));
+    if let eframe::egui_wgpu::WgpuSetup::CreateNew(setup) = &mut wgpu_options.wgpu_setup {
+        use eframe::egui_wgpu::wgpu;
+        // Smaller allocator blocks than the default `Performance` hint: an egui UI
+        // only needs a few small buffers and the font atlas.
+        let base = Arc::clone(&setup.device_descriptor);
+        setup.device_descriptor = Arc::new(move |adapter| wgpu::DeviceDescriptor {
+            memory_hints: wgpu::MemoryHints::MemoryUsage,
+            ..base(adapter)
+        });
+        if std::env::var_os("WGPU_BACKEND").is_none() {
+            // DX12 only: egui-wgpu's default also initialises Vulkan and GL (a
+            // hidden WGL context), whose driver state then stays resident for the
+            // whole session although the DX12 adapter is always picked. Windows
+            // 10+ always offers DX12 WARP as a fallback; `WGPU_BACKEND` overrides.
+            setup.instance_descriptor.backends = wgpu::Backends::DX12;
+            setup.native_adapter_selector = Some(Arc::new(prefer_dx12_adapter));
+        }
     }
     let native = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -551,22 +564,25 @@ fn clamp_width<R>(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui) ->
 /// Pick the GPU adapter: DirectX 12 first. On NVIDIA (RTX 5080, driver 617)
 /// the Vulkan path stopped presenting after a window resize: the image stayed at
 /// the old size and the event loop no longer woke up on its own. DX12 does not
-/// show it. Falls back to any other usable adapter; `WGPU_BACKEND` (e.g.
+/// show it. Falls back to another hardware adapter, then to a software one
+/// (WARP, e.g. in a VM) that can present to the window; `WGPU_BACKEND` (e.g.
 /// `vulkan`) bypasses this selector entirely.
 fn prefer_dx12_adapter(
     adapters: &[eframe::egui_wgpu::wgpu::Adapter],
     surface: Option<&eframe::egui_wgpu::wgpu::Surface<'_>>,
 ) -> Result<eframe::egui_wgpu::wgpu::Adapter, String> {
-    use eframe::egui_wgpu::wgpu::{Backend, DeviceType};
-    let usable: Vec<_> = adapters
+    use eframe::egui_wgpu::wgpu::{Adapter, Backend, DeviceType};
+    let presentable: Vec<_> = adapters
         .iter()
         .filter(|a| surface.is_none_or(|s| a.is_surface_supported(s)))
-        .filter(|a| a.get_info().device_type != DeviceType::Cpu)
         .collect();
-    let dx12 = usable
+    let hardware = |a: &&&Adapter| a.get_info().device_type != DeviceType::Cpu;
+    presentable
         .iter()
-        .find(|a| a.get_info().backend == Backend::Dx12);
-    dx12.or(usable.first())
+        .filter(hardware)
+        .find(|a| a.get_info().backend == Backend::Dx12)
+        .or_else(|| presentable.iter().find(hardware))
+        .or_else(|| presentable.first())
         .map(|a| (*a).clone())
         .or_else(|| adapters.first().cloned())
         .ok_or_else(|| "no usable wgpu adapter".to_owned())

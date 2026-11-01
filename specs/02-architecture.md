@@ -55,7 +55,8 @@ Workspace version: **0.7.3** (see root `Cargo.toml`).
 - **egui + eframe 0.35** (see `specs/04-ui.md`).
 - Hardware PWM writes **on by default** (product UI/CLI); UI reflects read-only vs write-enabled. Use `--read-only` to disable.
 - Localization: 8 languages via `rust-i18n` (`crates/fancontrol-ui/locales/`), OS-locale default, live switch.
-- First custom wgpu rendering: the optional fractal-fun panel (`crates/fancontrol-ui/src/fractal.rs`) uses `egui_wgpu::CallbackTrait` to run its own render pipeline inside an egui panel, rather than egui's own 2D vector painter used everywhere else. This is a precedent for any future GPU-accelerated widget - reuse the same `FractalResources`-in-`callback_resources` pattern (one-time pipeline setup via `cc.wgpu_render_state`, per-frame `prepare`/`paint`) rather than inventing a new one.
+- Custom wgpu rendering: the shader graph styles (`crates/fancontrol-ui/src/shaders/mod.rs`) use `egui_wgpu::CallbackTrait` to run their own render pipeline inside an egui panel, rather than egui's own 2D vector painter used everywhere else. `ShaderGallery` lives in `callback_resources` (created once via `cc.wgpu_render_state`); each style's pipeline is compiled on first use in `prepare`. Reuse this pattern for any future GPU-accelerated widget.
+- Renderer: wgpu on DirectX 12 only (`run_native` sets `Backends::DX12` and `MemoryHints::MemoryUsage`): egui-wgpu's default would also initialise Vulkan and GL and keep their driver state resident. `prefer_dx12_adapter` picks a hardware DX12 adapter, else WARP. `WGPU_BACKEND` (e.g. `vulkan`) overrides both the backend list and the selector.
 
 ### 4. Concurrency
 

@@ -151,7 +151,11 @@ fn writer_loop(path: PathBuf, mut retention_days: u32, flush_ms: u64, rx: Receiv
         tracing::error!(error = %e, "metrics schema failed");
         return;
     }
-    let _ = conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;");
+    // Small page cache (256 KiB instead of the 2 MB default): the writer only
+    // appends, and the hourly purge / CSV export don't need a hot cache.
+    let _ = conn.execute_batch(
+        "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA cache_size=-256;",
+    );
 
     let mut pending: Vec<MetricSample> = Vec::new();
     let mut last_purge = SystemTime::now();
