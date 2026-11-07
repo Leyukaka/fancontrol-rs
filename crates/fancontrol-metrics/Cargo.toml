@@ -14,7 +14,7 @@ serde_json = { workspace = true }
 ureq = "3.4.0"
 
 # Bundled SQLite (no system libsqlite required on Windows CI).
-rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }
+rusqlite = { version = "0.41", default-features = false, features = ["bundled"] }
 
 [dev-dependencies]
 tempfile = "3"
