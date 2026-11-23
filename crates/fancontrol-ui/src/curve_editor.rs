@@ -250,9 +250,9 @@ pub fn show_curve_editor(
     ui.separator();
     let mut remove: Option<usize> = None;
     let n_pts = curve.points.len();
-    for i in 0..n_pts {
-        let mut t = curve.points[i].temperature as f32;
-        let mut d = f32::from(curve.points[i].duty);
+    for (i, point) in curve.points.iter_mut().enumerate() {
+        let mut t = point.temperature as f32;
+        let mut d = f32::from(point.duty);
         ui.horizontal(|ui| {
             ui.label(format!("#{i}"));
             if ui
@@ -264,7 +264,7 @@ pub fn show_curve_editor(
                 )
                 .changed()
             {
-                curve.points[i].temperature = f64::from(t);
+                point.temperature = f64::from(t);
                 changed = true;
             }
             if ui
@@ -276,7 +276,7 @@ pub fn show_curve_editor(
                 )
                 .changed()
             {
-                curve.points[i].duty = d.round() as u8;
+                point.duty = d.round() as u8;
                 changed = true;
             }
             if n_pts > 1 && ui.small_button("x").clicked() {
